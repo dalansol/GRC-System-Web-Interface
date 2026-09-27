@@ -1,7 +1,7 @@
 
-  # GRC System Web Interface
+  # Expedite GRC
 
-  This is a code bundle for GRC System Web Interface. The original project is available at https://www.figma.com/design/JOQJSLPqV3W6EH5UXiPbQC/GRC-System-Web-Interface.
+  This is a code bundle for Expedite GRC. The original project is available at https://www.figma.com/design/81zRCWhIiue8fy0HTI3WPN/Expedite-GRC.
 
   ## Running the code
 
