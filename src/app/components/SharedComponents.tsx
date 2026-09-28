@@ -11,9 +11,7 @@ export {
   ValidityBadge,
   AISummaryCard,
   exportToCSV,
-  STATUS_CONFIG
 };
-
 
 import {
   ChevronRight,
@@ -23,6 +21,8 @@ import {
   Loader2,
   Download
 } from "lucide-react";
+
+import {STATUS_CONFIG} from "../data/mock_data"
 
 export type {
   // Types
@@ -36,6 +36,8 @@ export type {
   NavItem,
   GeneralRisk,
   AuditEntity,
+  AuditDocument,
+  AuditRecord,
   SpecificRisk,
   ControlRecord,
   ProcedureTracking,
@@ -44,7 +46,9 @@ export type {
   BilacoraEntry,
   ActionPlan,
   Finding,
+  UserRecord
 };
+
 
 
 // ─── Shared Types ───────────────────────────────────────────────────────
@@ -63,6 +67,13 @@ type NavView =
 type View = NavView; // alias kept for existing components
 
 // ─── Data Interfaces ─────────────────────────────────────────────────────────
+
+interface UserRecord {
+  id: string; name: string; email: string;
+  role: string; status: "active" | "inactive"; lastLogin: string;
+}
+
+
 interface Task {
   id: string;
   name: string;
@@ -70,6 +81,15 @@ interface Task {
   dueDate: string;
   owner: string;
   type: string;
+}
+
+interface AuditDocument {
+  id: string; name: string; type: "pdf" | "docx" | "xlsx" | "pptx"; size: string; date: string;
+}
+interface AuditRecord {
+  id: string; name: string; type: string; status: StatusKey;
+  entity: string; responsible: string; startDate: string; endDate: string;
+  scope: string; documents: AuditDocument[];
 }
 
 interface NavItem {
@@ -567,33 +587,3 @@ function exportToCSV(filename: string, headers: string[], rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
-// ─── Constants ──────────────────────────────────────────────────────────────
-const STATUS_CONFIG: Record<
-  StatusKey,
-  { label: string; color: string; bg: string; dot: string }
-> = {
-  completed: {
-    label: "Completado",
-    color: "text-emerald-700",
-    bg: "bg-emerald-50 border border-emerald-200",
-    dot: "bg-emerald-500",
-  },
-  in_progress: {
-    label: "En Progreso",
-    color: "text-amber-700",
-    bg: "bg-amber-50 border border-amber-200",
-    dot: "bg-amber-500",
-  },
-  overdue: {
-    label: "Vencido",
-    color: "text-red-700",
-    bg: "bg-red-50 border border-red-200",
-    dot: "bg-red-500",
-  },
-  pending: {
-    label: "Pendiente",
-    color: "text-slate-600",
-    bg: "bg-slate-50 border border-slate-200",
-    dot: "bg-slate-400",
-  },
-};

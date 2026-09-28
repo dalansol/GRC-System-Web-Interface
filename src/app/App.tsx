@@ -90,7 +90,7 @@ import {
   ValidityBadge,
   AISummaryCard,
   exportToCSV,
-  STATUS_CONFIG
+  NavItem
 } from "./components/SharedComponents";
 
 import type {
@@ -101,14 +101,51 @@ import type {
   Navigate,
   // Interfaces
   AuditPlan,
+  AuditDocument,
+  AuditRecord,
   Finding,
 } from "./components/SharedComponents";
 
-import { INITIAL_FINDINGS } from "./data/mock_data";
+import {
+  INITIAL_FINDINGS,
+  INITIAL_USERS,
+  AUDIT_PLANS_DATA,
+  STATUS_CONFIG,
+  AUDIT_ENTITIES,
+  TASKS,
+  AUDIT_RECORDS,
+  GENERAL_RISKS,
+  QUARTERLY_DATA,
+  VERTICAL_DATA,
+  CHART_COLORS,
+  SPECIFIC_RISKS,
+  PLAN_ENTITIES,
+  PROCEDURE_TRACKING,
+  CONTROLS
+} from "./data/mock_data";
 
 import VistaHallazgo from "./components/VistaHallazgo";
 import EvidenciasSection from "./components/EvidenciasSection";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
+
+const NAV_ITEMS: NavItem[] = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    icon: <LayoutDashboard size={18} />,
+    badge: 3,
+  },
+  {
+    id: "filter",
+    label: "Filtrar",
+    icon: <SlidersHorizontal size={18} />,
+  },
+  {
+    id: "hierarchy",
+    label: "Catálogo",
+    icon: <GitBranch size={18} />,
+  },
+];
 
 
 // ─── Sidebar ────────────────────────────────────────────────────────────────
@@ -165,8 +202,8 @@ function Sidebar({
             id={`tour-nav-${item.id}`}
             onClick={() => onNav(item.id)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === item.id
-                ? "bg-sidebar-primary text-white"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+              ? "bg-sidebar-primary text-white"
+              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
               }`}
           >
             <span className="flex-shrink-0">{item.icon}</span>
@@ -197,8 +234,8 @@ function Sidebar({
             id={`tour-nav-${item.id}`}
             onClick={() => onNav(item.id)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === item.id
-                ? "bg-sidebar-primary text-white"
-                : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+              ? "bg-sidebar-primary text-white"
+              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
               }`}
           >
             <span className="flex-shrink-0">{item.icon}</span>
@@ -216,8 +253,8 @@ function Sidebar({
           id="tour-nav-users"
           onClick={() => onNav("users")}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === "users"
-              ? "bg-sidebar-primary text-white"
-              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+            ? "bg-sidebar-primary text-white"
+            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
             }`}
         >
           <span className="flex-shrink-0"><Users size={16} /></span>
@@ -227,8 +264,8 @@ function Sidebar({
           id="tour-nav-bitacora"
           onClick={() => onNav("bitacora")}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === "bitacora"
-              ? "bg-sidebar-primary text-white"
-              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+            ? "bg-sidebar-primary text-white"
+            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
             }`}
         >
           <span className="flex-shrink-0"><Activity size={16} /></span>
@@ -237,8 +274,8 @@ function Sidebar({
         <button
           onClick={() => onNav("settings")}
           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === "settings"
-              ? "bg-sidebar-primary text-white"
-              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+            ? "bg-sidebar-primary text-white"
+            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
             }`}
         >
           <span className="flex-shrink-0">
@@ -376,27 +413,6 @@ function DashboardView({
     statusFilter === "all"
       ? TASKS
       : TASKS.filter((t) => t.status === statusFilter);
-
-  // ─── Constants ──────────────────────────────────────────────────────────────
-  const NAV_ITEMS: NavItem[] = [
-    {
-      id: "dashboard",
-      label: "Dashboard",
-      icon: <LayoutDashboard size={18} />,
-      badge: 3,
-    },
-    {
-      id: "filter",
-      label: "Filtrar",
-      icon: <SlidersHorizontal size={18} />,
-    },
-    {
-      id: "hierarchy",
-      label: "Catálogo",
-      icon: <GitBranch size={18} />,
-    },
-  ];
-
 
   const kpis = [
     { label: "Auditorías Activas", value: "14", delta: "+2 vs Q anterior", icon: <ClipboardList size={16} />, color: "text-blue-600 bg-blue-50" },
@@ -722,8 +738,8 @@ function DashboardView({
                 <button
                   onClick={saveHours}
                   className={`px-4 py-2 rounded-md text-sm font-semibold transition-all ${hourSaved
-                      ? "bg-emerald-500 text-white"
-                      : "bg-primary text-primary-foreground hover:bg-primary/90"
+                    ? "bg-emerald-500 text-white"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
                     }`}
                 >
                   {hourSaved ? (
@@ -781,8 +797,8 @@ function DashboardView({
                   key={f}
                   onClick={() => setStatusFilter(f)}
                   className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${statusFilter === f
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-secondary"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-secondary"
                     }`}
                 >
                   {f === "all" ? "Todos" : STATUS_CONFIG[f].label}
@@ -1061,8 +1077,8 @@ function FilterView({ navigate }: { navigate: Navigate }) {
             key={tab.id}
             onClick={() => setCategory(tab.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${category === tab.id
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-card text-foreground border-border hover:border-primary/40 hover:bg-secondary"
+              ? "bg-primary text-primary-foreground border-primary"
+              : "bg-card text-foreground border-border hover:border-primary/40 hover:bg-secondary"
               }`}
           >
             {tab.icon}
@@ -2381,10 +2397,10 @@ function EditorView() {
                       gridRow: `span ${pw.h}`,
                     }}
                     className={`relative rounded-lg border-2 p-3 cursor-pointer transition-all min-h-20 flex flex-col ${isSelected
-                        ? "border-primary bg-primary/5 shadow-lg shadow-primary/10"
-                        : dragging === pw.id
-                          ? "border-accent/60 bg-accent/5 opacity-70"
-                          : "border-border bg-white hover:border-primary/30 hover:shadow-sm"
+                      ? "border-primary bg-primary/5 shadow-lg shadow-primary/10"
+                      : dragging === pw.id
+                        ? "border-accent/60 bg-accent/5 opacity-70"
+                        : "border-border bg-white hover:border-primary/30 hover:shadow-sm"
                       }`}
                   >
                     <div className="flex items-start gap-2 mb-2">
@@ -3573,8 +3589,8 @@ function HierarchyView() {
                     <button
                       onClick={() => setShowOnlyCompleted(s => !s)}
                       className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${showOnlyCompleted
-                          ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                          : "text-muted-foreground hover:bg-secondary"
+                        ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                        : "text-muted-foreground hover:bg-secondary"
                         }`}
                     >
                       <CheckCircle2 size={11} />
@@ -3646,8 +3662,8 @@ function HierarchyView() {
                                 <button
                                   onClick={() => toggleComplete(r.id)}
                                   className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors flex-shrink-0 ${done
-                                      ? "bg-emerald-500 border-emerald-500"
-                                      : "border-border hover:border-emerald-400"
+                                    ? "bg-emerald-500 border-emerald-500"
+                                    : "border-border hover:border-emerald-400"
                                     }`}
                                 >
                                   {done && <Check size={11} className="text-white" />}
@@ -4052,8 +4068,8 @@ function BitacoraView() {
             <button key={chip}
               onClick={() => applyFilter(() => setActionChip(chip))}
               className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-colors ${actionChip === chip
-                  ? "bg-primary text-white border-primary"
-                  : "bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
+                ? "bg-primary text-white border-primary"
+                : "bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
                 }`}>
               {chip}
             </button>
@@ -4069,8 +4085,8 @@ function BitacoraView() {
             <button key={p}
               onClick={() => applyFilter(() => { setDatePreset(p); if (p !== "Personalizado") { setDateFrom(""); setDateTo(""); } })}
               className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${datePreset === p
-                  ? "bg-primary/10 text-primary border-primary/40"
-                  : "bg-background text-muted-foreground border-border hover:border-primary/30"
+                ? "bg-primary/10 text-primary border-primary/40"
+                : "bg-background text-muted-foreground border-border hover:border-primary/30"
                 }`}>
               {p}
             </button>
@@ -4242,8 +4258,8 @@ function UsersRolesView() {
               key={role}
               onClick={() => setSelectedRole(role)}
               className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${selectedRole === role
-                  ? "bg-primary text-white shadow-sm"
-                  : "bg-secondary text-foreground hover:bg-secondary/70"
+                ? "bg-primary text-white shadow-sm"
+                : "bg-secondary text-foreground hover:bg-secondary/70"
                 }`}
             >
               {role}
@@ -4257,8 +4273,8 @@ function UsersRolesView() {
               key={perm}
               onClick={() => togglePerm(selectedRole, perm)}
               className={`flex items-center justify-between px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors text-left ${enabled
-                  ? "border-primary/30 bg-primary/5 text-primary"
-                  : "border-border bg-background text-muted-foreground hover:border-border/80"
+                ? "border-primary/30 bg-primary/5 text-primary"
+                : "border-border bg-background text-muted-foreground hover:border-border/80"
                 }`}
             >
               <span>{perm}</span>
@@ -4329,8 +4345,8 @@ function UsersRolesView() {
                     </td>
                     <td className="px-4 py-3.5">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${user.status === "active"
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : "bg-slate-50 text-slate-600 border border-slate-200"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-slate-50 text-slate-600 border border-slate-200"
                         }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${user.status === "active" ? "bg-emerald-500" : "bg-slate-400"}`} />
                         {user.status === "active" ? "Activo" : "Inactivo"}

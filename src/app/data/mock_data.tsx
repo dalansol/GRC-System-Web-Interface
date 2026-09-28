@@ -1,26 +1,38 @@
 import type {
   // Types
-  DetailType,
   StatusKey,
-  NavView,
-  View,
-  Navigate,
   // Interfaces
   Task,
-  NavItem,
   GeneralRisk,
   AuditEntity,
+  AuditRecord,
   SpecificRisk,
   ControlRecord,
   ProcedureTracking,
   PlanEntity,
   AuditPlan,
   BilacoraEntry,
-  ActionPlan,
   Finding,
+  UserRecord
 } from "../components/SharedComponents";
 
-export {INITIAL_FINDINGS, CONTROLS};
+export {
+  INITIAL_FINDINGS,
+  CONTROLS,
+  INITIAL_USERS,
+  AUDIT_PLANS_DATA,
+  STATUS_CONFIG,
+  AUDIT_ENTITIES,
+  TASKS,
+  AUDIT_RECORDS, 
+  GENERAL_RISKS, 
+  QUARTERLY_DATA, 
+  VERTICAL_DATA,
+  CHART_COLORS,
+  SPECIFIC_RISKS,
+  PLAN_ENTITIES,
+  PROCEDURE_TRACKING
+};
 
 
 // ─── Findings (Hallazgos) Data ─────────────────────────────────────────────────
@@ -58,7 +70,35 @@ const INITIAL_FINDINGS: Finding[] = [
   },
 ];
 
-
+const STATUS_CONFIG: Record<
+  StatusKey,
+  { label: string; color: string; bg: string; dot: string }
+> = {
+  completed: {
+    label: "Completado",
+    color: "text-emerald-700",
+    bg: "bg-emerald-50 border border-emerald-200",
+    dot: "bg-emerald-500",
+  },
+  in_progress: {
+    label: "En Progreso",
+    color: "text-amber-700",
+    bg: "bg-amber-50 border border-amber-200",
+    dot: "bg-amber-500",
+  },
+  overdue: {
+    label: "Vencido",
+    color: "text-red-700",
+    bg: "bg-red-50 border border-red-200",
+    dot: "bg-red-500",
+  },
+  pending: {
+    label: "Pendiente",
+    color: "text-slate-600",
+    bg: "bg-slate-50 border border-slate-200",
+    dot: "bg-slate-400",
+  },
+};
 
 const TASKS: Task[] = [
   {
@@ -431,41 +471,27 @@ const PLAN_ENTITIES: PlanEntity[] = [
 ];
 
 // ─── Users & Roles Data ──────────────────────────────────────────────────────
-interface UserRecord {
-  id: string; name: string; email: string;
-  role: string; status: "active" | "inactive"; lastLogin: string;
-}
-
 const ROLES = ["Administrador", "Jefe de Auditoría", "Auditor Senior", "Auditor", "Consultor", "Solo Lectura"];
 
 const DEFAULT_PERMISSIONS: Record<string, Record<string, boolean>> = {
-  "Administrador":      { "Ver Dashboard": true,  "Editar Registros": true,  "Gestionar Usuarios": true,  "Aprobar Riesgos": true,  "Exportar Datos": true,  "Ver Auditorías": true,  "Crear Auditorías": true,  "Eliminar Registros": true  },
-  "Jefe de Auditoría":  { "Ver Dashboard": true,  "Editar Registros": true,  "Gestionar Usuarios": false, "Aprobar Riesgos": true,  "Exportar Datos": true,  "Ver Auditorías": true,  "Crear Auditorías": true,  "Eliminar Registros": false },
-  "Auditor Senior":     { "Ver Dashboard": true,  "Editar Registros": true,  "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": true,  "Ver Auditorías": true,  "Crear Auditorías": false, "Eliminar Registros": false },
-  "Auditor":            { "Ver Dashboard": true,  "Editar Registros": false, "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": false, "Ver Auditorías": true,  "Crear Auditorías": false, "Eliminar Registros": false },
-  "Consultor":          { "Ver Dashboard": true,  "Editar Registros": false, "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": false, "Ver Auditorías": true,  "Crear Auditorías": false, "Eliminar Registros": false },
-  "Solo Lectura":       { "Ver Dashboard": true,  "Editar Registros": false, "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": false, "Ver Auditorías": true,  "Crear Auditorías": false, "Eliminar Registros": false },
+  "Administrador": { "Ver Dashboard": true, "Editar Registros": true, "Gestionar Usuarios": true, "Aprobar Riesgos": true, "Exportar Datos": true, "Ver Auditorías": true, "Crear Auditorías": true, "Eliminar Registros": true },
+  "Jefe de Auditoría": { "Ver Dashboard": true, "Editar Registros": true, "Gestionar Usuarios": false, "Aprobar Riesgos": true, "Exportar Datos": true, "Ver Auditorías": true, "Crear Auditorías": true, "Eliminar Registros": false },
+  "Auditor Senior": { "Ver Dashboard": true, "Editar Registros": true, "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": true, "Ver Auditorías": true, "Crear Auditorías": false, "Eliminar Registros": false },
+  "Auditor": { "Ver Dashboard": true, "Editar Registros": false, "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": false, "Ver Auditorías": true, "Crear Auditorías": false, "Eliminar Registros": false },
+  "Consultor": { "Ver Dashboard": true, "Editar Registros": false, "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": false, "Ver Auditorías": true, "Crear Auditorías": false, "Eliminar Registros": false },
+  "Solo Lectura": { "Ver Dashboard": true, "Editar Registros": false, "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": false, "Ver Auditorías": true, "Crear Auditorías": false, "Eliminar Registros": false },
 };
 
 const INITIAL_USERS: UserRecord[] = [
-  { id: "USR-001", name: "María García",      email: "m.garcia@expedite.com",    role: "Jefe de Auditoría", status: "active",   lastLogin: "2025-07-21" },
-  { id: "USR-002", name: "Carlos Morales",    email: "c.morales@expedite.com",   role: "Auditor Senior",    status: "active",   lastLogin: "2025-07-20" },
-  { id: "USR-003", name: "Ana Rodríguez",     email: "a.rodriguez@expedite.com", role: "Auditor",           status: "active",   lastLogin: "2025-07-19" },
-  { id: "USR-004", name: "Pedro Sánchez",     email: "p.sanchez@expedite.com",   role: "Consultor",         status: "inactive", lastLogin: "2025-06-30" },
-  { id: "USR-005", name: "Laura Fernández",   email: "l.fernandez@expedite.com", role: "Auditor",           status: "active",   lastLogin: "2025-07-21" },
-  { id: "USR-006", name: "Diego Torres",      email: "d.torres@expedite.com",    role: "Solo Lectura",      status: "active",   lastLogin: "2025-07-18" },
+  { id: "USR-001", name: "María García", email: "m.garcia@expedite.com", role: "Jefe de Auditoría", status: "active", lastLogin: "2025-07-21" },
+  { id: "USR-002", name: "Carlos Morales", email: "c.morales@expedite.com", role: "Auditor Senior", status: "active", lastLogin: "2025-07-20" },
+  { id: "USR-003", name: "Ana Rodríguez", email: "a.rodriguez@expedite.com", role: "Auditor", status: "active", lastLogin: "2025-07-19" },
+  { id: "USR-004", name: "Pedro Sánchez", email: "p.sanchez@expedite.com", role: "Consultor", status: "inactive", lastLogin: "2025-06-30" },
+  { id: "USR-005", name: "Laura Fernández", email: "l.fernandez@expedite.com", role: "Auditor", status: "active", lastLogin: "2025-07-21" },
+  { id: "USR-006", name: "Diego Torres", email: "d.torres@expedite.com", role: "Solo Lectura", status: "active", lastLogin: "2025-07-18" },
 ];
 
 // ─── Audit Records Data ──────────────────────────────────────────────────────
-interface AuditDocument {
-  id: string; name: string; type: "pdf" | "docx" | "xlsx" | "pptx"; size: string; date: string;
-}
-interface AuditRecord {
-  id: string; name: string; type: string; status: StatusKey;
-  entity: string; responsible: string; startDate: string; endDate: string;
-  scope: string; documents: AuditDocument[];
-}
-
 const AUDIT_RECORDS: AuditRecord[] = [
   {
     id: "AUD-001", name: "Auditoría SOX — Cuentas por Pagar", type: "Auditoría Financiera",
@@ -473,10 +499,10 @@ const AUDIT_RECORDS: AuditRecord[] = [
     startDate: "2025-06-01", endDate: "2025-08-31",
     scope: "Revisión de controles SOX para el ciclo de cuentas por pagar y tesorería",
     documents: [
-      { id: "D-001", name: "Plan de Auditoría SOX 2025.pdf",      type: "pdf",  size: "2.4 MB", date: "2025-06-05" },
-      { id: "D-002", name: "Matriz de Riesgos y Controles.xlsx",  type: "xlsx", size: "1.8 MB", date: "2025-06-12" },
-      { id: "D-003", name: "Informe Preliminar Q2.docx",          type: "docx", size: "890 KB", date: "2025-07-15" },
-      { id: "D-004", name: "Evidencias de Muestreo.pdf",          type: "pdf",  size: "5.1 MB", date: "2025-07-20" },
+      { id: "D-001", name: "Plan de Auditoría SOX 2025.pdf", type: "pdf", size: "2.4 MB", date: "2025-06-05" },
+      { id: "D-002", name: "Matriz de Riesgos y Controles.xlsx", type: "xlsx", size: "1.8 MB", date: "2025-06-12" },
+      { id: "D-003", name: "Informe Preliminar Q2.docx", type: "docx", size: "890 KB", date: "2025-07-15" },
+      { id: "D-004", name: "Evidencias de Muestreo.pdf", type: "pdf", size: "5.1 MB", date: "2025-07-20" },
     ],
   },
   {
@@ -485,10 +511,10 @@ const AUDIT_RECORDS: AuditRecord[] = [
     startDate: "2025-03-01", endDate: "2025-05-30",
     scope: "Evaluación de procesos de compra, almacenamiento y distribución en LATAM",
     documents: [
-      { id: "D-005", name: "Informe Final Supply Chain.pdf",      type: "pdf",  size: "3.7 MB", date: "2025-05-28" },
-      { id: "D-006", name: "Hallazgos y Recomendaciones.docx",    type: "docx", size: "1.2 MB", date: "2025-05-29" },
-      { id: "D-007", name: "Dashboard KPIs Logística.xlsx",       type: "xlsx", size: "2.1 MB", date: "2025-04-15" },
-      { id: "D-008", name: "Presentación Resultados.pptx",        type: "pptx", size: "4.3 MB", date: "2025-05-30" },
+      { id: "D-005", name: "Informe Final Supply Chain.pdf", type: "pdf", size: "3.7 MB", date: "2025-05-28" },
+      { id: "D-006", name: "Hallazgos y Recomendaciones.docx", type: "docx", size: "1.2 MB", date: "2025-05-29" },
+      { id: "D-007", name: "Dashboard KPIs Logística.xlsx", type: "xlsx", size: "2.1 MB", date: "2025-04-15" },
+      { id: "D-008", name: "Presentación Resultados.pptx", type: "pptx", size: "4.3 MB", date: "2025-05-30" },
     ],
   },
   {
@@ -497,8 +523,8 @@ const AUDIT_RECORDS: AuditRecord[] = [
     startDate: "2025-09-01", endDate: "2025-11-30",
     scope: "Revisión del cumplimiento normativo GDPR en sistemas de tratamiento y almacenamiento de datos",
     documents: [
-      { id: "D-009", name: "Programa de Auditoría GDPR.pdf",      type: "pdf",  size: "1.1 MB", date: "2025-08-20" },
-      { id: "D-010", name: "Cuestionario de Evaluación.docx",     type: "docx", size: "450 KB", date: "2025-08-22" },
+      { id: "D-009", name: "Programa de Auditoría GDPR.pdf", type: "pdf", size: "1.1 MB", date: "2025-08-20" },
+      { id: "D-010", name: "Cuestionario de Evaluación.docx", type: "docx", size: "450 KB", date: "2025-08-22" },
     ],
   },
   {
@@ -507,9 +533,9 @@ const AUDIT_RECORDS: AuditRecord[] = [
     startDate: "2025-04-01", endDate: "2025-06-30",
     scope: "Revisión de procesos de contratación, nómina y evaluación del desempeño",
     documents: [
-      { id: "D-011", name: "Plan de Trabajo RRHH.pdf",            type: "pdf",  size: "780 KB", date: "2025-04-03" },
-      { id: "D-012", name: "Análisis Nómina Q1 2025.xlsx",        type: "xlsx", size: "3.2 MB", date: "2025-04-20" },
-      { id: "D-013", name: "Entrevistas y Observaciones.docx",    type: "docx", size: "1.5 MB", date: "2025-05-10" },
+      { id: "D-011", name: "Plan de Trabajo RRHH.pdf", type: "pdf", size: "780 KB", date: "2025-04-03" },
+      { id: "D-012", name: "Análisis Nómina Q1 2025.xlsx", type: "xlsx", size: "3.2 MB", date: "2025-04-20" },
+      { id: "D-013", name: "Entrevistas y Observaciones.docx", type: "docx", size: "1.5 MB", date: "2025-05-10" },
     ],
   },
 ];
@@ -529,22 +555,22 @@ const AUDIT_PLANS_DATA: AuditPlan[] = [
 // ─── Bitácora Data ─────────────────────────────────────────────────────────────
 const BITACORA_DATA: BilacoraEntry[] = [
   // Hoy (2026-09-10)
-  { id: "BIT-001", user: "María García",    action: "Aprobó plan de auditoría",   entity: "PAI-2026-003",           entityId: "AP-003",   date: "2026-09-10 09:14" },
-  { id: "BIT-002", user: "Carlos Morales",  action: "Cargó evidencia",            entity: "CTR-003",                entityId: "CTR-003",  date: "2026-09-10 11:40" },
-  { id: "BIT-003", user: "Ana Rodríguez",   action: "Creó hallazgo",              entity: "HAL-2026-007",           entityId: "FND-007",  date: "2026-09-10 14:55" },
+  { id: "BIT-001", user: "María García", action: "Aprobó plan de auditoría", entity: "PAI-2026-003", entityId: "AP-003", date: "2026-09-10 09:14" },
+  { id: "BIT-002", user: "Carlos Morales", action: "Cargó evidencia", entity: "CTR-003", entityId: "CTR-003", date: "2026-09-10 11:40" },
+  { id: "BIT-003", user: "Ana Rodríguez", action: "Creó hallazgo", entity: "HAL-2026-007", entityId: "FND-007", date: "2026-09-10 14:55" },
   // Últimos 7 días (2026-09-04 – 2026-09-09)
-  { id: "BIT-004", user: "Laura Fernández", action: "Modificó control",           entity: "CTR-004",                entityId: "CTR-004",  date: "2026-09-09 10:22" },
-  { id: "BIT-005", user: "Diego Torres",    action: "Consultó hallazgo",          entity: "HAL-2026-005",           entityId: "FND-005",  date: "2026-09-08 16:05" },
-  { id: "BIT-006", user: "María García",    action: "Exportó CSV — Riesgos",      entity: "Catálogo Organizacional",entityId: "HIER",     date: "2026-09-07 08:48" },
-  { id: "BIT-007", user: "Carlos Morales",  action: "Creó plan de auditoría",     entity: "PAI-2026-004",           entityId: "AP-004",   date: "2026-09-05 13:30" },
+  { id: "BIT-004", user: "Laura Fernández", action: "Modificó control", entity: "CTR-004", entityId: "CTR-004", date: "2026-09-09 10:22" },
+  { id: "BIT-005", user: "Diego Torres", action: "Consultó hallazgo", entity: "HAL-2026-005", entityId: "FND-005", date: "2026-09-08 16:05" },
+  { id: "BIT-006", user: "María García", action: "Exportó CSV — Riesgos", entity: "Catálogo Organizacional", entityId: "HIER", date: "2026-09-07 08:48" },
+  { id: "BIT-007", user: "Carlos Morales", action: "Creó plan de auditoría", entity: "PAI-2026-004", entityId: "AP-004", date: "2026-09-05 13:30" },
   // Últimos 30 días, fuera de últimos 7 (2026-08-11 – 2026-09-03)
-  { id: "BIT-008", user: "Ana Rodríguez",   action: "Cargó evidencia",            entity: "HAL-2026-004",           entityId: "FND-004",  date: "2026-09-01 15:10" },
-  { id: "BIT-009", user: "Laura Fernández", action: "Modificó permisos de rol",   entity: "Auditor Senior",         entityId: "ROLE-003", date: "2026-08-27 09:55" },
-  { id: "BIT-010", user: "Diego Torres",    action: "Aprobó hallazgo",            entity: "HAL-2026-003",           entityId: "FND-003",  date: "2026-08-20 11:18" },
-  { id: "BIT-011", user: "Carlos Morales",  action: "Exportó PDF — Informe Q2",   entity: "Dashboard",              entityId: "DASH",     date: "2026-08-15 14:40" },
+  { id: "BIT-008", user: "Ana Rodríguez", action: "Cargó evidencia", entity: "HAL-2026-004", entityId: "FND-004", date: "2026-09-01 15:10" },
+  { id: "BIT-009", user: "Laura Fernández", action: "Modificó permisos de rol", entity: "Auditor Senior", entityId: "ROLE-003", date: "2026-08-27 09:55" },
+  { id: "BIT-010", user: "Diego Torres", action: "Aprobó hallazgo", entity: "HAL-2026-003", entityId: "FND-003", date: "2026-08-20 11:18" },
+  { id: "BIT-011", user: "Carlos Morales", action: "Exportó PDF — Informe Q2", entity: "Dashboard", entityId: "DASH", date: "2026-08-15 14:40" },
   // Anteriores (más de 30 días)
-  { id: "BIT-012", user: "María García",    action: "Marcó riesgo como completado",entity: "RIE-0187",              entityId: "RIE-0187", date: "2026-07-30 10:05" },
-  { id: "BIT-013", user: "Ana Rodríguez",   action: "Consultó catálogo",          entity: "Catálogo Organizacional",entityId: "HIER",     date: "2026-07-18 16:33" },
-  { id: "BIT-014", user: "Laura Fernández", action: "Creó riesgo específico",     entity: "RIE-0201",               entityId: "RIE-0201", date: "2026-07-05 08:20" },
-  { id: "BIT-015", user: "Diego Torres",    action: "Modificó permisos de rol",   entity: "Solo Lectura",           entityId: "ROLE-006", date: "2026-06-22 13:45" },
+  { id: "BIT-012", user: "María García", action: "Marcó riesgo como completado", entity: "RIE-0187", entityId: "RIE-0187", date: "2026-07-30 10:05" },
+  { id: "BIT-013", user: "Ana Rodríguez", action: "Consultó catálogo", entity: "Catálogo Organizacional", entityId: "HIER", date: "2026-07-18 16:33" },
+  { id: "BIT-014", user: "Laura Fernández", action: "Creó riesgo específico", entity: "RIE-0201", entityId: "RIE-0201", date: "2026-07-05 08:20" },
+  { id: "BIT-015", user: "Diego Torres", action: "Modificó permisos de rol", entity: "Solo Lectura", entityId: "ROLE-006", date: "2026-06-22 13:45" },
 ];
