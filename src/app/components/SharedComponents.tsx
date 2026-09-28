@@ -24,15 +24,28 @@ import {
   Download
 } from "lucide-react";
 
-
-
-export type{
+export type {
+  // Types
   DetailType,
   StatusKey,
+  NavView,
+  View,
+  Navigate,
+  // Interfaces
+  Task,
+  NavItem,
+  GeneralRisk,
+  AuditEntity,
+  SpecificRisk,
+  ControlRecord,
+  ProcedureTracking,
+  PlanEntity,
+  AuditPlan,
+  BilacoraEntry,
   ActionPlan,
   Finding,
-  Navigate
-}
+};
+
 
 // ─── Shared Types ───────────────────────────────────────────────────────
 type Navigate = (type: DetailType, id: string) => void;
@@ -42,6 +55,115 @@ type DetailType =
 
 type StatusKey =
   "completed" | "in_progress" | "overdue" | "pending";
+
+type NavView =
+  "dashboard" | "filter" | "editor" | "hierarchy" | "settings" | "users"
+  | "plans" | "findings" | "auditado" | "bitacora";
+
+type View = NavView; // alias kept for existing components
+
+// ─── Data Interfaces ─────────────────────────────────────────────────────────
+interface Task {
+  id: string;
+  name: string;
+  status: StatusKey;
+  dueDate: string;
+  owner: string;
+  type: string;
+}
+
+interface NavItem {
+  id: NavView;
+  label: string;
+  icon: React.ReactNode;
+  badge?: number;
+}
+
+
+interface GeneralRisk {
+  id: string;
+  name: string;
+  description: string;
+  auditDepartment: string;
+}
+interface AuditEntity {
+  id: string;
+  name: string;
+  auditDepartment: string;
+  auditDomain: string;
+  divisionName: string;
+  country: string;
+}
+interface SpecificRisk {
+  id: string;
+  generalRiskId: string;
+  auditEntityId: string;
+  inherentRiskLevel: string;
+  residualRiskLevel: string;
+  businessDeptName: string;
+  businessName: string;
+  divisionName: string;
+  country: string;
+  description: string;
+}
+interface ControlRecord {
+  id: string;
+  auditEntityId: string;
+  specificRiskIds: string[];
+  controlProcedureName: string;
+  validityStatus: string;
+  businessControlNumber: string;
+  controlActivity: string;
+  currentVulnerability: string;
+  controlType: string;
+  frequency: string;
+  sampleSize: string;
+  rotation: string;
+  controlStatus: string;
+}
+interface ProcedureTracking {
+  id: string;
+  controlId: string;
+  procedureName: string;
+  identificator: string;
+  businessDeptName: string;
+  businessName: string;
+  divisionName: string;
+  area: string;
+  country: string;
+}
+interface PlanEntity {
+  id: string;
+  name: string;
+  auditDepartment: string;
+  year: number;
+  status: StatusKey;
+  scope: string;
+}
+
+interface AuditPlan {
+  id: string;
+  code: string;
+  name: string;
+  period: string;
+  startDate: string;
+  endDate: string;
+  status: "Borrador" | "Aprobado" | "En Ejecución" | "Cerrado";
+  estimatedHours: number;
+  responsible: string;
+  scope: string;
+}
+
+
+
+interface BilacoraEntry {
+  id: string;
+  user: string;
+  action: string;
+  entity: string;
+  entityId: string;
+  date: string;
+}
 
 interface ActionPlan {
   description: string;
@@ -54,6 +176,8 @@ interface Finding {
   id: string;
   folio: string;
   title: string;
+  description?: string;
+  type?: string;
   severity: "Crítico" | "Alto" | "Medio" | "Bajo";
   failedControl: string;
   failedControlId: string;
@@ -126,8 +250,10 @@ function PageHeader({
       </div>
       {actions && (
         <div className="flex items-center gap-2">{actions}</div>
+        
       )}
     </div>
+    
   );
 }
 

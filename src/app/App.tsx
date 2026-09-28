@@ -76,6 +76,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+
 import {
   StatusBadge,
   Breadcrumbs,
@@ -93,638 +94,22 @@ import {
 } from "./components/SharedComponents";
 
 import type {
-  StatusKey,
+  // Types
   DetailType,
+  StatusKey,
+  NavView,
+  Navigate,
+  // Interfaces
+  AuditPlan,
   Finding,
-  ActionPlan,
-  Navigate
 } from "./components/SharedComponents";
 
-import {INITIAL_FINDINGS} from "./data/mock_data";
+import { INITIAL_FINDINGS } from "./data/mock_data";
 
 import VistaHallazgo from "./components/VistaHallazgo";
 import EvidenciasSection from "./components/EvidenciasSection";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-type NavView =
-  "dashboard" | "filter" | "editor" | "hierarchy" | "settings" | "users"
-  | "plans" | "findings" | "auditado" | "bitacora";
-type View = NavView; // alias kept for existing components
-
-
-interface Task {
-  id: string;
-  name: string;
-  status: StatusKey;
-  dueDate: string;
-  owner: string;
-  type: string;
-}
-
-interface NavItem {
-  id: NavView;
-  label: string;
-  icon: React.ReactNode;
-  badge?: number;
-}
-
-// ─── Data Interfaces ─────────────────────────────────────────────────────────
-interface GeneralRisk {
-  id: string;
-  name: string;
-  description: string;
-  auditDepartment: string;
-}
-interface AuditEntity {
-  id: string;
-  name: string;
-  auditDepartment: string;
-  auditDomain: string;
-  divisionName: string;
-  country: string;
-}
-interface SpecificRisk {
-  id: string;
-  generalRiskId: string;
-  auditEntityId: string;
-  inherentRiskLevel: string;
-  residualRiskLevel: string;
-  businessDeptName: string;
-  businessName: string;
-  divisionName: string;
-  country: string;
-  description: string;
-}
-interface ControlRecord {
-  id: string;
-  auditEntityId: string;
-  specificRiskIds: string[];
-  controlProcedureName: string;
-  validityStatus: string;
-  businessControlNumber: string;
-  controlActivity: string;
-  currentVulnerability: string;
-  controlType: string;
-  frequency: string;
-  sampleSize: string;
-  rotation: string;
-  controlStatus: string;
-}
-interface ProcedureTracking {
-  id: string;
-  controlId: string;
-  procedureName: string;
-  identificator: string;
-  businessDeptName: string;
-  businessName: string;
-  divisionName: string;
-  area: string;
-  country: string;
-}
-interface PlanEntity {
-  id: string;
-  name: string;
-  auditDepartment: string;
-  year: number;
-  status: StatusKey;
-  scope: string;
-}
-
-interface AuditPlan {
-  id: string;
-  code: string;
-  name: string;
-  period: string;
-  startDate: string;
-  endDate: string;
-  status: "Borrador" | "Aprobado" | "En Ejecución" | "Cerrado";
-  estimatedHours: number;
-  responsible: string;
-  scope: string;
-}
-
-
-
-interface BilacoraEntry {
-  id: string;
-  user: string;
-  action: string;
-  entity: string;
-  entityId: string;
-  date: string;
-}
-
-
-
-// ─── Constants ──────────────────────────────────────────────────────────────
-const NAV_ITEMS: NavItem[] = [
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    icon: <LayoutDashboard size={18} />,
-    badge: 3,
-  },
-  {
-    id: "filter",
-    label: "Filtrar",
-    icon: <SlidersHorizontal size={18} />,
-  },
-  {
-    id: "hierarchy",
-    label: "Catálogo",
-    icon: <GitBranch size={18} />,
-  },
-];
-
-const TASKS: Task[] = [
-  {
-    id: "T-0041",
-    name: "Revisión controles SOX — Cuentas por pagar",
-    status: "overdue",
-    dueDate: "2025-07-15",
-    owner: "M. García",
-    type: "Auditoría Financiera",
-  },
-  {
-    id: "T-0042",
-    name: "Entrevista CISO — Políticas de acceso",
-    status: "in_progress",
-    dueDate: "2025-07-22",
-    owner: "L. Herrera",
-    type: "TI & Seguridad",
-  },
-  {
-    id: "T-0043",
-    name: "Pruebas sustantivas — Inventarios Q2",
-    status: "in_progress",
-    dueDate: "2025-07-28",
-    owner: "P. Morales",
-    type: "Auditoría Operacional",
-  },
-  {
-    id: "T-0044",
-    name: "Cierre hallazgos — Filial Brasil",
-    status: "pending",
-    dueDate: "2025-08-05",
-    owner: "A. Costa",
-    type: "Cumplimiento",
-  },
-  {
-    id: "T-0045",
-    name: "Informe ejecutivo — Riesgo regulatorio LATAM",
-    status: "pending",
-    dueDate: "2025-08-12",
-    owner: "M. García",
-    type: "Regulatorio",
-  },
-  {
-    id: "T-0046",
-    name: "Walkthrough — Proceso nómina México",
-    status: "completed",
-    dueDate: "2025-07-10",
-    owner: "R. Jiménez",
-    type: "Auditoría Operacional",
-  },
-];
-
-const QUARTERLY_DATA = [
-  {
-    quarter: "Q1 2025",
-    completadas: 8,
-    en_progreso: 3,
-    pendientes: 2,
-    vencidas: 1,
-  },
-  {
-    quarter: "Q2 2025",
-    completadas: 11,
-    en_progreso: 4,
-    pendientes: 3,
-    vencidas: 2,
-  },
-  {
-    quarter: "Q3 2025",
-    completadas: 5,
-    en_progreso: 7,
-    pendientes: 5,
-    vencidas: 3,
-  },
-  {
-    quarter: "Q4 2025",
-    completadas: 0,
-    en_progreso: 2,
-    pendientes: 9,
-    vencidas: 0,
-  },
-];
-
-const VERTICAL_DATA = [
-  { name: "TI & Ciberseg.", mx: 4, br: 3, co: 2 },
-  { name: "Financiero", mx: 6, br: 5, co: 3 },
-  { name: "Operacional", mx: 5, br: 4, co: 4 },
-  { name: "Regulatorio", mx: 3, br: 2, co: 1 },
-  { name: "Cumplimiento", mx: 4, br: 3, co: 2 },
-];
-
-const CHART_COLORS = {
-  completadas: "#16a34a",
-  en_progreso: "#d97706",
-  pendientes: "#2B6FD4",
-  vencidas: "#C8271C",
-};
-
-// ─── GRC Data ────────────────────────────────────────────────────────────────
-const GENERAL_RISKS: GeneralRisk[] = [
-  {
-    id: "GR-001",
-    name: "Integridad de Reportes Financieros",
-    auditDepartment: "Beverage",
-    description:
-      "Riesgo de que los estados financieros consolidados contengan errores materiales derivados de debilidades en los controles del proceso de cierre contable mensual, incluyendo conciliaciones, segregación de funciones y aprobaciones por niveles directivos.",
-  },
-  {
-    id: "GR-002",
-    name: "Acceso No Autorizado a Sistemas Críticos",
-    auditDepartment: "Beverage",
-    description:
-      "Riesgo de que usuarios internos o externos no autorizados accedan a sistemas críticos de información, comprometiendo la confidencialidad, integridad y disponibilidad de los datos operativos y financieros del grupo.",
-  },
-  {
-    id: "GR-003",
-    name: "Incumplimiento Normativo Regulatorio",
-    auditDepartment: "Beverage",
-    description:
-      "Riesgo de incumplimiento de regulaciones locales e internacionales aplicables a las operaciones del grupo en los mercados LATAM, incluyendo normativas fiscales, de protección de datos y de reporte a organismos reguladores.",
-  },
-];
-
-const AUDIT_ENTITIES: AuditEntity[] = [
-  {
-    id: "AE-001",
-    name: "Entidad Auditora — Cierre Financiero MX",
-    auditDepartment: "Beverage",
-    auditDomain: "Integridad Financiera",
-    divisionName: "Norteamérica",
-    country: "México",
-  },
-  {
-    id: "AE-002",
-    name: "Entidad Auditora — Ciberseguridad LATAM",
-    auditDepartment: "Beverage",
-    auditDomain: "TI & Ciberseguridad",
-    divisionName: "Sudamérica",
-    country: "Brasil",
-  },
-  {
-    id: "AE-003",
-    name: "Entidad Auditora — Cumplimiento Normativo",
-    auditDepartment: "Beverage",
-    auditDomain: "Cumplimiento Regulatorio",
-    divisionName: "Sudamérica",
-    country: "Colombia",
-  },
-];
-
-const SPECIFIC_RISKS: SpecificRisk[] = [
-  {
-    id: "SR-001",
-    generalRiskId: "GR-001",
-    auditEntityId: "AE-001",
-    inherentRiskLevel: "Crítico",
-    residualRiskLevel: "Alto",
-    businessDeptName: "Finanzas",
-    businessName: "Banca Corporativa",
-    divisionName: "Norteamérica",
-    country: "México",
-    description:
-      "Posibilidad de que las conciliaciones bancarias del proceso de cierre mensual en la filial México contengan discrepancias no detectadas a tiempo debido a la falta de segregación de funciones entre quien registra y quien aprueba.",
-  },
-  {
-    id: "SR-002",
-    generalRiskId: "GR-001",
-    auditEntityId: "AE-001",
-    inherentRiskLevel: "Alto",
-    residualRiskLevel: "Medio",
-    businessDeptName: "Tesorería",
-    businessName: "Banca Corporativa",
-    divisionName: "Norteamérica",
-    country: "México",
-    description:
-      "Riesgo de que transacciones de tesorería de alto valor sean registradas sin autorización dual, permitiendo errores o fraudes que impacten el estado de resultados consolidado.",
-  },
-  {
-    id: "SR-003",
-    generalRiskId: "GR-002",
-    auditEntityId: "AE-002",
-    inherentRiskLevel: "Alto",
-    residualRiskLevel: "Alto",
-    businessDeptName: "Tecnología",
-    businessName: "Infraestructura TI",
-    divisionName: "Sudamérica",
-    country: "Brasil",
-    description:
-      "Riesgo de que cuentas con privilegios administrativos en sistemas críticos no sean revisadas con la frecuencia requerida, permitiendo que ex-empleados o accesos no autorizados persistan activos en producción.",
-  },
-  {
-    id: "SR-004",
-    generalRiskId: "GR-003",
-    auditEntityId: "AE-003",
-    inherentRiskLevel: "Medio",
-    residualRiskLevel: "Bajo",
-    businessDeptName: "Legal & Cumplimiento",
-    businessName: "Cumplimiento Corporativo",
-    divisionName: "Sudamérica",
-    country: "Colombia",
-    description:
-      "Riesgo de incumplimiento de obligaciones de reporte ante la Superintendencia Financiera de Colombia por desactualización del calendario regulatorio y falta de seguimiento formal de compromisos.",
-  },
-];
-
-const CONTROLS: ControlRecord[] = [
-  {
-    id: "CTR-001",
-    auditEntityId: "AE-001",
-    specificRiskIds: ["SR-001"],
-    controlProcedureName: "Conciliación Bancaria Mensual",
-    validityStatus: "Válido",
-    businessControlNumber: "BC-0041",
-    controlActivity:
-      "Revisión y aprobación formal de conciliaciones bancarias al cierre de cada mes por el Director Financiero y el Controller.",
-    currentVulnerability: "Baja",
-    controlType: "Preventivo",
-    frequency: "Mensual",
-    sampleSize: "100%",
-    rotation: "No Aplica",
-    controlStatus: "Activo",
-  },
-  {
-    id: "CTR-002",
-    auditEntityId: "AE-001",
-    specificRiskIds: ["SR-001", "SR-002"],
-    controlProcedureName:
-      "Segregación de Funciones — Cierre Contable",
-    validityStatus: "Requiere Revisión",
-    businessControlNumber: "BC-0042",
-    controlActivity:
-      "Verificación semestral de que ningún usuario tiene acceso simultáneo a funciones de registro y autorización en el sistema ERP.",
-    currentVulnerability: "Media",
-    controlType: "Detectivo",
-    frequency: "Semestral",
-    sampleSize: "25 usuarios",
-    rotation: "Anual",
-    controlStatus: "Activo",
-  },
-  {
-    id: "CTR-003",
-    auditEntityId: "AE-002",
-    specificRiskIds: ["SR-003"],
-    controlProcedureName: "Revisión de Accesos Privilegiados",
-    validityStatus: "Válido",
-    businessControlNumber: "BC-0055",
-    controlActivity:
-      "Revisión trimestral de cuentas con privilegios administrativos en sistemas de producción y depuración de accesos inactivos.",
-    currentVulnerability: "Baja",
-    controlType: "Detectivo",
-    frequency: "Trimestral",
-    sampleSize: "100%",
-    rotation: "Semestral",
-    controlStatus: "Activo",
-  },
-  {
-    id: "CTR-004",
-    auditEntityId: "AE-003",
-    specificRiskIds: ["SR-004"],
-    controlProcedureName:
-      "Monitoreo de Obligaciones Regulatorias",
-    validityStatus: "Válido",
-    businessControlNumber: "BC-0071",
-    controlActivity:
-      "Seguimiento mensual del calendario de obligaciones regulatorias y generación de alertas ante vencimientos próximos.",
-    currentVulnerability: "Baja",
-    controlType: "Preventivo",
-    frequency: "Mensual",
-    sampleSize: "N/A",
-    rotation: "No Aplica",
-    controlStatus: "Activo",
-  },
-];
-
-const PROCEDURE_TRACKING: ProcedureTracking[] = [
-  {
-    id: "PT-001",
-    controlId: "CTR-001",
-    procedureName: "Verificación de saldos bancarios",
-    identificator: "VER-BAN-001",
-    businessDeptName: "Finanzas",
-    businessName: "Banca Corporativa",
-    divisionName: "Norteamérica",
-    area: "Contabilidad",
-    country: "México",
-  },
-  {
-    id: "PT-002",
-    controlId: "CTR-001",
-    procedureName: "Aprobación por Director Financiero",
-    identificator: "APR-DIR-001",
-    businessDeptName: "Finanzas",
-    businessName: "Banca Corporativa",
-    divisionName: "Norteamérica",
-    area: "Dirección Financiera",
-    country: "México",
-  },
-  {
-    id: "PT-003",
-    controlId: "CTR-001",
-    procedureName: "Carga en sistema ERP (SAP)",
-    identificator: "ERP-CAR-001",
-    businessDeptName: "Finanzas",
-    businessName: "Banca Corporativa",
-    divisionName: "Norteamérica",
-    area: "Sistemas Financieros",
-    country: "México",
-  },
-  {
-    id: "PT-004",
-    controlId: "CTR-002",
-    procedureName: "Revisión de roles en SAP",
-    identificator: "ROL-SAP-001",
-    businessDeptName: "Finanzas",
-    businessName: "Banca Corporativa",
-    divisionName: "Norteamérica",
-    area: "Auditoría Interna",
-    country: "México",
-  },
-  {
-    id: "PT-005",
-    controlId: "CTR-003",
-    procedureName: "Extracción de reporte de accesos",
-    identificator: "ACC-REP-001",
-    businessDeptName: "TI",
-    businessName: "Infraestructura TI",
-    divisionName: "Sudamérica",
-    area: "IAM / Seguridad",
-    country: "Brasil",
-  },
-  {
-    id: "PT-006",
-    controlId: "CTR-004",
-    procedureName: "Actualización calendario normativo",
-    identificator: "CAL-NOR-001",
-    businessDeptName: "Legal",
-    businessName: "Cumpl. Corporativo",
-    divisionName: "Sudamérica",
-    area: "Cumplimiento",
-    country: "Colombia",
-  },
-];
-
-const PLAN_ENTITIES: PlanEntity[] = [
-  {
-    id: "PE-001",
-    name: "Plan de Auditoría Financiera 2025",
-    auditDepartment: "Beverage",
-    year: 2025,
-    status: "in_progress",
-    scope:
-      "Cierre contable, conciliaciones y reportes a casa matriz",
-  },
-  {
-    id: "PE-002",
-    name: "Plan de Auditoría TI & Ciberseguridad 2025",
-    auditDepartment: "Beverage",
-    year: 2025,
-    status: "pending",
-    scope: "Accesos privilegiados, seguridad perimetral y BYOD",
-  },
-  {
-    id: "PE-003",
-    name: "Plan de Auditoría Cumplimiento LATAM 2025",
-    auditDepartment: "Beverage",
-    year: 2025,
-    status: "pending",
-    scope: "Obligaciones regulatorias MX, BR, CO, AR, CL, PE",
-  },
-];
-
-// ─── Users & Roles Data ──────────────────────────────────────────────────────
-interface UserRecord {
-  id: string; name: string; email: string;
-  role: string; status: "active" | "inactive"; lastLogin: string;
-}
-
-const ROLES = ["Administrador", "Jefe de Auditoría", "Auditor Senior", "Auditor", "Consultor", "Solo Lectura"];
-
-const DEFAULT_PERMISSIONS: Record<string, Record<string, boolean>> = {
-  "Administrador":      { "Ver Dashboard": true,  "Editar Registros": true,  "Gestionar Usuarios": true,  "Aprobar Riesgos": true,  "Exportar Datos": true,  "Ver Auditorías": true,  "Crear Auditorías": true,  "Eliminar Registros": true  },
-  "Jefe de Auditoría":  { "Ver Dashboard": true,  "Editar Registros": true,  "Gestionar Usuarios": false, "Aprobar Riesgos": true,  "Exportar Datos": true,  "Ver Auditorías": true,  "Crear Auditorías": true,  "Eliminar Registros": false },
-  "Auditor Senior":     { "Ver Dashboard": true,  "Editar Registros": true,  "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": true,  "Ver Auditorías": true,  "Crear Auditorías": false, "Eliminar Registros": false },
-  "Auditor":            { "Ver Dashboard": true,  "Editar Registros": false, "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": false, "Ver Auditorías": true,  "Crear Auditorías": false, "Eliminar Registros": false },
-  "Consultor":          { "Ver Dashboard": true,  "Editar Registros": false, "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": false, "Ver Auditorías": true,  "Crear Auditorías": false, "Eliminar Registros": false },
-  "Solo Lectura":       { "Ver Dashboard": true,  "Editar Registros": false, "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": false, "Ver Auditorías": true,  "Crear Auditorías": false, "Eliminar Registros": false },
-};
-
-const INITIAL_USERS: UserRecord[] = [
-  { id: "USR-001", name: "María García",      email: "m.garcia@expedite.com",    role: "Jefe de Auditoría", status: "active",   lastLogin: "2025-07-21" },
-  { id: "USR-002", name: "Carlos Morales",    email: "c.morales@expedite.com",   role: "Auditor Senior",    status: "active",   lastLogin: "2025-07-20" },
-  { id: "USR-003", name: "Ana Rodríguez",     email: "a.rodriguez@expedite.com", role: "Auditor",           status: "active",   lastLogin: "2025-07-19" },
-  { id: "USR-004", name: "Pedro Sánchez",     email: "p.sanchez@expedite.com",   role: "Consultor",         status: "inactive", lastLogin: "2025-06-30" },
-  { id: "USR-005", name: "Laura Fernández",   email: "l.fernandez@expedite.com", role: "Auditor",           status: "active",   lastLogin: "2025-07-21" },
-  { id: "USR-006", name: "Diego Torres",      email: "d.torres@expedite.com",    role: "Solo Lectura",      status: "active",   lastLogin: "2025-07-18" },
-];
-
-// ─── Audit Records Data ──────────────────────────────────────────────────────
-interface AuditDocument {
-  id: string; name: string; type: "pdf" | "docx" | "xlsx" | "pptx"; size: string; date: string;
-}
-interface AuditRecord {
-  id: string; name: string; type: string; status: StatusKey;
-  entity: string; responsible: string; startDate: string; endDate: string;
-  scope: string; documents: AuditDocument[];
-}
-
-const AUDIT_RECORDS: AuditRecord[] = [
-  {
-    id: "AUD-001", name: "Auditoría SOX — Cuentas por Pagar", type: "Auditoría Financiera",
-    status: "in_progress", entity: "Finanzas Corporativas", responsible: "M. García",
-    startDate: "2025-06-01", endDate: "2025-08-31",
-    scope: "Revisión de controles SOX para el ciclo de cuentas por pagar y tesorería",
-    documents: [
-      { id: "D-001", name: "Plan de Auditoría SOX 2025.pdf",      type: "pdf",  size: "2.4 MB", date: "2025-06-05" },
-      { id: "D-002", name: "Matriz de Riesgos y Controles.xlsx",  type: "xlsx", size: "1.8 MB", date: "2025-06-12" },
-      { id: "D-003", name: "Informe Preliminar Q2.docx",          type: "docx", size: "890 KB", date: "2025-07-15" },
-      { id: "D-004", name: "Evidencias de Muestreo.pdf",          type: "pdf",  size: "5.1 MB", date: "2025-07-20" },
-    ],
-  },
-  {
-    id: "AUD-002", name: "Auditoría Operacional — Cadena de Suministro", type: "Auditoría Operacional",
-    status: "completed", entity: "Logística & Supply Chain", responsible: "C. Morales",
-    startDate: "2025-03-01", endDate: "2025-05-30",
-    scope: "Evaluación de procesos de compra, almacenamiento y distribución en LATAM",
-    documents: [
-      { id: "D-005", name: "Informe Final Supply Chain.pdf",      type: "pdf",  size: "3.7 MB", date: "2025-05-28" },
-      { id: "D-006", name: "Hallazgos y Recomendaciones.docx",    type: "docx", size: "1.2 MB", date: "2025-05-29" },
-      { id: "D-007", name: "Dashboard KPIs Logística.xlsx",       type: "xlsx", size: "2.1 MB", date: "2025-04-15" },
-      { id: "D-008", name: "Presentación Resultados.pptx",        type: "pptx", size: "4.3 MB", date: "2025-05-30" },
-    ],
-  },
-  {
-    id: "AUD-003", name: "Auditoría de Cumplimiento — GDPR", type: "Auditoría de Cumplimiento",
-    status: "pending", entity: "Tecnología & Datos", responsible: "A. Rodríguez",
-    startDate: "2025-09-01", endDate: "2025-11-30",
-    scope: "Revisión del cumplimiento normativo GDPR en sistemas de tratamiento y almacenamiento de datos",
-    documents: [
-      { id: "D-009", name: "Programa de Auditoría GDPR.pdf",      type: "pdf",  size: "1.1 MB", date: "2025-08-20" },
-      { id: "D-010", name: "Cuestionario de Evaluación.docx",     type: "docx", size: "450 KB", date: "2025-08-22" },
-    ],
-  },
-  {
-    id: "AUD-004", name: "Auditoría Interna — Recursos Humanos", type: "Auditoría Interna",
-    status: "overdue", entity: "Recursos Humanos", responsible: "L. Fernández",
-    startDate: "2025-04-01", endDate: "2025-06-30",
-    scope: "Revisión de procesos de contratación, nómina y evaluación del desempeño",
-    documents: [
-      { id: "D-011", name: "Plan de Trabajo RRHH.pdf",            type: "pdf",  size: "780 KB", date: "2025-04-03" },
-      { id: "D-012", name: "Análisis Nómina Q1 2025.xlsx",        type: "xlsx", size: "3.2 MB", date: "2025-04-20" },
-      { id: "D-013", name: "Entrevistas y Observaciones.docx",    type: "docx", size: "1.5 MB", date: "2025-05-10" },
-    ],
-  },
-];
-
-// ─── Audit Plans Data ─────────────────────────────────────────────────────────
-const AUDIT_PLANS_DATA: AuditPlan[] = [
-  { id: "AP-001", code: "PAI-2025-001", name: "Plan Auditoría Financiera LATAM", period: "Q1–Q2 2025", startDate: "2025-01-15", endDate: "2025-06-30", status: "Aprobado", estimatedHours: 320, responsible: "M. García", scope: "Cierre contable, conciliaciones bancarias y reportes a casa matriz en MX, BR, CO" },
-  { id: "AP-002", code: "PAI-2025-002", name: "Plan Auditoría TI & Ciberseguridad", period: "Q2–Q3 2025", startDate: "2025-04-01", endDate: "2025-09-30", status: "En Ejecución", estimatedHours: 240, responsible: "C. Morales", scope: "Accesos privilegiados, seguridad perimetral, revisión de vulnerabilidades" },
-  { id: "AP-003", code: "PAI-2025-003", name: "Plan Auditoría Cumplimiento Regulatorio", period: "Q3–Q4 2025", startDate: "2025-07-01", endDate: "2025-12-31", status: "Borrador", estimatedHours: 180, responsible: "A. Rodríguez", scope: "Obligaciones regulatorias GDPR, SUNAT, Superintendencia Financiera Colombia" },
-  { id: "AP-004", code: "PAI-2024-012", name: "Plan Auditoría Operacional LATAM", period: "Q4 2024", startDate: "2024-10-01", endDate: "2024-12-31", status: "Cerrado", estimatedHours: 290, responsible: "M. García", scope: "Cadena de suministro, logística y distribución en toda la región" },
-];
-
-
-
-
-
-// ─── Bitácora Data ─────────────────────────────────────────────────────────────
-const BITACORA_DATA: BilacoraEntry[] = [
-  // Hoy (2026-09-10)
-  { id: "BIT-001", user: "María García",    action: "Aprobó plan de auditoría",   entity: "PAI-2026-003",           entityId: "AP-003",   date: "2026-09-10 09:14" },
-  { id: "BIT-002", user: "Carlos Morales",  action: "Cargó evidencia",            entity: "CTR-003",                entityId: "CTR-003",  date: "2026-09-10 11:40" },
-  { id: "BIT-003", user: "Ana Rodríguez",   action: "Creó hallazgo",              entity: "HAL-2026-007",           entityId: "FND-007",  date: "2026-09-10 14:55" },
-  // Últimos 7 días (2026-09-04 – 2026-09-09)
-  { id: "BIT-004", user: "Laura Fernández", action: "Modificó control",           entity: "CTR-004",                entityId: "CTR-004",  date: "2026-09-09 10:22" },
-  { id: "BIT-005", user: "Diego Torres",    action: "Consultó hallazgo",          entity: "HAL-2026-005",           entityId: "FND-005",  date: "2026-09-08 16:05" },
-  { id: "BIT-006", user: "María García",    action: "Exportó CSV — Riesgos",      entity: "Catálogo Organizacional",entityId: "HIER",     date: "2026-09-07 08:48" },
-  { id: "BIT-007", user: "Carlos Morales",  action: "Creó plan de auditoría",     entity: "PAI-2026-004",           entityId: "AP-004",   date: "2026-09-05 13:30" },
-  // Últimos 30 días, fuera de últimos 7 (2026-08-11 – 2026-09-03)
-  { id: "BIT-008", user: "Ana Rodríguez",   action: "Cargó evidencia",            entity: "HAL-2026-004",           entityId: "FND-004",  date: "2026-09-01 15:10" },
-  { id: "BIT-009", user: "Laura Fernández", action: "Modificó permisos de rol",   entity: "Auditor Senior",         entityId: "ROLE-003", date: "2026-08-27 09:55" },
-  { id: "BIT-010", user: "Diego Torres",    action: "Aprobó hallazgo",            entity: "HAL-2026-003",           entityId: "FND-003",  date: "2026-08-20 11:18" },
-  { id: "BIT-011", user: "Carlos Morales",  action: "Exportó PDF — Informe Q2",   entity: "Dashboard",              entityId: "DASH",     date: "2026-08-15 14:40" },
-  // Anteriores (más de 30 días)
-  { id: "BIT-012", user: "María García",    action: "Marcó riesgo como completado",entity: "RIE-0187",              entityId: "RIE-0187", date: "2026-07-30 10:05" },
-  { id: "BIT-013", user: "Ana Rodríguez",   action: "Consultó catálogo",          entity: "Catálogo Organizacional",entityId: "HIER",     date: "2026-07-18 16:33" },
-  { id: "BIT-014", user: "Laura Fernández", action: "Creó riesgo específico",     entity: "RIE-0201",               entityId: "RIE-0201", date: "2026-07-05 08:20" },
-  { id: "BIT-015", user: "Diego Torres",    action: "Modificó permisos de rol",   entity: "Solo Lectura",           entityId: "ROLE-006", date: "2026-06-22 13:45" },
-];
 
 // ─── Sidebar ────────────────────────────────────────────────────────────────
 function Sidebar({
@@ -740,9 +125,9 @@ function Sidebar({
       <div className="px-5 py-5 border-b border-sidebar-border">
         <div className="flex items-center gap-2.5">
           <svg viewBox="0 0 96 64" xmlns="http://www.w3.org/2000/svg" className="h-7 w-auto flex-shrink-0" fill="none">
-            <path d="M6 6 L26 32 L6 58" stroke="white" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M38 6 L58 32 L38 58" stroke="white" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M70 6 L90 32 L70 58" stroke="white" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M6 6 L26 32 L6 58" stroke="white" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M38 6 L58 32 L38 58" stroke="white" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M70 6 L90 32 L70 58" stroke="white" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <div>
             <div className="text-white text-sm font-bold leading-none tracking-wide">
@@ -779,11 +164,10 @@ function Sidebar({
             key={item.id}
             id={`tour-nav-${item.id}`}
             onClick={() => onNav(item.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${
-              active === item.id
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === item.id
                 ? "bg-sidebar-primary text-white"
                 : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
-            }`}
+              }`}
           >
             <span className="flex-shrink-0">{item.icon}</span>
             <span className="flex-1">{item.label}</span>
@@ -812,11 +196,10 @@ function Sidebar({
             key={item.id}
             id={`tour-nav-${item.id}`}
             onClick={() => onNav(item.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${
-              active === item.id
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === item.id
                 ? "bg-sidebar-primary text-white"
                 : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
-            }`}
+              }`}
           >
             <span className="flex-shrink-0">{item.icon}</span>
             <span className="flex-1">{item.label}</span>
@@ -832,11 +215,10 @@ function Sidebar({
         <button
           id="tour-nav-users"
           onClick={() => onNav("users")}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${
-            active === "users"
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === "users"
               ? "bg-sidebar-primary text-white"
               : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
-          }`}
+            }`}
         >
           <span className="flex-shrink-0"><Users size={16} /></span>
           Usuarios & Roles
@@ -844,22 +226,20 @@ function Sidebar({
         <button
           id="tour-nav-bitacora"
           onClick={() => onNav("bitacora")}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${
-            active === "bitacora"
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === "bitacora"
               ? "bg-sidebar-primary text-white"
               : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
-          }`}
+            }`}
         >
           <span className="flex-shrink-0"><Activity size={16} /></span>
           Bitácora
         </button>
         <button
           onClick={() => onNav("settings")}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${
-            active === "settings"
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === "settings"
               ? "bg-sidebar-primary text-white"
               : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
-          }`}
+            }`}
         >
           <span className="flex-shrink-0">
             <Settings size={16} />
@@ -942,10 +322,11 @@ function DashboardView({
   const [auditForm, setAuditForm] = useState(EMPTY_AUDIT_FORM);
   const [auditErr, setAuditErr] = useState<Record<string, string>>({});
   const [auditCounter, setAuditCounter] = useState(47);
+
   const [quickLinks, setQuickLinks] = useState<QuickLink[]>([
-    { label: "AUD-2025-041 — SOX Financiero",       urgency: "overdue",     desc: "Vencida · Entregable pendiente" },
-    { label: "AUD-2025-038 — TI & Ciberseguridad",  urgency: "in_progress", desc: "En progreso · Faltan 6 días"    },
-    { label: "AUD-2025-035 — Nómina México",         urgency: "pending",     desc: "Inicio en 12 días"              },
+    { label: "AUD-2025-041 — SOX Financiero", urgency: "overdue", desc: "Vencida · Entregable pendiente" },
+    { label: "AUD-2025-038 — TI & Ciberseguridad", urgency: "in_progress", desc: "En progreso · Faltan 6 días" },
+    { label: "AUD-2025-035 — Nómina México", urgency: "pending", desc: "Inicio en 12 días" },
   ]);
 
   const saveHours = () => {
@@ -962,11 +343,11 @@ function DashboardView({
 
   const validateAudit = () => {
     const e: Record<string, string> = {};
-    if (!auditForm.name.trim())       e.name        = "Requerido";
-    if (!auditForm.entityId)          e.entityId    = "Requerido";
-    if (!auditForm.leadAuditor)       e.leadAuditor = "Requerido";
-    if (!auditForm.startDate)         e.startDate   = "Requerido";
-    if (!auditForm.endDate)           e.endDate     = "Requerido";
+    if (!auditForm.name.trim()) e.name = "Requerido";
+    if (!auditForm.entityId) e.entityId = "Requerido";
+    if (!auditForm.leadAuditor) e.leadAuditor = "Requerido";
+    if (!auditForm.startDate) e.startDate = "Requerido";
+    if (!auditForm.endDate) e.endDate = "Requerido";
     if (auditForm.startDate && auditForm.endDate && auditForm.endDate <= auditForm.startDate)
       e.endDate = "Debe ser posterior a la fecha de inicio";
     return e;
@@ -996,11 +377,32 @@ function DashboardView({
       ? TASKS
       : TASKS.filter((t) => t.status === statusFilter);
 
+  // ─── Constants ──────────────────────────────────────────────────────────────
+  const NAV_ITEMS: NavItem[] = [
+    {
+      id: "dashboard",
+      label: "Dashboard",
+      icon: <LayoutDashboard size={18} />,
+      badge: 3,
+    },
+    {
+      id: "filter",
+      label: "Filtrar",
+      icon: <SlidersHorizontal size={18} />,
+    },
+    {
+      id: "hierarchy",
+      label: "Catálogo",
+      icon: <GitBranch size={18} />,
+    },
+  ];
+
+
   const kpis = [
-    { label: "Auditorías Activas",  value: "14",   delta: "+2 vs Q anterior", icon: <ClipboardList size={16} />, color: "text-blue-600 bg-blue-50"     },
-    { label: "Hallazgos Abiertos",  value: "38",   delta: "7 críticos",        icon: <AlertTriangle size={16} />, color: "text-red-600 bg-red-50"       },
-    { label: "Controles Probados",  value: "127",  delta: "83% aprobados",     icon: <CheckCircle2 size={16} />, color: "text-emerald-600 bg-emerald-50" },
-    { label: "Horas Registradas",   value: "342h", delta: "Este mes",          icon: <Timer size={16} />,        color: "text-purple-600 bg-purple-50"  },
+    { label: "Auditorías Activas", value: "14", delta: "+2 vs Q anterior", icon: <ClipboardList size={16} />, color: "text-blue-600 bg-blue-50" },
+    { label: "Hallazgos Abiertos", value: "38", delta: "7 críticos", icon: <AlertTriangle size={16} />, color: "text-red-600 bg-red-50" },
+    { label: "Controles Probados", value: "127", delta: "83% aprobados", icon: <CheckCircle2 size={16} />, color: "text-emerald-600 bg-emerald-50" },
+    { label: "Horas Registradas", value: "342h", delta: "Este mes", icon: <Timer size={16} />, color: "text-purple-600 bg-purple-50" },
   ];
 
   const activeUsers = INITIAL_USERS.filter(u => u.status === "active");
@@ -1008,532 +410,530 @@ function DashboardView({
 
   return (
     <>
-    {/* ── Nueva Auditoría Modal ── */}
-    {showNewAudit && (
-      <>
-        <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setShowNewAudit(false); setAuditErr({}); }} />
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            {/* Header */}
-            <div className="px-6 pt-5 pb-4 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-primary/10 rounded-lg"><ClipboardList size={15} className="text-primary" /></div>
-                <div>
-                  <div className="text-sm font-bold text-foreground">Nueva Auditoría</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">Completa todos los campos requeridos</div>
+      {/* ── Nueva Auditoría Modal ── */}
+      {showNewAudit && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => { setShowNewAudit(false); setAuditErr({}); }} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-card rounded-2xl shadow-2xl w-full max-w-lg" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {/* Header */}
+              <div className="px-6 pt-5 pb-4 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-primary/10 rounded-lg"><ClipboardList size={15} className="text-primary" /></div>
+                  <div>
+                    <div className="text-sm font-bold text-foreground">Nueva Auditoría</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Completa todos los campos requeridos</div>
+                  </div>
                 </div>
-              </div>
-              <button onClick={() => { setShowNewAudit(false); setAuditErr({}); }} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary transition-colors">
-                <X size={16} />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 py-5 space-y-4">
-              {/* Nombre */}
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
-                  Nombre de la auditoría <span className="text-destructive">*</span>
-                </label>
-                <input
-                  value={auditForm.name}
-                  onChange={e => setField("name", e.target.value)}
-                  placeholder="Ej. Auditoría Financiera Q4 — Tesorería"
-                  className={`w-full text-sm px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${auditErr.name ? "border-destructive" : "border-border"}`}
-                />
-                {auditErr.name && <p className="text-xs text-destructive mt-0.5">{auditErr.name}</p>}
+                <button onClick={() => { setShowNewAudit(false); setAuditErr({}); }} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary transition-colors">
+                  <X size={16} />
+                </button>
               </div>
 
-              {/* Tipo */}
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Tipo de auditoría</label>
-                <select
-                  value={auditForm.auditType}
-                  onChange={e => setField("auditType", e.target.value)}
-                  className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  <option value="">— Seleccionar —</option>
-                  {AUDIT_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-
-              {/* Entidad auditable */}
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
-                  Entidad auditable <span className="text-destructive">*</span>
-                </label>
-                <select
-                  value={auditForm.entityId}
-                  onChange={e => setField("entityId", e.target.value)}
-                  className={`w-full text-sm px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${auditErr.entityId ? "border-destructive" : "border-border"}`}
-                >
-                  <option value="">— Seleccionar entidad —</option>
-                  {AUDIT_ENTITIES.map(ae => (
-                    <option key={ae.id} value={ae.id}>{ae.id} — {ae.name.replace("Entidad Auditora — ", "")}</option>
-                  ))}
-                </select>
-                {auditErr.entityId && <p className="text-xs text-destructive mt-0.5">{auditErr.entityId}</p>}
-              </div>
-
-              {/* Plan de auditoría */}
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Plan de auditoría asociado</label>
-                <select
-                  value={auditForm.planId}
-                  onChange={e => setField("planId", e.target.value)}
-                  className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  <option value="">— Sin plan asociado —</option>
-                  {auditPlansAll.map(p => (
-                    <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Auditor líder */}
-              <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
-                  Auditor líder <span className="text-destructive">*</span>
-                </label>
-                <select
-                  value={auditForm.leadAuditor}
-                  onChange={e => setField("leadAuditor", e.target.value)}
-                  className={`w-full text-sm px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${auditErr.leadAuditor ? "border-destructive" : "border-border"}`}
-                >
-                  <option value="">— Seleccionar auditor —</option>
-                  {activeUsers.map(u => (
-                    <option key={u.id} value={u.name}>{u.name} · {u.role}</option>
-                  ))}
-                </select>
-                {auditErr.leadAuditor && <p className="text-xs text-destructive mt-0.5">{auditErr.leadAuditor}</p>}
-              </div>
-
-              {/* Fechas */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Body */}
+              <div className="px-6 py-5 space-y-4">
+                {/* Nombre */}
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
-                    Fecha de inicio <span className="text-destructive">*</span>
+                    Nombre de la auditoría <span className="text-destructive">*</span>
                   </label>
                   <input
-                    type="date"
-                    value={auditForm.startDate}
-                    onChange={e => setField("startDate", e.target.value)}
-                    className={`w-full text-sm px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${auditErr.startDate ? "border-destructive" : "border-border"}`}
+                    value={auditForm.name}
+                    onChange={e => setField("name", e.target.value)}
+                    placeholder="Ej. Auditoría Financiera Q4 — Tesorería"
+                    className={`w-full text-sm px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${auditErr.name ? "border-destructive" : "border-border"}`}
                   />
-                  {auditErr.startDate && <p className="text-xs text-destructive mt-0.5">{auditErr.startDate}</p>}
+                  {auditErr.name && <p className="text-xs text-destructive mt-0.5">{auditErr.name}</p>}
                 </div>
+
+                {/* Tipo */}
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Tipo de auditoría</label>
+                  <select
+                    value={auditForm.auditType}
+                    onChange={e => setField("auditType", e.target.value)}
+                    className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="">— Seleccionar —</option>
+                    {AUDIT_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+
+                {/* Entidad auditable */}
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
-                    Fecha de fin <span className="text-destructive">*</span>
+                    Entidad auditable <span className="text-destructive">*</span>
                   </label>
-                  <input
-                    type="date"
-                    value={auditForm.endDate}
-                    onChange={e => setField("endDate", e.target.value)}
-                    className={`w-full text-sm px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${auditErr.endDate ? "border-destructive" : "border-border"}`}
-                  />
-                  {auditErr.endDate && <p className="text-xs text-destructive mt-0.5">{auditErr.endDate}</p>}
+                  <select
+                    value={auditForm.entityId}
+                    onChange={e => setField("entityId", e.target.value)}
+                    className={`w-full text-sm px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${auditErr.entityId ? "border-destructive" : "border-border"}`}
+                  >
+                    <option value="">— Seleccionar entidad —</option>
+                    {AUDIT_ENTITIES.map(ae => (
+                      <option key={ae.id} value={ae.id}>{ae.id} — {ae.name.replace("Entidad Auditora — ", "")}</option>
+                    ))}
+                  </select>
+                  {auditErr.entityId && <p className="text-xs text-destructive mt-0.5">{auditErr.entityId}</p>}
+                </div>
+
+                {/* Plan de auditoría */}
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Plan de auditoría asociado</label>
+                  <select
+                    value={auditForm.planId}
+                    onChange={e => setField("planId", e.target.value)}
+                    className="w-full text-sm px-3 py-2 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    <option value="">— Sin plan asociado —</option>
+                    {auditPlansAll.map(p => (
+                      <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Auditor líder */}
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                    Auditor líder <span className="text-destructive">*</span>
+                  </label>
+                  <select
+                    value={auditForm.leadAuditor}
+                    onChange={e => setField("leadAuditor", e.target.value)}
+                    className={`w-full text-sm px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${auditErr.leadAuditor ? "border-destructive" : "border-border"}`}
+                  >
+                    <option value="">— Seleccionar auditor —</option>
+                    {activeUsers.map(u => (
+                      <option key={u.id} value={u.name}>{u.name} · {u.role}</option>
+                    ))}
+                  </select>
+                  {auditErr.leadAuditor && <p className="text-xs text-destructive mt-0.5">{auditErr.leadAuditor}</p>}
+                </div>
+
+                {/* Fechas */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                      Fecha de inicio <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={auditForm.startDate}
+                      onChange={e => setField("startDate", e.target.value)}
+                      className={`w-full text-sm px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${auditErr.startDate ? "border-destructive" : "border-border"}`}
+                    />
+                    {auditErr.startDate && <p className="text-xs text-destructive mt-0.5">{auditErr.startDate}</p>}
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                      Fecha de fin <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={auditForm.endDate}
+                      onChange={e => setField("endDate", e.target.value)}
+                      className={`w-full text-sm px-3 py-2 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${auditErr.endDate ? "border-destructive" : "border-border"}`}
+                    />
+                    {auditErr.endDate && <p className="text-xs text-destructive mt-0.5">{auditErr.endDate}</p>}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Footer */}
-            <div className="px-6 pb-5 flex items-center gap-3">
-              <PrimaryBtn icon={<Check size={14} />} onClick={handleCreateAudit}>
-                Crear auditoría
-              </PrimaryBtn>
-              <GhostBtn onClick={() => { setShowNewAudit(false); setAuditErr({}); setAuditForm(EMPTY_AUDIT_FORM); }}>
-                Cancelar
-              </GhostBtn>
+              {/* Footer */}
+              <div className="px-6 pb-5 flex items-center gap-3">
+                <PrimaryBtn icon={<Check size={14} />} onClick={handleCreateAudit}>
+                  Crear auditoría
+                </PrimaryBtn>
+                <GhostBtn onClick={() => { setShowNewAudit(false); setAuditErr({}); setAuditForm(EMPTY_AUDIT_FORM); }}>
+                  Cancelar
+                </GhostBtn>
+              </div>
             </div>
           </div>
-        </div>
-      </>
-    )}
-
-    <div
-      className="flex-1 overflow-auto p-6"
-      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-    >
-      <Breadcrumbs
-        items={["Inicio", "Dashboard", "Jefatura de Auditoría"]}
-      />
-      <PageHeader
-        title="Dashboard — Jefatura de Auditoría"
-        subtitle="Período activo: Q3 2025 · Última actualización: hace 4 min"
-        actions={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setDashPdfOpen(true)}
-              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:bg-secondary transition-colors font-semibold"
-            >
-              <FileText size={12} /> Exportar PDF
-            </button>
-            <PrimaryBtn icon={<Plus size={14} />} onClick={() => setShowNewAudit(true)}>
-              Nueva Auditoría
-            </PrimaryBtn>
-          </div>
-        }
-      />
-      {dashPdfOpen && (
-        <PDFPreviewModal
-          onClose={() => setDashPdfOpen(false)}
-          doc={{
-            title: "Resumen del Período Q3 2025",
-            subtitle: "Jefatura de Auditoría · Expedite GRC Platform",
-            sections: [
-              {
-                heading: "Indicadores Clave",
-                rows: [
-                  ["Auditorías activas", "14"],
-                  ["Hallazgos abiertos", "38 (7 críticos)"],
-                  ["Controles probados", "127 (83% aprobados)"],
-                  ["Horas registradas", "342h (este mes)"],
-                ],
-              },
-              {
-                heading: "Tareas Urgentes",
-                rows: [
-                  ["AUD-2025-041", "SOX Financiero — Vencida"],
-                  ["AUD-2025-038", "TI & Ciberseguridad — En progreso"],
-                  ["AUD-2025-035", "Nómina México — Pendiente"],
-                ],
-              },
-              {
-                heading: "Tendencias Q3 2025",
-                rows: [
-                  ["Q1 completadas", "8"],
-                  ["Q2 completadas", "11"],
-                  ["Q3 en ejecución", "5 completadas · 7 en progreso"],
-                  ["Q4 proyectadas", "9 pendientes"],
-                ],
-              },
-            ],
-          }}
-        />
+        </>
       )}
 
-      {/* KPI Row */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {kpis.map((k) => (
-          <Card key={k.label} className="p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div className={`p-2 rounded-lg ${k.color}`}>
-                {k.icon}
-              </div>
-              <TrendingUp
-                size={12}
-                className="text-muted-foreground"
-              />
-            </div>
-            <div className="text-2xl font-bold text-foreground tracking-tight">
-              {k.value}
-            </div>
-            <div className="text-xs font-semibold text-foreground mt-0.5">
-              {k.label}
-            </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {k.delta}
-            </div>
-          </Card>
-        ))}
-      </div>
-
-      {/* Quick Access & Hour Log */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="col-span-2">
-          <Card>
-            <div className="px-4 pt-4 pb-3 border-b border-border flex items-center justify-between">
-              <div className="text-sm font-semibold text-foreground">
-                Accesos Rápidos — Registros Urgentes
-              </div>
+      <div
+        className="flex-1 overflow-auto p-6"
+        style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+      >
+        <Breadcrumbs
+          items={["Inicio", "Dashboard", "Jefatura de Auditoría"]}
+        />
+        <PageHeader
+          title="Dashboard — Jefatura de Auditoría"
+          subtitle="Período activo: Q3 2025 · Última actualización: hace 4 min"
+          actions={
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => onNav("filter")}
-                className="text-xs text-accent flex items-center gap-1 hover:underline"
+                onClick={() => setDashPdfOpen(true)}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:bg-secondary transition-colors font-semibold"
               >
-                Ver todos <ArrowRight size={10} />
+                <FileText size={12} /> Exportar PDF
               </button>
+              <PrimaryBtn icon={<Plus size={14} />} onClick={() => setShowNewAudit(true)}>
+                Nueva Auditoría
+              </PrimaryBtn>
             </div>
-            <div className="divide-y divide-border">
-              {quickLinks.map((link, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/50 cursor-pointer group transition-colors"
-                >
-                  <div
-                    className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_CONFIG[link.urgency as StatusKey].dot}`}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
-                      {link.label}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {link.desc}
-                    </div>
-                  </div>
-                  <StatusBadge
-                    status={link.urgency as StatusKey}
-                  />
-                  <ArrowRight
-                    size={14}
-                    className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                  />
+          }
+        />
+        {dashPdfOpen && (
+          <PDFPreviewModal
+            onClose={() => setDashPdfOpen(false)}
+            doc={{
+              title: "Resumen del Período Q3 2025",
+              subtitle: "Jefatura de Auditoría · Expedite GRC Platform",
+              sections: [
+                {
+                  heading: "Indicadores Clave",
+                  rows: [
+                    ["Auditorías activas", "14"],
+                    ["Hallazgos abiertos", "38 (7 críticos)"],
+                    ["Controles probados", "127 (83% aprobados)"],
+                    ["Horas registradas", "342h (este mes)"],
+                  ],
+                },
+                {
+                  heading: "Tareas Urgentes",
+                  rows: [
+                    ["AUD-2025-041", "SOX Financiero — Vencida"],
+                    ["AUD-2025-038", "TI & Ciberseguridad — En progreso"],
+                    ["AUD-2025-035", "Nómina México — Pendiente"],
+                  ],
+                },
+                {
+                  heading: "Tendencias Q3 2025",
+                  rows: [
+                    ["Q1 completadas", "8"],
+                    ["Q2 completadas", "11"],
+                    ["Q3 en ejecución", "5 completadas · 7 en progreso"],
+                    ["Q4 proyectadas", "9 pendientes"],
+                  ],
+                },
+              ],
+            }}
+          />
+        )}
+
+        {/* KPI Row */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          {kpis.map((k) => (
+            <Card key={k.label} className="p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div className={`p-2 rounded-lg ${k.color}`}>
+                  {k.icon}
                 </div>
-              ))}
-            </div>
-          </Card>
+                <TrendingUp
+                  size={12}
+                  className="text-muted-foreground"
+                />
+              </div>
+              <div className="text-2xl font-bold text-foreground tracking-tight">
+                {k.value}
+              </div>
+              <div className="text-xs font-semibold text-foreground mt-0.5">
+                {k.label}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {k.delta}
+              </div>
+            </Card>
+          ))}
         </div>
 
-        {/* Hour logger */}
-        <Card className="p-4 flex flex-col">
-          <div className="flex items-center gap-2 mb-3">
-            <Clock size={15} className="text-primary" />
-            <div className="text-sm font-semibold text-foreground">
-              Registro de Horas
-            </div>
-          </div>
-          <div className="space-y-2.5 flex-1">
-            <select className="w-full text-sm bg-input-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring/30">
-              <option>AUD-2025-041 — SOX Financiero</option>
-              <option>
-                AUD-2025-038 — TI & Ciberseguridad
-              </option>
-              <option>AUD-2025-035 — Nómina México</option>
-            </select>
-            <select className="w-full text-sm bg-input-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring/30">
-              <option>Planificación</option>
-              <option>Trabajo de campo</option>
-              <option>Revisión / QA</option>
-              <option>Reporte</option>
-            </select>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min="0.5"
-                max="24"
-                step="0.5"
-                placeholder="Horas (ej. 3.5)"
-                value={hours}
-                onChange={(e) => setHours(e.target.value)}
-                className="flex-1 text-sm bg-input-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground"
-              />
-              <button
-                onClick={saveHours}
-                className={`px-4 py-2 rounded-md text-sm font-semibold transition-all ${
-                  hourSaved
-                    ? "bg-emerald-500 text-white"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90"
-                }`}
-              >
-                {hourSaved ? (
-                  <Check size={16} />
-                ) : (
-                  <Save size={16} />
-                )}
-              </button>
-            </div>
-          </div>
-          {hourSaved && (
-            <div className="mt-2 flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 rounded-md px-3 py-2">
-              <CheckCircle2 size={12} />
-              <span>Horas registradas correctamente</span>
-            </div>
-          )}
-          <div className="mt-3 pt-3 border-t border-border">
-            <div className="text-xs text-muted-foreground">
-              Hoy:{" "}
-              <span className="font-semibold text-foreground">
-                4.5h
-              </span>{" "}
-              · Semana:{" "}
-              <span className="font-semibold text-foreground">
-                22h
-              </span>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Tasks Table */}
-      <Card className="mb-6">
-        <div className="px-4 pt-4 pb-3 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <ListTodo size={15} className="text-primary" />
-            <div className="text-sm font-semibold text-foreground">
-              Tareas Pendientes
-            </div>
-            <span className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-medium">
-              {TASKS.length}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {(
-              [
-                "all",
-                "overdue",
-                "in_progress",
-                "pending",
-                "completed",
-              ] as const
-            ).map((f) => (
-              <button
-                key={f}
-                onClick={() => setStatusFilter(f)}
-                className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${
-                  statusFilter === f
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-secondary"
-                }`}
-              >
-                {f === "all" ? "Todos" : STATUS_CONFIG[f].label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="overflow-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  ID / Nombre
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Tipo
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Responsable
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Estatus
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Fecha Esperada
-                </th>
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filteredTasks.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-10 text-center text-muted-foreground"
-                  >
-                    <CheckCircle2
-                      size={28}
-                      className="mx-auto mb-2 text-muted-foreground/40"
-                    />
-                    <div className="text-sm">
-                      No hay tareas con este filtro
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {filteredTasks.map((task) => (
-                <tr
-                  key={task.id}
-                  className="hover:bg-secondary/30 cursor-pointer group transition-colors"
+        {/* Quick Access & Hour Log */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <div className="col-span-2">
+            <Card>
+              <div className="px-4 pt-4 pb-3 border-b border-border flex items-center justify-between">
+                <div className="text-sm font-semibold text-foreground">
+                  Accesos Rápidos — Registros Urgentes
+                </div>
+                <button
                   onClick={() => onNav("filter")}
+                  className="text-xs text-accent flex items-center gap-1 hover:underline"
                 >
-                  <td className="px-4 py-3">
-                    <div className="font-mono text-xs text-muted-foreground mb-0.5">
-                      {task.id}
-                    </div>
-                    <div className="font-medium text-foreground text-sm group-hover:text-primary transition-colors">
-                      {task.name}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {task.type}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-bold text-primary flex-shrink-0">
-                        {task.owner
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
+                  Ver todos <ArrowRight size={10} />
+                </button>
+              </div>
+              <div className="divide-y divide-border">
+                {quickLinks.map((link, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/50 cursor-pointer group transition-colors"
+                  >
+                    <div
+                      className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_CONFIG[link.urgency as StatusKey].dot}`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                        {link.label}
                       </div>
-                      <span className="text-xs text-foreground">
-                        {task.owner}
-                      </span>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {link.desc}
+                      </div>
                     </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={task.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`font-mono text-xs ${task.status === "overdue" ? "text-red-600 font-semibold" : "text-muted-foreground"}`}
-                    >
-                      {task.dueDate}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
+                    <StatusBadge
+                      status={link.urgency as StatusKey}
+                    />
                     <ArrowRight
                       size={14}
-                      className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                     />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+
+          {/* Hour logger */}
+          <Card className="p-4 flex flex-col">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock size={15} className="text-primary" />
+              <div className="text-sm font-semibold text-foreground">
+                Registro de Horas
+              </div>
+            </div>
+            <div className="space-y-2.5 flex-1">
+              <select className="w-full text-sm bg-input-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring/30">
+                <option>AUD-2025-041 — SOX Financiero</option>
+                <option>
+                  AUD-2025-038 — TI & Ciberseguridad
+                </option>
+                <option>AUD-2025-035 — Nómina México</option>
+              </select>
+              <select className="w-full text-sm bg-input-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring/30">
+                <option>Planificación</option>
+                <option>Trabajo de campo</option>
+                <option>Revisión / QA</option>
+                <option>Reporte</option>
+              </select>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min="0.5"
+                  max="24"
+                  step="0.5"
+                  placeholder="Horas (ej. 3.5)"
+                  value={hours}
+                  onChange={(e) => setHours(e.target.value)}
+                  className="flex-1 text-sm bg-input-background border border-border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring/30 placeholder:text-muted-foreground"
+                />
+                <button
+                  onClick={saveHours}
+                  className={`px-4 py-2 rounded-md text-sm font-semibold transition-all ${hourSaved
+                      ? "bg-emerald-500 text-white"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90"
+                    }`}
+                >
+                  {hourSaved ? (
+                    <Check size={16} />
+                  ) : (
+                    <Save size={16} />
+                  )}
+                </button>
+              </div>
+            </div>
+            {hourSaved && (
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 rounded-md px-3 py-2">
+                <CheckCircle2 size={12} />
+                <span>Horas registradas correctamente</span>
+              </div>
+            )}
+            <div className="mt-3 pt-3 border-t border-border">
+              <div className="text-xs text-muted-foreground">
+                Hoy:{" "}
+                <span className="font-semibold text-foreground">
+                  4.5h
+                </span>{" "}
+                · Semana:{" "}
+                <span className="font-semibold text-foreground">
+                  22h
+                </span>
+              </div>
+            </div>
+          </Card>
         </div>
-      </Card>
 
-      {/* Charts */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* Quarterly */}
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart3 size={15} className="text-primary" />
-            <div className="text-sm font-semibold text-foreground">
-              Auditorías por Trimestre
+        {/* Tasks Table */}
+        <Card className="mb-6">
+          <div className="px-4 pt-4 pb-3 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <ListTodo size={15} className="text-primary" />
+              <div className="text-sm font-semibold text-foreground">
+                Tareas Pendientes
+              </div>
+              <span className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-medium">
+                {TASKS.length}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {(
+                [
+                  "all",
+                  "overdue",
+                  "in_progress",
+                  "pending",
+                  "completed",
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setStatusFilter(f)}
+                  className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${statusFilter === f
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-secondary"
+                    }`}
+                >
+                  {f === "all" ? "Todos" : STATUS_CONFIG[f].label}
+                </button>
+              ))}
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart
-              data={QUARTERLY_DATA}
-              barSize={12}
-              barGap={4}
-            >
-              <CartesianGrid key="qgrid" strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
-              <XAxis key="qxaxis" dataKey="quarter" tick={{ fontSize: 11, fill: "#5A6A85" }} axisLine={false} tickLine={false} />
-              <YAxis key="qyaxis" tick={{ fontSize: 11, fill: "#5A6A85" }} axisLine={false} tickLine={false} />
-              <Tooltip key="qtooltip" contentStyle={{ background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, fontSize: 12 }} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
-              <Legend key="qlegend" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-              <Bar key="qbar-completadas" dataKey="completadas" name="Completadas" fill={CHART_COLORS.completadas} radius={[3, 3, 0, 0]} />
-              <Bar key="qbar-en_progreso" dataKey="en_progreso" name="En Progreso" fill={CHART_COLORS.en_progreso} radius={[3, 3, 0, 0]} />
-              <Bar key="qbar-pendientes" dataKey="pendientes" name="Pendientes" fill={CHART_COLORS.pendientes} radius={[3, 3, 0, 0]} />
-              <Bar key="qbar-vencidas" dataKey="vencidas" name="Vencidas" fill={CHART_COLORS.vencidas} radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    ID / Nombre
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Tipo
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Responsable
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Estatus
+                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Fecha Esperada
+                  </th>
+                  <th className="px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredTasks.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-4 py-10 text-center text-muted-foreground"
+                    >
+                      <CheckCircle2
+                        size={28}
+                        className="mx-auto mb-2 text-muted-foreground/40"
+                      />
+                      <div className="text-sm">
+                        No hay tareas con este filtro
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {filteredTasks.map((task) => (
+                  <tr
+                    key={task.id}
+                    className="hover:bg-secondary/30 cursor-pointer group transition-colors"
+                    onClick={() => onNav("filter")}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-mono text-xs text-muted-foreground mb-0.5">
+                        {task.id}
+                      </div>
+                      <div className="font-medium text-foreground text-sm group-hover:text-primary transition-colors">
+                        {task.name}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {task.type}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-bold text-primary flex-shrink-0">
+                          {task.owner
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")}
+                        </div>
+                        <span className="text-xs text-foreground">
+                          {task.owner}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={task.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`font-mono text-xs ${task.status === "overdue" ? "text-red-600 font-semibold" : "text-muted-foreground"}`}
+                      >
+                        {task.dueDate}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <ArrowRight
+                        size={14}
+                        className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
 
-        {/* Vertical/Country */}
-        <Card className="p-4">
-          <div className="flex items-center gap-2 mb-4">
-            <Building2 size={15} className="text-primary" />
-            <div className="text-sm font-semibold text-foreground">
-              Por Vertical · Entidad Auditada
+        {/* Charts */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* Quarterly */}
+          <Card className="p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <BarChart3 size={15} className="text-primary" />
+              <div className="text-sm font-semibold text-foreground">
+                Auditorías por Trimestre
+              </div>
             </div>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={VERTICAL_DATA} barSize={14} barGap={3} layout="vertical">
-              <CartesianGrid key="vgrid" strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
-              <XAxis key="vxaxis" type="number" tick={{ fontSize: 11, fill: "#5A6A85" }} axisLine={false} tickLine={false} />
-              <YAxis key="vyaxis" dataKey="name" type="category" tick={{ fontSize: 11, fill: "#5A6A85" }} axisLine={false} tickLine={false} width={90} />
-              <Tooltip key="vtooltip" contentStyle={{ background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, fontSize: 12 }} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
-              <Legend key="vlegend" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-              <Bar key="vbar-mx" dataKey="mx" name="México" fill="#1A4FA0" radius={[0, 3, 3, 0]} />
-              <Bar key="vbar-br" dataKey="br" name="Brasil" fill="#2B6FD4" radius={[0, 3, 3, 0]} />
-              <Bar key="vbar-co" dataKey="co" name="Colombia" fill="#7BA7D9" radius={[0, 3, 3, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </Card>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart
+                data={QUARTERLY_DATA}
+                barSize={12}
+                barGap={4}
+              >
+                <CartesianGrid key="qgrid" strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
+                <XAxis key="qxaxis" dataKey="quarter" tick={{ fontSize: 11, fill: "#5A6A85" }} axisLine={false} tickLine={false} />
+                <YAxis key="qyaxis" tick={{ fontSize: 11, fill: "#5A6A85" }} axisLine={false} tickLine={false} />
+                <Tooltip key="qtooltip" contentStyle={{ background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, fontSize: 12 }} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+                <Legend key="qlegend" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                <Bar key="qbar-completadas" dataKey="completadas" name="Completadas" fill={CHART_COLORS.completadas} radius={[3, 3, 0, 0]} />
+                <Bar key="qbar-en_progreso" dataKey="en_progreso" name="En Progreso" fill={CHART_COLORS.en_progreso} radius={[3, 3, 0, 0]} />
+                <Bar key="qbar-pendientes" dataKey="pendientes" name="Pendientes" fill={CHART_COLORS.pendientes} radius={[3, 3, 0, 0]} />
+                <Bar key="qbar-vencidas" dataKey="vencidas" name="Vencidas" fill={CHART_COLORS.vencidas} radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+
+          {/* Vertical/Country */}
+          <Card className="p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Building2 size={15} className="text-primary" />
+              <div className="text-sm font-semibold text-foreground">
+                Por Vertical · Entidad Auditada
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={VERTICAL_DATA} barSize={14} barGap={3} layout="vertical">
+                <CartesianGrid key="vgrid" strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" horizontal={false} />
+                <XAxis key="vxaxis" type="number" tick={{ fontSize: 11, fill: "#5A6A85" }} axisLine={false} tickLine={false} />
+                <YAxis key="vyaxis" dataKey="name" type="category" tick={{ fontSize: 11, fill: "#5A6A85" }} axisLine={false} tickLine={false} width={90} />
+                <Tooltip key="vtooltip" contentStyle={{ background: "#fff", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 6, fontSize: 12 }} cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+                <Legend key="vlegend" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                <Bar key="vbar-mx" dataKey="mx" name="México" fill="#1A4FA0" radius={[0, 3, 3, 0]} />
+                <Bar key="vbar-br" dataKey="br" name="Brasil" fill="#2B6FD4" radius={[0, 3, 3, 0]} />
+                <Bar key="vbar-co" dataKey="co" name="Colombia" fill="#7BA7D9" radius={[0, 3, 3, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        </div>
       </div>
-    </div>
     </>
   );
 }
@@ -1553,12 +953,12 @@ const FILTER_TABS: {
   label: string;
   icon: React.ReactNode;
 }[] = [
-  { id: "general_risk",  label: "Riesgos Generales",    icon: <Shield size={14} /> },
-  { id: "specific_risk", label: "Riesgos Específicos",  icon: <ShieldAlert size={14} /> },
-  { id: "audit_entity",  label: "Entidades Auditoras",  icon: <Building2 size={14} /> },
-  { id: "plan_entity",   label: "Entidades de Plan",    icon: <ClipboardList size={14} /> },
-  { id: "audit",         label: "Auditorías",           icon: <ClipboardCheck size={14} /> },
-];
+    { id: "general_risk", label: "Riesgos Generales", icon: <Shield size={14} /> },
+    { id: "specific_risk", label: "Riesgos Específicos", icon: <ShieldAlert size={14} /> },
+    { id: "audit_entity", label: "Entidades Auditoras", icon: <Building2 size={14} /> },
+    { id: "plan_entity", label: "Entidades de Plan", icon: <ClipboardList size={14} /> },
+    { id: "audit", label: "Auditorías", icon: <ClipboardCheck size={14} /> },
+  ];
 
 function FilterView({ navigate }: { navigate: Navigate }) {
   const [category, setCategory] =
@@ -1660,11 +1060,10 @@ function FilterView({ navigate }: { navigate: Navigate }) {
           <button
             key={tab.id}
             onClick={() => setCategory(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${
-              category === tab.id
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-colors ${category === tab.id
                 ? "bg-primary text-primary-foreground border-primary"
                 : "bg-card text-foreground border-border hover:border-primary/40 hover:bg-secondary"
-            }`}
+              }`}
           >
             {tab.icon}
             {tab.label}
@@ -1832,7 +1231,7 @@ function AuditFilterCard({ audit }: { audit: AuditRecord }) {
               <FileText size={12} /> Exportar PDF
             </button>
             <button
-              onClick={e => { e.stopPropagation(); exportToCSV(`auditoria_${audit.id}.csv`, ["Campo","Valor"], [["ID",audit.id],["Nombre",audit.name],["Tipo",audit.type],["Entidad",audit.entity],["Responsable",audit.responsible],["Inicio",audit.startDate],["Fin",audit.endDate],["Estado",audit.status]]); }}
+              onClick={e => { e.stopPropagation(); exportToCSV(`auditoria_${audit.id}.csv`, ["Campo", "Valor"], [["ID", audit.id], ["Nombre", audit.name], ["Tipo", audit.type], ["Entidad", audit.entity], ["Responsable", audit.responsible], ["Inicio", audit.startDate], ["Fin", audit.endDate], ["Estado", audit.status]]); }}
               className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-border text-muted-foreground hover:bg-secondary transition-colors font-medium"
             >
               <Download size={12} /> Exportar CSV
@@ -2981,13 +2380,12 @@ function EditorView() {
                       gridColumn: `span ${Math.min(pw.w, 6)}`,
                       gridRow: `span ${pw.h}`,
                     }}
-                    className={`relative rounded-lg border-2 p-3 cursor-pointer transition-all min-h-20 flex flex-col ${
-                      isSelected
+                    className={`relative rounded-lg border-2 p-3 cursor-pointer transition-all min-h-20 flex flex-col ${isSelected
                         ? "border-primary bg-primary/5 shadow-lg shadow-primary/10"
                         : dragging === pw.id
                           ? "border-accent/60 bg-accent/5 opacity-70"
                           : "border-border bg-white hover:border-primary/30 hover:shadow-sm"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start gap-2 mb-2">
                       <GripVertical
@@ -3736,10 +3134,10 @@ function HierarchyView() {
   const searchResults =
     search.trim().length >= 1
       ? ALL_NODES.filter(({ node }) =>
-          node.label
-            .toLowerCase()
-            .includes(search.toLowerCase()),
-        ).slice(0, 7)
+        node.label
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+      ).slice(0, 7)
       : [];
 
   // Jump directly to any search result
@@ -3760,10 +3158,10 @@ function HierarchyView() {
   const baseRisks =
     isLeaf && currentNode
       ? RISK_TABLE_ALL.filter((r) =>
-          nodeLabels.some(
-            (l) => r.pais === l || r.area.includes(l),
-          ),
-        )
+        nodeLabels.some(
+          (l) => r.pais === l || r.area.includes(l),
+        ),
+      )
       : RISK_TABLE_ALL;
   const byNivel = nivelFilter === "all" ? baseRisks : baseRisks.filter((r) => r.nivel === nivelFilter);
   const filteredRisks = showOnlyCompleted ? byNivel.filter(r => completedIds.has(r.id)) : byNivel;
@@ -4174,11 +3572,10 @@ function HierarchyView() {
                     <div className="w-px h-4 bg-border mx-0.5 flex-shrink-0" />
                     <button
                       onClick={() => setShowOnlyCompleted(s => !s)}
-                      className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${
-                        showOnlyCompleted
+                      className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${showOnlyCompleted
                           ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
                           : "text-muted-foreground hover:bg-secondary"
-                      }`}
+                        }`}
                     >
                       <CheckCircle2 size={11} />
                       Ver solo realizados
@@ -4248,11 +3645,10 @@ function HierarchyView() {
                               <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                                 <button
                                   onClick={() => toggleComplete(r.id)}
-                                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors flex-shrink-0 ${
-                                    done
+                                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors flex-shrink-0 ${done
                                       ? "bg-emerald-500 border-emerald-500"
                                       : "border-border hover:border-emerald-400"
-                                  }`}
+                                    }`}
                                 >
                                   {done && <Check size={11} className="text-white" />}
                                 </button>
@@ -4566,14 +3962,14 @@ const DATE_PRESETS = ["Todos", "Hoy", "Últimos 7 días", "Últimos 30 días", "
 const PAGE_SIZE = 20;
 
 function BitacoraView() {
-  const [search, setSearch]         = useState("");
+  const [search, setSearch] = useState("");
   const [actionChip, setActionChip] = useState<string>("Todos");
   const [entityType, setEntityType] = useState<string>("Todos");
   const [datePreset, setDatePreset] = useState<string>("Todos");
-  const [dateFrom, setDateFrom]     = useState("");
-  const [dateTo, setDateTo]         = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [userFilter, setUserFilter] = useState<string>("Todos");
-  const [page, setPage]             = useState(1);
+  const [page, setPage] = useState(1);
 
   const userList = ["Todos", ...Array.from(new Set(INITIAL_USERS.map(u => u.name)))];
 
@@ -4587,7 +3983,7 @@ function BitacoraView() {
     if (datePreset === "Últimos 30 días") { const t = new Date(today); t.setDate(t.getDate() - 29); return d >= t; }
     if (datePreset === "Personalizado") {
       if (dateFrom && d < new Date(dateFrom)) return false;
-      if (dateTo   && d > new Date(dateTo))   return false;
+      if (dateTo && d > new Date(dateTo)) return false;
     }
     return true;
   };
@@ -4603,7 +3999,7 @@ function BitacoraView() {
   });
 
   const paginated = filtered.slice(0, page * PAGE_SIZE);
-  const hasMore   = paginated.length < filtered.length;
+  const hasMore = paginated.length < filtered.length;
 
   // Active filter chips for the "active filters" bar
   type ActiveFilter = { label: string; clear: () => void };
@@ -4655,11 +4051,10 @@ function BitacoraView() {
           {ACTION_CHIPS.map(chip => (
             <button key={chip}
               onClick={() => applyFilter(() => setActionChip(chip))}
-              className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-colors ${
-                actionChip === chip
+              className={`text-xs px-3 py-1.5 rounded-full font-medium border transition-colors ${actionChip === chip
                   ? "bg-primary text-white border-primary"
                   : "bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
-              }`}>
+                }`}>
               {chip}
             </button>
           ))}
@@ -4673,11 +4068,10 @@ function BitacoraView() {
           {DATE_PRESETS.map(p => (
             <button key={p}
               onClick={() => applyFilter(() => { setDatePreset(p); if (p !== "Personalizado") { setDateFrom(""); setDateTo(""); } })}
-              className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
-                datePreset === p
+              className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${datePreset === p
                   ? "bg-primary/10 text-primary border-primary/40"
                   : "bg-background text-muted-foreground border-border hover:border-primary/30"
-              }`}>
+                }`}>
               {p}
             </button>
           ))}
@@ -4756,12 +4150,12 @@ function BitacoraView() {
               ) : paginated.map(b => {
                 const cat = classifyAction(b.action);
                 const catColor: Record<string, string> = {
-                  "Creó":           "bg-emerald-50 text-emerald-700 border-emerald-200",
-                  "Modificó":       "bg-blue-50 text-blue-700 border-blue-200",
-                  "Aprobó":         "bg-violet-50 text-violet-700 border-violet-200",
-                  "Cargó evidencia":"bg-amber-50 text-amber-700 border-amber-200",
-                  "Exportó":        "bg-sky-50 text-sky-700 border-sky-200",
-                  "Consultó":       "bg-secondary text-muted-foreground border-border",
+                  "Creó": "bg-emerald-50 text-emerald-700 border-emerald-200",
+                  "Modificó": "bg-blue-50 text-blue-700 border-blue-200",
+                  "Aprobó": "bg-violet-50 text-violet-700 border-violet-200",
+                  "Cargó evidencia": "bg-amber-50 text-amber-700 border-amber-200",
+                  "Exportó": "bg-sky-50 text-sky-700 border-sky-200",
+                  "Consultó": "bg-secondary text-muted-foreground border-border",
                 };
                 return (
                   <tr key={b.id} className="hover:bg-secondary/20 transition-colors">
@@ -4847,11 +4241,10 @@ function UsersRolesView() {
             <button
               key={role}
               onClick={() => setSelectedRole(role)}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                selectedRole === role
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${selectedRole === role
                   ? "bg-primary text-white shadow-sm"
                   : "bg-secondary text-foreground hover:bg-secondary/70"
-              }`}
+                }`}
             >
               {role}
             </button>
@@ -4863,11 +4256,10 @@ function UsersRolesView() {
             <button
               key={perm}
               onClick={() => togglePerm(selectedRole, perm)}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors text-left ${
-                enabled
+              className={`flex items-center justify-between px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors text-left ${enabled
                   ? "border-primary/30 bg-primary/5 text-primary"
                   : "border-border bg-background text-muted-foreground hover:border-border/80"
-              }`}
+                }`}
             >
               <span>{perm}</span>
               <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ml-2 transition-colors ${enabled ? "bg-primary" : "bg-muted"}`}>
@@ -4936,11 +4328,10 @@ function UsersRolesView() {
                       </select>
                     </td>
                     <td className="px-4 py-3.5">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.status === "active"
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${user.status === "active"
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                           : "bg-slate-50 text-slate-600 border border-slate-200"
-                      }`}>
+                        }`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${user.status === "active" ? "bg-emerald-500" : "bg-slate-400"}`} />
                         {user.status === "active" ? "Activo" : "Inactivo"}
                       </span>
@@ -4959,10 +4350,10 @@ function UsersRolesView() {
 
 // ─── View: PLANES DE AUDITORÍA ───────────────────────────────────────────────
 const PLAN_STATUS_CFG: Record<AuditPlan["status"], { label: string; cls: string }> = {
-  "Borrador":     { label: "Borrador",     cls: "bg-slate-50 text-slate-600 border border-slate-200" },
-  "Aprobado":     { label: "Aprobado",     cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
+  "Borrador": { label: "Borrador", cls: "bg-slate-50 text-slate-600 border border-slate-200" },
+  "Aprobado": { label: "Aprobado", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
   "En Ejecución": { label: "En Ejecución", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
-  "Cerrado":      { label: "Cerrado",      cls: "bg-blue-50 text-blue-700 border border-blue-200" },
+  "Cerrado": { label: "Cerrado", cls: "bg-blue-50 text-blue-700 border border-blue-200" },
 };
 
 function AuditPlansView({ canCreate }: { canCreate: boolean }) {
@@ -5062,7 +4453,7 @@ function AuditPlansView({ canCreate }: { canCreate: boolean }) {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => exportToCSV("planes_auditoria.csv", ["ID","Código","Nombre","Periodo","Inicio","Fin","Estado","Horas"], plans.map(p => [p.id, p.code, p.name, p.period, p.startDate, p.endDate, p.status, String(p.estimatedHours)]))}
+              onClick={() => exportToCSV("planes_auditoria.csv", ["ID", "Código", "Nombre", "Periodo", "Inicio", "Fin", "Estado", "Horas"], plans.map(p => [p.id, p.code, p.name, p.period, p.startDate, p.endDate, p.status, String(p.estimatedHours)]))}
               className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-border text-muted-foreground hover:bg-secondary transition-colors"
             >
               <Download size={12} /> Exportar CSV
@@ -5152,15 +4543,15 @@ function AuditPlansView({ canCreate }: { canCreate: boolean }) {
 // ─── View: HALLAZGOS ─────────────────────────────────────────────────────────
 const SEV_COLOR: Record<Finding["severity"], string> = {
   "Crítico": "bg-red-50 text-red-700 border border-red-200",
-  "Alto":    "bg-orange-50 text-orange-700 border border-orange-200",
-  "Medio":   "bg-amber-50 text-amber-700 border border-amber-200",
-  "Bajo":    "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  "Alto": "bg-orange-50 text-orange-700 border border-orange-200",
+  "Medio": "bg-amber-50 text-amber-700 border border-amber-200",
+  "Bajo": "bg-emerald-50 text-emerald-700 border border-emerald-200",
 };
 const FIND_STATUS_CFG: Record<Finding["status"], string> = {
-  "Abierto":     "bg-red-50 text-red-700 border border-red-200",
+  "Abierto": "bg-red-50 text-red-700 border border-red-200",
   "En Revisión": "bg-amber-50 text-amber-700 border border-amber-200",
-  "Asignado":    "bg-blue-50 text-blue-700 border border-blue-200",
-  "Cerrado":     "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  "Asignado": "bg-blue-50 text-blue-700 border border-blue-200",
+  "Cerrado": "bg-emerald-50 text-emerald-700 border border-emerald-200",
 };
 
 
@@ -5213,7 +4604,7 @@ function AuditadoPortalView() {
                   </div>
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Fecha de compromiso</div>
-                    <div className={`text-sm font-semibold font-mono ${f.actionPlan?.dueDate && f.actionPlan.dueDate < new Date().toISOString().slice(0,10) ? "text-red-600" : "text-foreground"}`}>
+                    <div className={`text-sm font-semibold font-mono ${f.actionPlan?.dueDate && f.actionPlan.dueDate < new Date().toISOString().slice(0, 10) ? "text-red-600" : "text-foreground"}`}>
                       {f.actionPlan?.dueDate}
                     </div>
                   </div>
@@ -5232,15 +4623,15 @@ function AuditadoPortalView() {
 
 // ─── Copilot Panel ────────────────────────────────────────────────────────────
 const COPILOT_SUGGESTIONS: Record<string, string[]> = {
-  dashboard:  ["Resumir hallazgos del trimestre", "Redactar informe ejecutivo Q3 2025", "Analizar tendencias de riesgo LATAM"],
-  filter:     ["Filtrar riesgos críticos pendientes", "Exportar selección actual a PDF", "Comparar riesgos por país"],
-  hierarchy:  ["Explicar la estructura de riesgo actual", "Identificar nodos sin controles asignados", "Resumir estado de cumplimiento"],
-  plans:      ["Revisar cronograma de auditorías", "Identificar solapamientos de alcance", "Estimar recursos necesarios Q4"],
-  findings:   ["Resumir hallazgos abiertos críticos", "Priorizar hallazgos por riesgo residual", "Redactar plan de remediación global"],
-  auditado:   ["Explicar mis planes de acción asignados", "¿Cuándo vencen mis compromisos?", "Genera resumen de mis pendientes"],
-  settings:   ["Revisar actividad reciente en bitácora", "¿Quién modificó permisos esta semana?", "Generar reporte de accesos"],
-  users:      ["Revisar permisos del rol Auditor", "Comparar roles Auditor vs. Consultor", "Lista usuarios activos con acceso completo"],
-  editor:     ["Sugiere un layout óptimo para el dashboard", "¿Qué widget añadir para riesgo operacional?"],
+  dashboard: ["Resumir hallazgos del trimestre", "Redactar informe ejecutivo Q3 2025", "Analizar tendencias de riesgo LATAM"],
+  filter: ["Filtrar riesgos críticos pendientes", "Exportar selección actual a PDF", "Comparar riesgos por país"],
+  hierarchy: ["Explicar la estructura de riesgo actual", "Identificar nodos sin controles asignados", "Resumir estado de cumplimiento"],
+  plans: ["Revisar cronograma de auditorías", "Identificar solapamientos de alcance", "Estimar recursos necesarios Q4"],
+  findings: ["Resumir hallazgos abiertos críticos", "Priorizar hallazgos por riesgo residual", "Redactar plan de remediación global"],
+  auditado: ["Explicar mis planes de acción asignados", "¿Cuándo vencen mis compromisos?", "Genera resumen de mis pendientes"],
+  settings: ["Revisar actividad reciente en bitácora", "¿Quién modificó permisos esta semana?", "Generar reporte de accesos"],
+  users: ["Revisar permisos del rol Auditor", "Comparar roles Auditor vs. Consultor", "Lista usuarios activos con acceso completo"],
+  editor: ["Sugiere un layout óptimo para el dashboard", "¿Qué widget añadir para riesgo operacional?"],
   general_risk: ["Resumir este riesgo general", "Redactar hallazgo basado en este riesgo", "Comparar con riesgos similares"],
   specific_risk: ["Analizar controles de este riesgo específico", "Estimar exposición residual ajustada", "Redactar hallazgo preliminar"],
   audit_entity: ["Resumir perfil de riesgo de esta entidad", "Listar hallazgos pendientes", "Comparar con entidades similares"],
@@ -5489,10 +4880,10 @@ function computeTooltipPos(box: DOMRect): { left: number; top: number } {
   const vh = window.innerHeight;
 
   // Available space on each side (from highlight edge to viewport edge)
-  const spaceRight  = vw - (box.right  + SPOTLIGHT_PAD) - GAP;
-  const spaceLeft   = (box.left  - SPOTLIGHT_PAD) - GAP;
+  const spaceRight = vw - (box.right + SPOTLIGHT_PAD) - GAP;
+  const spaceLeft = (box.left - SPOTLIGHT_PAD) - GAP;
   const spaceBottom = vh - (box.bottom + SPOTLIGHT_PAD) - GAP;
-  const spaceTop    = (box.top   - SPOTLIGHT_PAD) - GAP;
+  const spaceTop = (box.top - SPOTLIGHT_PAD) - GAP;
 
   // Pick preferred horizontal side: right first, then left
   let left: number;
@@ -5524,7 +4915,7 @@ function computeTooltipPos(box: DOMRect): { left: number; top: number } {
 
   // Clamp to viewport with margin
   left = Math.max(MARGIN, Math.min(left, vw - TOOLTIP_W - MARGIN));
-  top  = Math.max(MARGIN, Math.min(top,  vh - TOOLTIP_H - MARGIN));
+  top = Math.max(MARGIN, Math.min(top, vh - TOOLTIP_H - MARGIN));
 
   return { left, top };
 }
@@ -5772,7 +5163,7 @@ export default function App() {
 
   const handleTourClose = () => {
     setTourActive(false);
-    try { localStorage.setItem("expedite_tour_done", "1"); } catch {}
+    try { localStorage.setItem("expedite_tour_done", "1"); } catch { }
   };
 
   return (
