@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { toast } from "sonner";
+
 import {
   Check,
   CheckCircle2,
@@ -7,9 +9,19 @@ import {
   FileText,
   Filter,
   Flag,
+  Info,
+  Plus,
+  Trash2,
   X,
 } from "lucide-react";
-import { toast } from "sonner";
+
+import FormularioHallazgo from "./FormularioHallazgo";
+
+import type {
+  CreatedFinding,
+  FindingControlOption,
+} from "./FormularioHallazgo";
+
 import {
   Breadcrumbs,
   PageHeader,
@@ -26,7 +38,7 @@ import type {
 } from "./SharedComponents";
 
 import EvidenciasSection from "./EvidenciasSection";
-import {INITIAL_FINDINGS} from "../data/mock_data";
+import { INITIAL_FINDINGS, CONTROLS } from "../data/mock_data";
 
 const SEV_COLOR: Record<Finding["severity"], string> = {
   "Crítico": "bg-red-50 text-red-700 border border-red-200",
@@ -42,7 +54,41 @@ const FIND_STATUS_CFG: Record<Finding["status"], string> = {
   "Cerrado": "bg-emerald-50 text-emerald-700 border border-emerald-200",
 };
 
+const controlOptions = CONTROLS.map(control => ({
+  id: control.id,
+  name: control.controlProcedureName,
+  vulnerability: control.currentVulnerability as "Baja" | "Media" | "Alta",
+}));
+
 export default function VistaHallazgo() {
+  const handleExport = () => {
+    exportToCSV(
+      "hallazgos.csv",
+      [
+        "Folio",
+        "Título",
+        "Descripción",
+        "Tipo",
+        "Gravedad",
+        "Control Fallido",
+        "Riesgo Residual",
+        "Estado",
+        "Fecha",
+      ],
+      findings.map(f => [
+        f.folio,
+        f.title,
+        f.description ?? "",
+        f.type ?? "",
+        f.severity,
+        f.failedControl,
+        f.residualRisk,
+        f.status,
+        f.date,
+      ]),
+    );
+  };
+
   const [findings, setFindings] = useState<Finding[]>(INITIAL_FINDINGS);
   const [actionModal, setActionModal] = useState<Finding | null>(null);
   const [findingPdf, setFindingPdf] = useState<Finding | null>(null);
@@ -51,6 +97,8 @@ export default function VistaHallazgo() {
   const [actionErr, setActionErr] = useState<Record<string, string>>({});
   const [sevFilter, setSevFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [showFindingForm, setShowFindingForm] = useState(false);
+  const nextFolio = `HAL-2025-${String(findings.length + 1).padStart(3, "0")}`;
 
   const filtered = findings.filter(f =>
     (sevFilter === "all" || f.severity === sevFilter) &&
@@ -72,25 +120,58 @@ export default function VistaHallazgo() {
     toast.success(`Plan de acción asignado para "${actionModal!.folio}"`);
   };
 
+  const handleFindingCreated = (created: CreatedFinding) => {
+    setFindings(current => [
+      {
+        ...created,
+        description: created.description,
+        type: created.type,
+        status: "Abierto",
+      },
+      ...current,
+    ]);
+
+    setShowFindingForm(false);
+  };
+
   return (
     <div className="flex-1 overflow-auto p-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <Breadcrumbs items={["Inicio", "Auditoría", "Hallazgos"]} />
+      {showFindingForm && (
+        <FormularioHallazgo
+          controls={controlOptions}
+          nextFolio={nextFolio}
+          onCreated={handleFindingCreated}
+          onClose={() => setShowFindingForm(false)}
+        />
+      )}
       <PageHeader
         title="Hallazgos de Auditoría"
-        subtitle={`${findings.length} hallazgos registrados · ${findings.filter(f => f.status !== "Cerrado").length} abiertos`}
+        subtitle={`${findings.length} hallazgos registrados`}
         actions={
           <div className="flex items-center gap-2">
             <button
-              onClick={() => exportToCSV("hallazgos.csv", ["Folio","Título","Gravedad","Control Fallido","Riesgo Residual","Estado","Fecha"], findings.map(f => [f.folio, f.title, f.severity, f.failedControl, f.residualRisk, f.status, f.date]))}
-              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:bg-secondary transition-colors"
+              onClick={() => setShowFindingForm(true)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90"
             >
-              <Download size={12} /> Exportar CSV
+              <Plus size={13} />
+              Nuevo hallazgo
             </button>
+
+            <button
+              onClick={handleExport}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-secondary"
+            >
+              <Download size={12} />
+              Exportar CSV
+            </button>
+
             <button
               onClick={() => setFindingPdf(findings[0])}
-              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:bg-secondary transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-secondary"
             >
-              <FileText size={12} /> Exportar PDF
+              <FileText size={12} />
+              Exportar PDF
             </button>
           </div>
         }
@@ -222,6 +303,27 @@ export default function VistaHallazgo() {
                               className="text-xs px-2.5 py-1 bg-primary text-primary-foreground rounded-md font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap">
                               Crear plan
                             </button>
+                          )}
+                        </td>
+                        <td
+                          className="px-4 py-3"
+                          onClick={event => event.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            disabled
+                            title="La eliminación está deshabilitada para mantener la trazabilidad"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-muted-foreground opacity-50"
+                          >
+                            <Trash2 size={12} />
+                            Eliminar
+                          </button>
+
+                          {f.status === "En Revisión" && (
+                            <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-700">
+                              <Info size={10} />
+                              No se puede eliminar porque el hallazgo ya está en revisión.
+                            </div>
                           )}
                         </td>
                       </tr>
