@@ -1,0 +1,5 @@
+allowBuilds:
+  esbuild: set this to true or false
+  msnodesqlv8: set this to true or false
+minimumReleaseAgeExclude:
+  - dotenv@18.0.5

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export interface FindingControlOption {
@@ -74,6 +74,10 @@ function calculateResidualRisk(
   return "Bajo";
 }
 
+const metaEnv = (import.meta as any).env;
+const API_BASE_URL = metaEnv?.VITE_API_URL || "http://localhost:3000/api";
+const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND === "true";
+
 export default function FormularioHallazgo({
   controls,
   nextFolio,
@@ -88,6 +92,7 @@ export default function FormularioHallazgo({
     useState<CreatedFinding["severity"]>("Medio");
   const [controlId, setControlId] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedControl = controls.find(control => control.id === controlId);
 
@@ -116,7 +121,7 @@ export default function FormularioHallazgo({
     return nextErrors;
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
     const nextErrors = validate();
@@ -128,8 +133,7 @@ export default function FormularioHallazgo({
 
     if (!selectedControl || !residualRisk) return;
 
-    const finding: CreatedFinding = {
-      id: `FND-${Date.now()}`,
+    const payload = {
       folio: nextFolio,
       title: title.trim(),
       description: description.trim(),
@@ -143,8 +147,42 @@ export default function FormularioHallazgo({
       date: new Date().toISOString().slice(0, 10),
     };
 
-    onCreated(finding);
-    toast.success(`Hallazgo ${nextFolio} registrado correctamente`);
+    setIsSubmitting(true);
+
+    try {
+      let createdFinding: CreatedFinding;
+
+      if (USE_REAL_BACKEND) {
+        const response = await fetch(`${API_BASE_URL}/hallazgos`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Error al registrar el hallazgo en el servidor");
+        }
+
+        createdFinding = await response.json();
+      } else {
+        // Fallback local en memoria
+        createdFinding = {
+          id: `FND-${Date.now()}`,
+          ...payload,
+        } as CreatedFinding;
+      }
+
+      onCreated(createdFinding);
+      toast.success(`Hallazgo ${nextFolio} registrado correctamente`);
+      onClose();
+    } catch (error: any) {
+      toast.error(error.message || "Error inesperado al intentar guardar el hallazgo");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -169,7 +207,8 @@ export default function FormularioHallazgo({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            disabled={isSubmitting}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50"
           >
             <X size={16} />
           </button>
@@ -182,11 +221,12 @@ export default function FormularioHallazgo({
             </label>
             <input
               value={title}
+              disabled={isSubmitting}
               onChange={event => {
                 setTitle(event.target.value);
                 setErrors(current => ({ ...current, title: "" }));
               }}
-              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm disabled:bg-slate-100"
               placeholder="Ej. Segregación de funciones insuficiente"
             />
             {errors.title && (
@@ -200,12 +240,13 @@ export default function FormularioHallazgo({
             </label>
             <textarea
               value={description}
+              disabled={isSubmitting}
               onChange={event => {
                 setDescription(event.target.value);
                 setErrors(current => ({ ...current, description: "" }));
               }}
               rows={4}
-              className="w-full resize-none rounded-md border border-border bg-white px-3 py-2 text-sm"
+              className="w-full resize-none rounded-md border border-border bg-white px-3 py-2 text-sm disabled:bg-slate-100"
               placeholder="Describe la situación identificada..."
             />
             {errors.description && (
@@ -221,11 +262,12 @@ export default function FormularioHallazgo({
             </label>
             <select
               value={type}
+              disabled={isSubmitting}
               onChange={event => {
                 setType(event.target.value);
                 setErrors(current => ({ ...current, type: "" }));
               }}
-              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm disabled:bg-slate-100"
             >
               <option value="">Seleccionar tipo</option>
               {FINDING_TYPES.map(option => (
@@ -245,13 +287,14 @@ export default function FormularioHallazgo({
             </label>
             <select
               value={severity}
+              disabled={isSubmitting}
               onChange={event => {
                 setSeverity(
                   event.target.value as CreatedFinding["severity"],
                 );
                 setErrors(current => ({ ...current, severity: "" }));
               }}
-              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm disabled:bg-slate-100"
             >
               {SEVERITIES.map(option => (
                 <option key={option} value={option}>
@@ -267,11 +310,12 @@ export default function FormularioHallazgo({
             </label>
             <select
               value={controlId}
+              disabled={isSubmitting}
               onChange={event => {
                 setControlId(event.target.value);
                 setErrors(current => ({ ...current, controlId: "" }));
               }}
-              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm disabled:bg-slate-100"
             >
               <option value="">Seleccionar control</option>
               {controls.map(control => (
@@ -300,16 +344,27 @@ export default function FormularioHallazgo({
         <div className="mt-6 flex gap-3 border-t border-border pt-4">
           <button
             type="submit"
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+            disabled={isSubmitting}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
           >
-            <Check size={14} />
-            Registrar hallazgo
+            {isSubmitting ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Check size={14} />
+                Registrar hallazgo
+              </>
+            )}
           </button>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary"
+            disabled={isSubmitting}
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary disabled:opacity-50"
           >
             Cancelar
           </button>
