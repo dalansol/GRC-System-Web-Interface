@@ -39,7 +39,9 @@ muchos, por eso existe `role_permissions`.
 
 Datos iniciales: los 6 roles y 8 permisos de `src/app/data/mock_data.tsx`.
 
-Scripts en `backend/sql/`: `001_schema.sql` y `002_seed.sql`.
+Scripts en `backend/sql/`: `001_schema.sql`, `002_seed.sql` y
+`003_primer_administrador.sql` (crea al primer Administrador; hay que editar su nombre
+y correo antes de ejecutarlo).
 
 ## Backend (`backend/src/`)
 
@@ -81,7 +83,10 @@ Errores con forma `{ "error": { "codigo", "mensaje" } }`:
 | Datos faltantes o mal formados | 400 | `DATOS_INVALIDOS` |
 | Correo fuera del dominio corporativo | 422 | `DOMINIO_NO_AUTORIZADO` |
 | Correo ya registrado | 409 | `CORREO_DUPLICADO` |
-| Usuario o rol inexistente | 404 | `NO_ENCONTRADO` |
+| Quitar el rol al único Administrador activo | 409 | `ULTIMO_ADMINISTRADOR` |
+| Usuario inexistente | 404 | `NO_ENCONTRADO` |
+
+Un rol inexistente en el cuerpo de la petición cuenta como `DATOS_INVALIDOS`.
 
 ### Autenticación y autorización
 
@@ -115,7 +120,8 @@ cuenta como dominio autorizado.
 src/app/api/cliente.ts               fetch con token y manejo de errores
 src/app/api/usuarios.ts              llamadas a los endpoints
 src/app/auth/SesionContext.tsx       usuario en sesión, rol y permisos
-src/app/auth/msal.ts                 configuración de MSAL
+src/app/auth/PuertaSesion.tsx        pantallas de inicio de sesión y acceso denegado
+src/app/auth/proveedores.ts          identidad con MSAL (Entra ID) o modo de desarrollo
 src/app/components/UsuariosRolesView.tsx   vista (sale de App.tsx)
 ```
 
@@ -127,9 +133,11 @@ src/app/components/UsuariosRolesView.tsx   vista (sale de App.tsx)
 - Matriz de permisos por rol en solo lectura.
 - Si el usuario en sesión no es Administrador, el botón "Usuarios" no aparece en la
   barra lateral y la vista muestra un aviso de acceso restringido.
+- La sesión vuelve a leer rol y permisos del servidor cuando el usuario regresa a la
+  pestaña y cuando el servidor responde que su rol ya no tiene acceso.
 - Variables `VITE_API_URL`, `VITE_AUTH_MODE`, `VITE_ENTRA_TENANT_ID`,
-  `VITE_ENTRA_CLIENT_ID`. En modo `dev` un selector permite elegir el usuario de
-  prueba.
+  `VITE_ENTRA_CLIENT_ID`, `VITE_ENTRA_API_SCOPE`. En modo `dev` se entra escribiendo
+  el correo de un usuario de prueba.
 
 ## Pruebas
 

@@ -25,31 +25,43 @@
 
 ## 3. Stack técnico (estado actual del repo)
 
-- **Frontend-only prototipo** exportado desde Figma Make ("Expedite GRC"). Aún **no hay backend**; todos los datos son mocks en memoria.
+- **Frontend** exportado desde Figma Make ("Expedite GRC"). Casi todos los datos siguen siendo mocks en memoria (`src/app/data/mock_data.tsx`); **usuarios y roles ya salen del backend**.
 - React 18 + TypeScript + **Vite 6**, Tailwind CSS v4 (`@tailwindcss/vite`), componentes **shadcn/ui** (Radix) en `src/app/components/ui/`, iconos `lucide-react`, gráficas `recharts`, toasts `sonner`, también MUI instalado.
-- Comandos: `npm i`, `npm run dev`, `npm run build`. No hay tests ni linter configurados.
+- **Backend** en `backend/`: Node + Express 5 + TypeScript (módulos ES), `mssql` para Azure SQL, `jose` para validar tokens de Entra ID. Usa **pnpm** (`corepack pnpm ...`); la raíz usa **npm**.
+- Comandos frontend: `npm i`, `npm run dev`, `npm run build`, `npm test` (Vitest + Testing Library). Comandos backend: `corepack pnpm dev`, `test`, `typecheck`, `build`. No hay linter ni revisión de tipos en el frontend.
+- La app exige sesión: sin el backend corriendo muestra un error de conexión. Para desarrollo local, copiar `.env.example` a `.env` en la raíz y en `backend/` (modo `dev`, sin Azure). Nunca leer ni versionar los `.env`.
+- Diseño y pruebas de usuarios y roles: `docs/diseno/usuarios-roles.md`, `docs/pruebas/usuarios-roles.md`.
 - Alias `@` → `src/`. Plugin `figma:asset/…` → `src/assets/`. **No quitar** los plugins `react()` ni `tailwindcss()` de `vite.config.ts`.
 
 ### Estructura
 
 ```
 src/
-  main.tsx
-  app/App.tsx              ← TODA la app (~7,100 líneas): tipos, mocks, vistas, componentes
+  main.tsx                 ← monta la sesión (ProveedorSesion + PuertaSesion) y la app
+  app/App.tsx              ← la mayoría de las vistas (~5,100 líneas)
+  app/api/                 ← cliente HTTP y llamadas a la API
+  app/auth/                ← sesión, inicio de sesión (MSAL / modo dev)
+  app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, EvidenciasSection, SpreadsheetEditor
   app/components/ui/       ← shadcn/ui (no editar salvo necesidad)
   app/components/figma/    ← ImageWithFallback
+  app/data/mock_data.tsx   ← datos de prueba
   imports/logo.svg         ← logo Expedite
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
+backend/
+  sql/                     ← scripts de Azure SQL (esquema, datos iniciales, primer administrador)
+  src/app.ts               ← app Express; recibe repositorio y verificador de tokens
+  src/routes/              ← endpoints
+  src/middleware/          ← autenticar (token → usuario) y autorizar (por rol)
+  src/repos/               ← repositorio SQL y en memoria
+  test/                    ← pruebas (las de SQL requieren SQL_TEST_*)
 ```
-
-Nota: en la rama `Version-2` se eliminaron `src/app/views/*` y `components/shared/SharedComponents.tsx`; todo vive ahora en `App.tsx`.
 
 ### Mapa de `App.tsx` (buscar por nombre, las líneas cambian)
 
 - **Tipos:** `NavView` (`dashboard | filter | editor | hierarchy | settings | users | plans | findings | auditado | bitacora`), `DetailType`, `StatusKey`, `AuditEntity`, `GeneralRisk`, `SpecificRisk`, `ControlRecord`, `AuditPlan`, `Finding`, `ActionPlan`, `EvidenceFile`, `BilacoraEntry`, `UserRecord`, `Xlsx*`.
 - **Mocks/constantes:** `STATUS_CONFIG`, `NAV_ITEMS`, `TASKS`, `GENERAL_RISKS`, `AUDIT_ENTITIES`, `SPECIFIC_RISKS`, `CONTROLS`, `PROCEDURE_TRACKING`, `ROLES`, `DEFAULT_PERMISSIONS`, `INITIAL_USERS`, `AUDIT_RECORDS`, `AUDIT_PLANS_DATA`, `INITIAL_FINDINGS`, `INITIAL_EVIDENCES`, `BITACORA_DATA`.
 - **Componentes base:** `StatusBadge`, `Breadcrumbs`, `PageHeader`, `Card`, `PrimaryBtn`, `GhostBtn`, `Sidebar`, `TopBar`, `PDFPreviewModal`, `exportToCSV`.
-- **Vistas:** `DashboardView`, `FilterView`, `EditorView`, `HierarchyView` (Catálogo), `SettingsView`, `BitacoraView`, `UsersRolesView`, `AuditPlansView`, `FindingsView`, `AuditadoPortalView`, vistas de detalle (`GeneralRiskDetailView`, `SpecificRiskDetailView`, `AuditEntityDetailView`, `ControlDetailView`).
+- **Vistas:** `DashboardView`, `FilterView`, `EditorView`, `HierarchyView` (Catálogo), `SettingsView`, `BitacoraView`, `AuditPlansView`, `FindingsView`, `AuditadoPortalView` (usuarios y roles vive en `components/UsuariosRolesView.tsx`, solo para Administrador), vistas de detalle (`GeneralRiskDetailView`, `SpecificRiskDetailView`, `AuditEntityDetailView`, `ControlDetailView`).
 - **IA / extras:** `CopilotPanel`, `AISummaryCard`, `GuidedTour`, `SpreadsheetEditor` (editor tipo Excel con versiones y hash).
 
 ### Convenciones de código
@@ -137,6 +149,14 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 5. **Lineamientos de ciberseguridad de FEMSA:** pendientes de solicitar; condicionan la arquitectura de IA.
 6. **Índice del SRS** no lista "Distribución de las funciones sobre los módulos".
 7. **Modelos del Sistema** sin texto explicativo.
+
+8. **Dominio corporativo real** para el alta de usuarios: hoy `DOMINIOS_PERMITIDOS=expedite.com` como valor de desarrollo.
+9. **Recursos de Azure** (base Azure SQL y registro de aplicación en Entra ID) aún sin crear; el backend ya está listo para conectarse por variables de entorno.
+
+### Decisiones tomadas
+
+- Tablas `users`, `roles`, `permissions`, `role_permissions` siguiendo el modelo de datos de Miro (inglés, `snake_case`). `users.role` (texto) se sustituyó por `users.role_id`; **falta reflejarlo en el diagrama de Miro**.
+- Los permisos se leen de la base en cada petición (sin caché ni claims en el token) para que el cambio de rol sea inmediato (SF-17).
 
 ## 8. Referencias
 
