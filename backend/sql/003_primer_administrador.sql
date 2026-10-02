@@ -2,6 +2,10 @@
 -- Cambia el nombre y el correo antes de ejecutar. El correo debe ser el de su
 -- cuenta de Microsoft Entra ID.
 
+-- Los índices filtrados exigen estas opciones; sqlcmd no las activa por omisión.
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+
 DECLARE @nombre NVARCHAR(150) = N'CAMBIAR: nombre completo';
 DECLARE @correo NVARCHAR(254) = N'cambiar@dominio-corporativo.com';
 

@@ -1,6 +1,10 @@
 -- Roles y permisos iniciales. Debe coincidir con src/repos/semilla.ts.
 -- Se puede ejecutar más de una vez sin duplicar datos.
 
+-- Los índices filtrados exigen estas opciones; sqlcmd no las activa por omisión.
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+
 INSERT INTO dbo.roles (name)
 SELECT v.name
 FROM (VALUES

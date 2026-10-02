@@ -42,9 +42,23 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
       options: { encrypt: true, trustServerCertificate: conexion.confiarCertificado },
     }).connect();
 
-    // Dos veces cada uno: los scripts deben poder repetirse.
-    for (const nombre of ["001_schema.sql", "002_seed.sql", "001_schema.sql", "002_seed.sql"]) {
-      await pool.request().batch(await script(nombre));
+    // Los scripts se ejecutan como lo hace sqlcmd, que trae QUOTED_IDENTIFIER desactivado,
+    // y dos veces cada uno: deben poder repetirse.
+    const comoSqlcmd = await new sql.ConnectionPool({
+      server: conexion.servidor,
+      port: conexion.puerto,
+      database: conexion.baseDatos,
+      user: conexion.usuario,
+      password: conexion.contrasena,
+      options: { encrypt: true, trustServerCertificate: conexion.confiarCertificado, enableQuotedIdentifier: false },
+    }).connect();
+    try {
+      await comoSqlcmd.request().batch("DROP TABLE IF EXISTS dbo.users, dbo.role_permissions, dbo.permissions, dbo.roles");
+      for (const nombre of ["001_schema.sql", "002_seed.sql", "001_schema.sql", "002_seed.sql"]) {
+        await comoSqlcmd.request().batch(await script(nombre));
+      }
+    } finally {
+      await comoSqlcmd.close();
     }
 
     repo = await RepositorioSql.conectar(conexion);
@@ -69,6 +83,26 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
              (SELECT COUNT(*) FROM dbo.role_permissions) AS asignaciones`);
 
     expect(recordset[0]).toEqual({ roles: 6, permisos: 8, asignaciones: 24 });
+  });
+
+  it("crea los índices de la tabla users", async () => {
+    const { recordset } = await pool.request().query<{ name: string; is_unique: boolean; has_filter: boolean }>(`
+      SELECT name, is_unique, has_filter FROM sys.indexes
+      WHERE object_id = OBJECT_ID('dbo.users') AND name IN ('uq_users_entra_oid', 'ix_users_role_id')
+      ORDER BY name`);
+
+    expect(recordset).toEqual([
+      { name: "ix_users_role_id", is_unique: false, has_filter: false },
+      { name: "uq_users_entra_oid", is_unique: true, has_filter: true },
+    ]);
+  });
+
+  it("dos usuarios no pueden compartir la misma identidad de Entra", async () => {
+    await pool.request().batch("UPDATE dbo.users SET entra_oid = 'oid-1' WHERE email = 's.ramirez@expedite.com'");
+
+    await expect(
+      pool.request().batch("UPDATE dbo.users SET entra_oid = 'oid-1' WHERE email = 'a.rodriguez@expedite.com'"),
+    ).rejects.toThrow(/uq_users_entra_oid/);
   });
 
   it("los roles y permisos de la base coinciden con los del repositorio en memoria", async () => {
