@@ -64,6 +64,7 @@ import {
   FileCheck2,
   Ban,
   Activity,
+  LogOut,
 } from "lucide-react";
 
 import {
@@ -127,6 +128,8 @@ import {
 import VistaHallazgo from "./components/VistaHallazgo";
 import EvidenciasSection from "./components/EvidenciasSection";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
+import UsuariosRolesView from "./components/UsuariosRolesView";
+import { useSesion } from "./auth/SesionContext";
 
 const NAV_ITEMS: NavItem[] = [
   {
@@ -156,6 +159,9 @@ function Sidebar({
   active: NavView;
   onNav: (v: NavView) => void;
 }) {
+  const { usuario, esAdministrador, cerrarSesion } = useSesion();
+  const iniciales = (usuario?.nombre ?? "").split(" ").map(n => n[0]).join("").slice(0, 2);
+
   return (
     <aside className="w-56 min-h-screen bg-sidebar flex flex-col flex-shrink-0">
       {/* Logo */}
@@ -181,14 +187,14 @@ function Sidebar({
       <div className="px-4 py-3 border-b border-sidebar-border">
         <div className="flex items-center gap-2 bg-sidebar-accent rounded-md px-3 py-2">
           <div className="w-6 h-6 rounded-full bg-sidebar-primary flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            MG
+            {iniciales}
           </div>
           <div className="min-w-0">
             <div className="text-white text-xs font-semibold truncate">
-              María García
+              {usuario?.nombre}
             </div>
             <div className="text-sidebar-foreground/60 text-[10px] truncate">
-              Jefatura de Auditoría
+              {usuario?.rol}
             </div>
           </div>
         </div>
@@ -249,17 +255,19 @@ function Sidebar({
           </div>
         </div>
 
-        <button
-          id="tour-nav-users"
-          onClick={() => onNav("users")}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === "users"
-            ? "bg-sidebar-primary text-white"
-            : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
-            }`}
-        >
-          <span className="flex-shrink-0"><Users size={16} /></span>
-          Usuarios & Roles
-        </button>
+        {esAdministrador && (
+          <button
+            id="tour-nav-users"
+            onClick={() => onNav("users")}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors text-left ${active === "users"
+              ? "bg-sidebar-primary text-white"
+              : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-white"
+              }`}
+          >
+            <span className="flex-shrink-0"><Users size={16} /></span>
+            Usuarios & Roles
+          </button>
+        )}
         <button
           id="tour-nav-bitacora"
           onClick={() => onNav("bitacora")}
@@ -285,7 +293,14 @@ function Sidebar({
         </button>
       </nav>
 
-      <div className="px-4 py-3 border-t border-sidebar-border">
+      <div className="px-4 py-3 border-t border-sidebar-border space-y-2">
+        <button
+          onClick={() => void cerrarSesion()}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-white transition-colors text-left"
+        >
+          <LogOut size={14} />
+          Cerrar sesión
+        </button>
         <div className="text-[10px] text-sidebar-foreground/30 text-center font-mono">
           © 2025 Expedite
         </div>
@@ -4215,155 +4230,6 @@ function BitacoraView() {
   );
 }
 
-// ─── Users & Roles View ──────────────────────────────────────────────────────
-function UsersRolesView() {
-  const [selectedRole, setSelectedRole] = useState("Jefe de Auditoría");
-  const [permissions, setPermissions] = useState(DEFAULT_PERMISSIONS);
-  const [users, setUsers] = useState<UserRecord[]>(INITIAL_USERS);
-  const [saved, setSaved] = useState(false);
-
-  const togglePerm = (role: string, perm: string) => {
-    setPermissions(prev => ({
-      ...prev,
-      [role]: { ...prev[role], [perm]: !prev[role][perm] },
-    }));
-  };
-
-  const changeUserRole = (userId: string, newRole: string) => {
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole } : u));
-  };
-
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2200);
-  };
-
-  return (
-    <div className="flex-1 overflow-y-auto p-8 space-y-8">
-      <div>
-        <h2 className="text-xl font-bold text-foreground">Usuarios & Roles</h2>
-        <p className="text-sm text-muted-foreground mt-1">Administra los usuarios del sistema y configura los permisos por rol.</p>
-      </div>
-
-      {/* Role selector + permissions */}
-      <section className="bg-white rounded-xl border border-border p-6 space-y-5">
-        <div className="flex items-center gap-2">
-          <Lock size={16} className="text-primary" />
-          <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Roles & Permisos</h3>
-        </div>
-
-        <div className="flex gap-2 flex-wrap">
-          {ROLES.map(role => (
-            <button
-              key={role}
-              onClick={() => setSelectedRole(role)}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${selectedRole === role
-                ? "bg-primary text-white shadow-sm"
-                : "bg-secondary text-foreground hover:bg-secondary/70"
-                }`}
-            >
-              {role}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-          {Object.entries(permissions[selectedRole] ?? {}).map(([perm, enabled]) => (
-            <button
-              key={perm}
-              onClick={() => togglePerm(selectedRole, perm)}
-              className={`flex items-center justify-between px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors text-left ${enabled
-                ? "border-primary/30 bg-primary/5 text-primary"
-                : "border-border bg-background text-muted-foreground hover:border-border/80"
-                }`}
-            >
-              <span>{perm}</span>
-              <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ml-2 transition-colors ${enabled ? "bg-primary" : "bg-muted"}`}>
-                {enabled && <Check size={10} className="text-white" />}
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-3 pt-2 border-t border-border">
-          <button
-            onClick={handleSave}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-md hover:bg-primary/90 transition-colors"
-          >
-            {saved ? <Check size={14} /> : <Save size={14} />}
-            {saved ? "Guardado" : "Guardar permisos"}
-          </button>
-          {saved && <span className="text-xs text-emerald-600 font-medium">Permisos actualizados correctamente.</span>}
-        </div>
-      </section>
-
-      {/* Users table */}
-      <section className="bg-white rounded-xl border border-border overflow-hidden">
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Users size={16} className="text-primary" />
-            <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Usuarios del Sistema</h3>
-          </div>
-          <span className="text-xs text-muted-foreground">{users.length} usuarios</span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-secondary/30">
-                <th className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Usuario</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Correo</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Rol</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Estado</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Último acceso</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {users.map(user => {
-                const initials = user.name.split(" ").map(n => n[0]).join("").slice(0, 2);
-                return (
-                  <tr key={user.id} className="hover:bg-secondary/20 transition-colors">
-                    <td className="px-6 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
-                          {initials}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-foreground text-sm">{user.name}</div>
-                          <div className="text-[10px] text-muted-foreground font-mono">{user.id}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground">{user.email}</td>
-                    <td className="px-4 py-3.5">
-                      <select
-                        value={user.role}
-                        onChange={e => changeUserRole(user.id, e.target.value)}
-                        className="text-xs border border-border rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 font-medium text-foreground"
-                      >
-                        {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${user.status === "active"
-                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        : "bg-slate-50 text-slate-600 border border-slate-200"
-                        }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${user.status === "active" ? "bg-emerald-500" : "bg-slate-400"}`} />
-                        {user.status === "active" ? "Activo" : "Inactivo"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5 text-xs text-muted-foreground font-mono">{user.lastLogin}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
-  );
-}
-
 // ─── View: PLANES DE AUDITORÍA ───────────────────────────────────────────────
 const PLAN_STATUS_CFG: Record<AuditPlan["status"], { label: string; cls: string }> = {
   "Borrador": { label: "Borrador", cls: "bg-slate-50 text-slate-600 border border-slate-200" },
@@ -4939,8 +4805,11 @@ function computeTooltipPos(box: DOMRect): { left: number; top: number } {
 function GuidedTour({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState(0);
   const [box, setBox] = useState<DOMRect | null>(null);
+  const { esAdministrador } = useSesion();
 
-  const current = TOUR_STEPS[step];
+  // "Usuarios & Roles" solo aparece en la barra lateral del Administrador.
+  const pasos = TOUR_STEPS.filter(p => p.targetId !== "tour-nav-users" || esAdministrador);
+  const current = pasos[step];
 
   useEffect(() => {
     const el = document.getElementById(current.targetId);
@@ -4950,7 +4819,7 @@ function GuidedTour({ onClose }: { onClose: () => void }) {
     }
   }, [step, current.targetId]);
 
-  const next = () => { if (step < TOUR_STEPS.length - 1) setStep(s => s + 1); else onClose(); };
+  const next = () => { if (step < pasos.length - 1) setStep(s => s + 1); else onClose(); };
   const prev = () => { if (step > 0) setStep(s => s - 1); };
 
   const pos = box ? computeTooltipPos(box) : { left: MARGIN, top: MARGIN };
@@ -4994,13 +4863,13 @@ function GuidedTour({ onClose }: { onClose: () => void }) {
 
         <div className="mb-1">
           <div className="text-sm font-bold text-foreground">{current.title}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">Paso {step + 1} de {TOUR_STEPS.length}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">Paso {step + 1} de {pasos.length}</div>
         </div>
         <p className="text-xs text-muted-foreground leading-relaxed mt-2 mb-4">{current.description}</p>
 
         {/* Progress */}
         <div className="flex gap-1 mb-4">
-          {TOUR_STEPS.map((_, i) => (
+          {pasos.map((_, i) => (
             <button key={i} onClick={() => setStep(i)}
               className={`h-1.5 flex-1 rounded-full transition-all ${i === step ? "bg-primary" : i < step ? "bg-primary/40" : "bg-border"}`} />
           ))}
@@ -5013,7 +4882,7 @@ function GuidedTour({ onClose }: { onClose: () => void }) {
             </button>
           )}
           <button onClick={next} className="flex-1 flex items-center justify-center gap-1 text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors">
-            {step === TOUR_STEPS.length - 1 ? "Finalizar" : "Siguiente"} <ChevronRight size={12} />
+            {step === pasos.length - 1 ? "Finalizar" : "Siguiente"} <ChevronRight size={12} />
           </button>
           <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2">Omitir</button>
         </div>
@@ -5161,7 +5030,7 @@ export default function App() {
           />
         );
       case "users":
-        return <UsersRolesView />;
+        return <UsuariosRolesView />;
       case "bitacora":
         return <BitacoraView />;
       case "plans":
