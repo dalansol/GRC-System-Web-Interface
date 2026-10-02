@@ -1,5 +1,5 @@
 import cors from "cors";
-import express, { type ErrorRequestHandler, type Express } from "express";
+import express, { type ErrorRequestHandler, type Express, type Router } from "express";
 import type { VerificadorToken } from "./auth/verificador.js";
 import { registrarEnConsola, type RegistrarEvento } from "./bitacora.js";
 import { ErrorApi } from "./errores.js";
@@ -13,6 +13,8 @@ export interface DependenciasApp {
   dominiosPermitidos: readonly string[];
   corsOrigin: string | string[];
   registrarEvento?: RegistrarEvento;
+  /** Rutas de /api que aún no exigen sesión. Deben pasar a exigirla. */
+  rutasSinSesion?: Router[];
 }
 
 const manejarErrores: ErrorRequestHandler = (error, _req, res, _next) => {
@@ -35,6 +37,10 @@ export function crearApp(deps: DependenciasApp): Express {
   app.disable("x-powered-by");
   app.use(cors({ origin: deps.corsOrigin }));
   app.use(express.json({ limit: "10kb" }));
+
+  for (const rutas of deps.rutasSinSesion ?? []) {
+    app.use("/api", rutas);
+  }
 
   app.use(
     "/api",

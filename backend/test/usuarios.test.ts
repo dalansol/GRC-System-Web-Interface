@@ -1,3 +1,4 @@
+import { Router } from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
@@ -304,6 +305,28 @@ describe("autenticación y autorización por rol", () => {
       "Solo Lectura",
     ]);
     expect(res.body[3].permisos).toEqual(["Ver Dashboard", "Ver Auditorías"]);
+  });
+
+  it("las rutas registradas sin sesión responden sin identidad y no abren las demás", async () => {
+    const abiertas = Router();
+    abiertas.get("/hallazgos", (_req, res) => {
+      res.json([{ id: "H-1" }]);
+    });
+    const conAbiertas = crearApp({
+      repo: new RepositorioMemoria(),
+      verificador: crearVerificadorDev(),
+      dominiosPermitidos: ["expedite.com"],
+      corsOrigin: "http://localhost:5173",
+      registrarEvento: () => {},
+      rutasSinSesion: [abiertas],
+    });
+
+    const hallazgos = await request(conAbiertas).get("/api/hallazgos");
+    expect(hallazgos.status).toBe(200);
+    expect(hallazgos.body).toEqual([{ id: "H-1" }]);
+
+    expect((await request(conAbiertas).get("/api/usuarios")).status).toBe(401);
+    expect((await request(conAbiertas).get("/api/no-existe")).status).toBe(401);
   });
 
   it("responde 404 con el formato de error en rutas inexistentes", async () => {

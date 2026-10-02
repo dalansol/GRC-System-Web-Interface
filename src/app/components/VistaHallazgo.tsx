@@ -1,308 +1,371 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
-  Check,
+  Trash2,
+  Edit3,
+  RefreshCw,
+  AlertCircle,
   CheckCircle2,
-  ChevronRight,
-  Download,
-  FileText,
-  Filter,
-  Flag,
-  X,
+  Clock,
+  Loader2,
+  Plus
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Breadcrumbs,
-  PageHeader,
-  Card,
-  PrimaryBtn,
-  GhostBtn,
-  PDFPreviewModal,
-  RiskLevelBadge,
-  exportToCSV,
-} from "./SharedComponents";
+import { INITIAL_FINDINGS, CONTROLS } from "../data/mock_data";
 
-import type {
-  Finding
-} from "./SharedComponents";
+import FormularioHallazgo, {
+  CreatedFinding,
+  FindingControlOption,
+} from "./FormularioHallazgo";
 
-import EvidenciasSection from "./EvidenciasSection";
-import {INITIAL_FINDINGS} from "../data/mock_data";
+export interface Hallazgo {
+  id: string;
+  folio?: string;
+  title: string;
+  description?: string;
+  type?: string;
+  severity: "Crítico" | "Alto" | "Medio" | "Bajo";
+  status: "Abierto" | "En Proceso" | "Cerrado";
+  auditId?: string;
+  controlId?: string;
+  ownerId?: string;
+}
 
-const SEV_COLOR: Record<Finding["severity"], string> = {
-  "Crítico": "bg-red-50 text-red-700 border border-red-200",
-  "Alto": "bg-orange-50 text-orange-700 border border-orange-200",
-  "Medio": "bg-amber-50 text-amber-700 border border-amber-200",
-  "Bajo": "bg-emerald-50 text-emerald-700 border border-emerald-200",
-};
-
-const FIND_STATUS_CFG: Record<Finding["status"], string> = {
-  "Abierto": "bg-red-50 text-red-700 border border-red-200",
-  "En Revisión": "bg-amber-50 text-amber-700 border border-amber-200",
-  "Asignado": "bg-blue-50 text-blue-700 border border-blue-200",
-  "Cerrado": "bg-emerald-50 text-emerald-700 border border-emerald-200",
-};
+const metaEnv = (import.meta as any).env;
+const API_BASE_URL = metaEnv?.VITE_API_URL || "http://localhost:3000/api";
+const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND === "true";
 
 export default function VistaHallazgo() {
-  const [findings, setFindings] = useState<Finding[]>(INITIAL_FINDINGS);
-  const [actionModal, setActionModal] = useState<Finding | null>(null);
-  const [findingPdf, setFindingPdf] = useState<Finding | null>(null);
-  const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
-  const [actionForm, setActionForm] = useState({ description: "", responsible: "", dueDate: "" });
-  const [actionErr, setActionErr] = useState<Record<string, string>>({});
-  const [sevFilter, setSevFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingHallazgo, setEditingHallazgo] = useState<Hallazgo | null>(null);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
-  const filtered = findings.filter(f =>
-    (sevFilter === "all" || f.severity === sevFilter) &&
-    (statusFilter === "all" || f.status === statusFilter)
-  );
+  // 1. GET: Cargar hallazgos desde el Backend o Mock Data
+  const fetchHallazgos = async () => {
+    setLoading(true);
+    try {
+      if (USE_REAL_BACKEND) {
+        const response = await fetch(`${API_BASE_URL}/hallazgos`);
+        if (!response.ok) {
+          throw new Error("No se pudieron obtener los hallazgos del servidor.");
+        }
+        const data = await response.json();
+        setHallazgos(data);
+      } else {
+        // Fallback a mock_data.tsx
+        setHallazgos(INITIAL_FINDINGS as unknown as Hallazgo[]);
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Error al cargar los hallazgos.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const saveActionPlan = () => {
-    const errs: Record<string, string> = {};
-    if (!actionForm.description.trim()) errs.description = "Requerido";
-    if (!actionForm.responsible.trim()) errs.responsible = "Requerido";
-    if (!actionForm.dueDate) errs.dueDate = "Requerido";
-    if (Object.keys(errs).length) { setActionErr(errs); return; }
-    setFindings(prev => prev.map(f => f.id === actionModal!.id ? {
-      ...f, status: "Asignado",
-      actionPlan: { description: actionForm.description, responsible: actionForm.responsible, dueDate: actionForm.dueDate, status: "Asignado" },
-    } : f));
-    setActionModal(null);
-    setActionForm({ description: "", responsible: "", dueDate: "" });
-    toast.success(`Plan de acción asignado para "${actionModal!.folio}"`);
+  useEffect(() => {
+    fetchHallazgos();
+  }, []);
+
+  const findingControls: FindingControlOption[] = CONTROLS.map((control) => ({
+    id: control.id,
+    name: control.controlProcedureName,
+    vulnerability: control.currentVulnerability as FindingControlOption["vulnerability"],
+  }));
+
+  const nextFolioNumber = hallazgos.reduce((max, finding) => {
+    const number = Number(finding.folio?.split("-").pop());
+    return Number.isFinite(number) ? Math.max(max, number) : max;
+  }, 0) + 1;
+
+  const nextFolio = `HAL-${new Date().getFullYear()}-${String(
+    nextFolioNumber,
+  ).padStart(3, "0")}`;
+
+  const handleFindingCreated = (finding: CreatedFinding) => {
+    setHallazgos((current) => [finding, ...current]);
+  };
+
+  // 2. DELETE: Eliminar hallazgo por ID
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("¿Estás seguro de que deseas eliminar este hallazgo?")) return;
+
+    setDeletingId(id);
+    try {
+      if (USE_REAL_BACKEND) {
+        const response = await fetch(`${API_BASE_URL}/hallazgos/${id}`, {
+          method: "DELETE",
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Error al eliminar el hallazgo.");
+        }
+      }
+
+      setHallazgos((prev) => prev.filter((item) => item.id !== id));
+      toast.success("Hallazgo eliminado correctamente.");
+    } catch (error: any) {
+      toast.error(error.message || "Error al eliminar el hallazgo.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // 3. PUT: Actualizar hallazgo desde el modal/formulario de edición
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingHallazgo) return;
+
+    setIsUpdating(true);
+    try {
+      if (USE_REAL_BACKEND) {
+        const response = await fetch(`${API_BASE_URL}/hallazgos/${editingHallazgo.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(editingHallazgo),
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Error al actualizar el hallazgo.");
+        }
+
+        const updatedData = await response.json();
+        setHallazgos((prev) =>
+          prev.map((item) => (item.id === updatedData.id ? updatedData : item))
+        );
+      } else {
+        // Fallback local
+        setHallazgos((prev) =>
+          prev.map((item) => (item.id === editingHallazgo.id ? editingHallazgo : item))
+        );
+      }
+
+      toast.success("Hallazgo actualizado con éxito.");
+      setEditingHallazgo(null);
+    } catch (error: any) {
+      toast.error(error.message || "Error al actualizar.");
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   return (
-    <div className="flex-1 overflow-auto p-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <Breadcrumbs items={["Inicio", "Auditoría", "Hallazgos"]} />
-      <PageHeader
-        title="Hallazgos de Auditoría"
-        subtitle={`${findings.length} hallazgos registrados · ${findings.filter(f => f.status !== "Cerrado").length} abiertos`}
-        actions={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => exportToCSV("hallazgos.csv", ["Folio","Título","Gravedad","Control Fallido","Riesgo Residual","Estado","Fecha"], findings.map(f => [f.folio, f.title, f.severity, f.failedControl, f.residualRisk, f.status, f.date]))}
-              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:bg-secondary transition-colors"
-            >
-              <Download size={12} /> Exportar CSV
-            </button>
-            <button
-              onClick={() => setFindingPdf(findings[0])}
-              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:bg-secondary transition-colors"
-            >
-              <FileText size={12} /> Exportar PDF
-            </button>
-          </div>
-        }
-      />
-      {findingPdf && (
-        <PDFPreviewModal
-          onClose={() => setFindingPdf(null)}
-          doc={{
-            title: `Ficha de Hallazgo — ${findingPdf.folio}`,
-            subtitle: findingPdf.title,
-            sections: [
-              {
-                heading: "Datos del Hallazgo",
-                rows: [
-                  ["Folio", findingPdf.folio],
-                  ["Fecha de registro", findingPdf.date],
-                  ["Gravedad", findingPdf.severity],
-                  ["Estado", findingPdf.status],
-                  ["Riesgo residual", findingPdf.residualRisk],
-                ],
-              },
-              {
-                heading: "Control Fallido",
-                rows: [
-                  ["ID de control", findingPdf.failedControlId],
-                  ["Descripción", findingPdf.failedControl],
-                ],
-              },
-              ...(findingPdf.actionPlan ? [{
-                heading: "Plan de Acción",
-                rows: [
-                  ["Descripción", findingPdf.actionPlan.description],
-                  ["Responsable", findingPdf.actionPlan.responsible],
-                  ["Fecha compromiso", findingPdf.actionPlan.dueDate],
-                  ["Estado del plan", findingPdf.actionPlan.status],
-                ] as [string, string][],
-              }] : []),
-              {
-                heading: "Resumen Global",
-                rows: [
-                  ["Total hallazgos", String(findings.length)],
-                  ["Abiertos", String(findings.filter(f => f.status === "Abierto").length)],
-                  ["Asignados", String(findings.filter(f => f.status === "Asignado").length)],
-                  ["Cerrados", String(findings.filter(f => f.status === "Cerrado").length)],
-                ],
-              },
-            ],
-          }}
-        />
-      )}
+    <div className="w-full space-y-4 p-6">
+      {/* Encabezado */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-foreground">
+            Gestión de Hallazgos
+          </h1>
 
-      {/* Filters */}
-      <div className="flex items-center gap-2 flex-wrap mb-5">
-        <Filter size={12} className="text-muted-foreground" />
-        <span className="text-xs text-muted-foreground font-medium">Gravedad:</span>
-        {["all", "Crítico", "Alto", "Medio", "Bajo"].map(f => (
-          <button key={f} onClick={() => setSevFilter(f)}
-            className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${sevFilter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>
-            {f === "all" ? "Todos" : f}
+          <p className="text-xs text-muted-foreground">
+            Modo actual:{" "}
+            <span className="font-semibold text-primary">
+              {USE_REAL_BACKEND
+                ? "API Backend (SQL Server)"
+                : "Mock Data Local"}
+            </span>
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90"
+          >
+            <Plus size={14} />
+            Nuevo hallazgo
           </button>
-        ))}
-        <div className="w-px h-4 bg-border mx-1" />
-        <span className="text-xs text-muted-foreground font-medium">Estado:</span>
-        {["all", "Abierto", "En Revisión", "Asignado", "Cerrado"].map(f => (
-          <button key={f} onClick={() => setStatusFilter(f)}
-            className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${statusFilter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>
-            {f === "all" ? "Todos" : f}
+
+          <button
+            onClick={fetchHallazgos}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold hover:bg-secondary disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            Recargar
           </button>
-        ))}
+        </div>
       </div>
 
-      <Card>
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-14 text-center">
-            <Flag size={28} className="text-muted-foreground/30 mb-3" />
-            <div className="text-sm font-semibold text-muted-foreground">Sin hallazgos con estos filtros</div>
-            <button onClick={() => { setSevFilter("all"); setStatusFilter("all"); }} className="mt-2 text-xs text-accent font-semibold hover:underline">Limpiar filtros</button>
+      {/* Tabla de Hallazgos */}
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        {loading ? (
+          <div className="flex items-center justify-center p-12 text-muted-foreground">
+            <Loader2 className="mr-2 animate-spin" size={20} />
+            Cargando hallazgos...
+          </div>
+        ) : hallazgos.length === 0 ? (
+          <div className="p-12 text-center text-sm text-muted-foreground">
+            No se encontraron hallazgos registrados.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  {["Folio", "Título", "Gravedad", "Control Fallido", "Riesgo Residual", "Estado", "Fecha", ""].map(h => (
-                    <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.map(f => {
-                  const isExpanded = expandedFinding === f.id;
-                  return (
-                    <React.Fragment key={f.id}>
-                      <tr
-                        className={`transition-colors cursor-pointer group ${isExpanded ? "bg-secondary/40" : "hover:bg-secondary/30"}`}
-                        onClick={() => setExpandedFinding(isExpanded ? null : f.id)}
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-muted-foreground transition-transform" style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", display: "inline-block" }}>
-                              <ChevronRight size={12} />
-                            </span>
-                            <span className="font-mono text-xs font-bold text-primary bg-primary/8 px-2 py-0.5 rounded-md">{f.folio}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 max-w-xs">
-                          <div className="font-medium text-foreground text-sm line-clamp-2">{f.title}</div>
-                          {f.actionPlan && (
-                            <div className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-1">
-                              <CheckCircle2 size={10} /> Plan asignado — {f.actionPlan.dueDate}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${SEV_COLOR[f.severity]}`}>{f.severity}</span>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
-                          <span className="font-mono text-primary">{f.failedControlId}</span>
-                          <div className="text-[10px] mt-0.5 max-w-[140px] truncate">{f.failedControl}</div>
-                        </td>
-                        <td className="px-4 py-3"><RiskLevelBadge level={f.residualRisk} /></td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${FIND_STATUS_CFG[f.status]}`}>{f.status}</span>
-                        </td>
-                        <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{f.date}</td>
-                        <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                          {!f.actionPlan && f.status !== "Cerrado" && (
-                            <button onClick={() => setActionModal(f)}
-                              className="text-xs px-2.5 py-1 bg-primary text-primary-foreground rounded-md font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap">
-                              Crear plan
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr>
-                          <td colSpan={8} className="px-4 pb-4 bg-secondary/20 border-b border-border">
-                            <div className="pt-3 space-y-3">
-                              {f.actionPlan && (
-                                <div className="bg-white rounded-lg border border-border p-4">
-                                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Plan de remediación</div>
-                                  <p className="text-sm text-foreground mb-3">{f.actionPlan.description}</p>
-                                  <div className="grid grid-cols-3 gap-4 text-xs">
-                                    <div><div className="text-muted-foreground font-semibold mb-0.5">Responsable</div><div className="text-foreground font-medium">{f.actionPlan.responsible}</div></div>
-                                    <div><div className="text-muted-foreground font-semibold mb-0.5">Fecha compromiso</div><div className="font-mono text-foreground">{f.actionPlan.dueDate}</div></div>
-                                    <div><div className="text-muted-foreground font-semibold mb-0.5">Estado</div><div className="text-foreground">{f.actionPlan.status}</div></div>
-                                  </div>
-                                </div>
-                              )}
-                              <EvidenciasSection entityId={f.id} />
-                            </div>
-                          </td>
-                        </tr>
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-border bg-muted/50 text-xs text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3">ID / Folio</th>
+                <th className="px-4 py-3">Título</th>
+                <th className="px-4 py-3">Severidad</th>
+                <th className="px-4 py-3">Estado</th>
+                <th className="px-4 py-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {hallazgos.map((item) => (
+                <tr key={item.id} className="hover:bg-muted/30">
+                  <td className="px-4 py-3 font-mono text-xs font-semibold">
+                    {item.folio || item.id}
+                  </td>
+                  <td className="px-4 py-3 font-medium text-foreground">{item.title}</td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${item.severity === "Crítico" || item.severity === "Alto"
+                        ? "bg-red-500/10 text-red-600"
+                        : item.severity === "Medio"
+                          ? "bg-yellow-500/10 text-yellow-600"
+                          : "bg-green-500/10 text-green-600"
+                        }`}
+                    >
+                      {item.severity}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                      {item.status === "Cerrado" ? (
+                        <CheckCircle2 size={14} className="text-green-500" />
+                      ) : item.status === "En Proceso" ? (
+                        <Clock size={14} className="text-yellow-500" />
+                      ) : (
+                        <AlertCircle size={14} className="text-red-500" />
                       )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      {item.status || "Abierto"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => setEditingHallazgo(item)}
+                        className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        disabled={deletingId === item.id}
+                        className="rounded p-1 text-muted-foreground hover:bg-red-500/10 hover:text-red-600 disabled:opacity-50"
+                      >
+                        {deletingId === item.id ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={16} />
+                        )}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
-      </Card>
+      </div>
 
-      {/* Action Plan Modal */}
-      {actionModal && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setActionModal(null)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="bg-card rounded-xl shadow-2xl w-full max-w-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <div className="text-sm font-bold text-foreground">Crear Plan de Acción</div>
-                  <div className="text-xs text-muted-foreground mt-0.5 font-mono">{actionModal.folio} — {actionModal.title.slice(0, 50)}…</div>
-                </div>
-                <button onClick={() => setActionModal(null)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary transition-colors"><X size={16} /></button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Descripción del plan de remediación</label>
-                  <textarea
-                    value={actionForm.description} rows={3} placeholder="Describe las acciones a tomar para cerrar este hallazgo…"
-                    onChange={e => { setActionForm(f => ({ ...f, description: e.target.value })); setActionErr(e => ({ ...e, description: "" })); }}
-                    className={`w-full text-sm px-3 py-2 rounded-md border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none ${actionErr.description ? "border-red-400" : "border-border"}`}
-                  />
-                  {actionErr.description && <div className="text-xs text-red-600 mt-0.5">{actionErr.description}</div>}
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Responsable auditado</label>
-                  <input
-                    value={actionForm.responsible} placeholder="Nombre y área del responsable"
-                    onChange={e => { setActionForm(f => ({ ...f, responsible: e.target.value })); setActionErr(e => ({ ...e, responsible: "" })); }}
-                    className={`w-full text-sm px-3 py-2 rounded-md border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${actionErr.responsible ? "border-red-400" : "border-border"}`}
-                  />
-                  {actionErr.responsible && <div className="text-xs text-red-600 mt-0.5">{actionErr.responsible}</div>}
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Fecha de compromiso</label>
-                  <input
-                    type="date" value={actionForm.dueDate}
-                    onChange={e => { setActionForm(f => ({ ...f, dueDate: e.target.value })); setActionErr(e => ({ ...e, dueDate: "" })); }}
-                    className={`w-full text-sm px-3 py-2 rounded-md border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${actionErr.dueDate ? "border-red-400" : "border-border"}`}
-                  />
-                  {actionErr.dueDate && <div className="text-xs text-red-600 mt-0.5">{actionErr.dueDate}</div>}
-                </div>
-              </div>
-              <div className="flex gap-3 mt-5 pt-4 border-t border-border">
-                <PrimaryBtn icon={<Check size={14} />} onClick={saveActionPlan}>Asignar plan</PrimaryBtn>
-                <GhostBtn onClick={() => setActionModal(null)}>Cancelar</GhostBtn>
-              </div>
+      {/* Modal de Edición (PUT) */}
+      {editingHallazgo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form
+            onSubmit={handleUpdate}
+            className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4"
+          >
+            <h3 className="text-lg font-bold text-foreground">Editar Hallazgo</h3>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                Título
+              </label>
+              <input
+                type="text"
+                value={editingHallazgo.title}
+                onChange={(e) =>
+                  setEditingHallazgo({ ...editingHallazgo, title: e.target.value })
+                }
+                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+                required
+              />
             </div>
-          </div>
-        </>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                Severidad
+              </label>
+              <select
+                value={editingHallazgo.severity}
+                onChange={(e) =>
+                  setEditingHallazgo({
+                    ...editingHallazgo,
+                    severity: e.target.value as Hallazgo["severity"],
+                  })
+                }
+                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+              >
+                <option value="Crítico">Crítico</option>
+                <option value="Alto">Alto</option>
+                <option value="Medio">Medio</option>
+                <option value="Bajo">Bajo</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                Estado
+              </label>
+              <select
+                value={editingHallazgo.status || "Abierto"}
+                onChange={(e) =>
+                  setEditingHallazgo({
+                    ...editingHallazgo,
+                    status: e.target.value as Hallazgo["status"],
+                  })
+                }
+                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+              >
+                <option value="Abierto">Abierto</option>
+                <option value="En Proceso">En Proceso</option>
+                <option value="Cerrado">Cerrado</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={() => setEditingHallazgo(null)}
+                disabled={isUpdating}
+                className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-secondary"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdating}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
+              >
+                {isUpdating && <Loader2 size={14} className="animate-spin" />}
+                Guardar Cambios
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {showCreateForm && (
+        <FormularioHallazgo
+          controls={findingControls}
+          nextFolio={nextFolio}
+          auditId="AUD-001"
+          onCreated={handleFindingCreated}
+          onClose={() => setShowCreateForm(false)}
+        />
       )}
     </div>
   );

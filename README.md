@@ -28,7 +28,7 @@ Los `.env` no se suben a git, así que cada quien los crea en su máquina la pri
 `backend/.env`:
 
 ```
-PORT=3001
+PORT=3000
 DOMINIOS_PERMITIDOS=expedite.com
 AUTH_MODE=dev
 DATA_MODE=memoria
@@ -37,8 +37,9 @@ DATA_MODE=memoria
 `.env` (en la raíz):
 
 ```
-VITE_API_URL=http://localhost:3001
+VITE_API_URL=http://localhost:3000/api
 VITE_AUTH_MODE=dev
+VITE_USE_REAL_BACKEND=false
 ```
 
 ### 2. Levantar el backend
@@ -51,7 +52,7 @@ corepack pnpm install     # solo la primera vez
 corepack pnpm dev
 ```
 
-Debe imprimir `API Expedite en http://localhost:3001 (autenticación: dev, datos: memoria)`.
+Debe imprimir `API Expedite en http://localhost:3000/api (autenticación: dev, datos: memoria)`.
 
 El backend usa **pnpm**. Si `corepack` no está disponible, instálalo con
 `npm install -g pnpm` y usa `pnpm` en lugar de `corepack pnpm`.
@@ -80,7 +81,9 @@ En modo de desarrollo se entra escribiendo el correo de un usuario de prueba:
 | `p.sanchez@expedite.com` | Consultor (inactivo) | No puede entrar |
 
 En este modo los datos de usuarios viven en memoria: se reinician cada vez que se
-apaga el backend.
+apaga el backend. La vista de hallazgos usa sus datos de prueba mientras
+`VITE_USE_REAL_BACKEND` sea `false`; sus rutas en el backend solo existen con
+`DATA_MODE=sql`, porque necesitan la base de datos.
 
 ### Problemas comunes
 
@@ -107,20 +110,22 @@ Backend (`backend/.env`):
 
 | Variable | Descripción |
 |---|---|
-| `PORT` | Puerto de la API. Por omisión `3001`. |
+| `PORT` | Puerto de la API. Por omisión `3000`. |
 | `CORS_ORIGIN` | Orígenes del frontend permitidos, separados por coma. Por omisión `http://localhost:5173,http://localhost:5174`. |
 | `DOMINIOS_PERMITIDOS` | Dominios de correo corporativo aceptados al dar de alta usuarios, separados por coma. Obligatoria. |
 | `AUTH_MODE` | `entra` (Microsoft Entra ID, por omisión) o `dev` (solo local; no arranca en producción). |
 | `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` | Obligatorias con `AUTH_MODE=entra`. |
 | `DATA_MODE` | `sql` (Azure SQL, por omisión) o `memoria` (solo local; no arranca en producción). |
-| `SQL_SERVER`, `SQL_DATABASE`, `SQL_USER`, `SQL_PASSWORD` | Obligatorias con `DATA_MODE=sql`. |
-| `SQL_PORT`, `SQL_TRUST_CERT` | Opcionales, solo para un SQL Server local (por ejemplo en Docker). |
+| `DB_SERVER`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Obligatorias con `DATA_MODE=sql`. Las usan usuarios y hallazgos. |
+| `DB_PORT` | Puerto de la base. Por omisión `1433`. |
+| `DB_TRUST_CERT` | `true` para un SQL Server local con certificado autofirmado; no arranca en producción. La conexión siempre va cifrada. |
 
 Frontend (`.env`):
 
 | Variable | Descripción |
 |---|---|
-| `VITE_API_URL` | URL del backend. Por omisión `http://localhost:3001`. |
+| `VITE_API_URL` | URL de la API, con el prefijo `/api`. Por omisión `http://localhost:3000/api`. |
+| `VITE_USE_REAL_BACKEND` | `true` para que la vista de hallazgos use el backend; con `false` usa datos de prueba. |
 | `VITE_AUTH_MODE` | `entra` (por omisión) o `dev` (requiere el backend con `AUTH_MODE=dev`). |
 | `VITE_ENTRA_TENANT_ID`, `VITE_ENTRA_CLIENT_ID` | Obligatorias con `VITE_AUTH_MODE=entra`. |
 | `VITE_ENTRA_API_SCOPE` | Opcional. Por omisión `api://<VITE_ENTRA_CLIENT_ID>/access_as_user`. |
@@ -132,7 +137,7 @@ Cuando existan los recursos en Azure:
 1. Ejecutar en la base de Azure SQL, en este orden, `backend/sql/001_schema.sql`,
    `002_seed.sql` y `003_primer_administrador.sql` (este último hay que editarlo
    antes con el nombre y correo del primer Administrador).
-2. En `backend/.env`: `DATA_MODE=sql` con las variables `SQL_*`, `AUTH_MODE=entra`
+2. En `backend/.env`: `DATA_MODE=sql` con las variables `DB_*`, `AUTH_MODE=entra`
    con `ENTRA_TENANT_ID` y `ENTRA_CLIENT_ID`, y el dominio real en
    `DOMINIOS_PERMITIDOS`.
 3. En el `.env` de la raíz: `VITE_AUTH_MODE=entra`, `VITE_ENTRA_TENANT_ID` y

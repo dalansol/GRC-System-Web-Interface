@@ -4,7 +4,16 @@ export type ConfigAuth = { modo: "dev" } | { modo: "entra"; tenantId: string; cl
 
 export type ConfigDatos =
   | { modo: "memoria" }
-  | { modo: "sql"; servidor: string; baseDatos: string; usuario: string; contrasena: string };
+  | {
+      modo: "sql";
+      servidor: string;
+      baseDatos: string;
+      usuario: string;
+      contrasena: string;
+      puerto: number;
+      /** Solo para un SQL Server local con certificado autofirmado. */
+      confiarCertificado: boolean;
+    };
 
 export interface Config {
   puerto: number;
@@ -30,10 +39,15 @@ export function cargarConfig(env: Entorno): Config {
     return valor;
   };
 
-  const puerto = Number(env.PORT ?? 3001);
-  if (!Number.isInteger(puerto) || puerto < 1 || puerto > 65535) {
-    throw new Error("PORT debe ser un número de puerto válido.");
-  }
+  const numeroDePuerto = (nombre: string, porOmision: number): number => {
+    const valor = Number(env[nombre] ?? porOmision);
+    if (!Number.isInteger(valor) || valor < 1 || valor > 65535) {
+      throw new Error(`${nombre} debe ser un número de puerto válido.`);
+    }
+    return valor;
+  };
+
+  const puerto = numeroDePuerto("PORT", 3000);
 
   const modoAuth = env.AUTH_MODE ?? "entra";
   let auth: ConfigAuth;
@@ -52,12 +66,18 @@ export function cargarConfig(env: Entorno): Config {
     if (produccion) throw new Error("DATA_MODE=memoria no está permitido en producción.");
     datos = { modo: "memoria" };
   } else if (modoDatos === "sql") {
+    const confiarCertificado = env.DB_TRUST_CERT === "true";
+    if (confiarCertificado && produccion) {
+      throw new Error("DB_TRUST_CERT=true no está permitido en producción.");
+    }
     datos = {
       modo: "sql",
-      servidor: requerida("SQL_SERVER"),
-      baseDatos: requerida("SQL_DATABASE"),
-      usuario: requerida("SQL_USER"),
-      contrasena: requerida("SQL_PASSWORD"),
+      servidor: requerida("DB_SERVER"),
+      baseDatos: requerida("DB_NAME"),
+      usuario: requerida("DB_USER"),
+      contrasena: requerida("DB_PASSWORD"),
+      puerto: numeroDePuerto("DB_PORT", 1433),
+      confiarCertificado,
     };
   } else {
     throw new Error("DATA_MODE debe ser 'sql' o 'memoria'.");

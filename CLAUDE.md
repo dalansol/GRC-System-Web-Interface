@@ -49,8 +49,10 @@ src/
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
 backend/
   sql/                     ← scripts de Azure SQL (esquema, datos iniciales, primer administrador)
-  src/app.ts               ← app Express; recibe repositorio y verificador de tokens
-  src/routes/              ← endpoints
+  src/server.ts            ← único punto de arranque; abre la conexión a la base y monta las rutas
+  src/app.ts               ← app Express; recibe repositorio, verificador de tokens y rutas
+  src/db.ts                ← conexión compartida (la registra server.ts)
+  src/routes/              ← endpoints: usuarios.ts (con sesión) y hallazgos.ts (aún sin sesión, solo con DATA_MODE=sql)
   src/middleware/          ← autenticar (token → usuario) y autorizar (por rol)
   src/repos/               ← repositorio SQL y en memoria
   test/                    ← pruebas (las de SQL requieren SQL_TEST_*)
@@ -152,11 +154,13 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 
 8. **Dominio corporativo real** para el alta de usuarios: hoy `DOMINIOS_PERMITIDOS=expedite.com` como valor de desarrollo.
 9. **Recursos de Azure** (base Azure SQL y registro de aplicación en Entra ID) aún sin crear; el backend ya está listo para conectarse por variables de entorno.
+10. **Sesión en las rutas de hallazgos:** `/api/hallazgos` todavía responde sin iniciar sesión y la vista de hallazgos no envía el token. Hay que pasarlas detrás de `autenticar` y usar `src/app/api/cliente.ts` en esa vista.
 
 ### Decisiones tomadas
 
 - Tablas `users`, `roles`, `permissions`, `role_permissions` siguiendo el modelo de datos de Miro (inglés, `snake_case`). `users.role` (texto) se sustituyó por `users.role_id`; **falta reflejarlo en el diagrama de Miro**.
 - Los permisos se leen de la base en cada petición (sin caché ni claims en el token) para que el cambio de rol sea inmediato (SF-17).
+- Un solo backend: arranca en `backend/src/server.ts`, puerto 3000, todo bajo `/api`, con una sola conexión a la base (variables `DB_*`).
 
 ## 8. Referencias
 

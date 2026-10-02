@@ -21,10 +21,10 @@ ejecutado. Ver "Pendiente" al final.
 ## Cómo ejecutar
 
 ```bash
-# Backend (95 pruebas; las 18 de base de datos se omiten sin conexión)
+# Backend (100 pruebas; las 18 de base de datos se omiten sin conexión)
 cd backend && pnpm test
 
-# Backend incluyendo la base de datos (113 pruebas). Usa una base exclusiva para
+# Backend incluyendo la base de datos (118 pruebas). Usa una base exclusiva para
 # pruebas: el contenido de la tabla users se borra.
 SQL_TEST_SERVER=<servidor> SQL_TEST_DATABASE=<base> SQL_TEST_USER=<usuario> \
 SQL_TEST_PASSWORD=<contraseña> pnpm test
@@ -37,7 +37,7 @@ npm test
 
 | Suite | Pruebas | Resultado |
 |---|---|---|
-| Backend: API, dominio, tokens de Entra, configuración | 95 | 95 aprobadas |
+| Backend: API, dominio, tokens de Entra, configuración | 100 | 100 aprobadas |
 | Backend: integración con SQL Server | 18 | 18 aprobadas |
 | Frontend: vista, sesión, cliente de API | 29 | 29 aprobadas |
 | Punta a punta en navegador | 10 comprobaciones | 10 aprobadas |

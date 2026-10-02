@@ -27,14 +27,14 @@ export interface NuevoUsuario {
   rol: string;
 }
 
-export const obtenerSesion = () => pedir<UsuarioConPermisos>("/api/me");
+export const obtenerSesion = () => pedir<UsuarioConPermisos>("/me");
 
-export const listarRoles = () => pedir<Rol[]>("/api/roles");
+export const listarRoles = () => pedir<Rol[]>("/roles");
 
-export const listarUsuarios = () => pedir<Usuario[]>("/api/usuarios");
+export const listarUsuarios = () => pedir<Usuario[]>("/usuarios");
 
 export const crearUsuario = (datos: NuevoUsuario) =>
-  pedir<Usuario>("/api/usuarios", { metodo: "POST", cuerpo: datos });
+  pedir<Usuario>("/usuarios", { metodo: "POST", cuerpo: datos });
 
 export const cambiarRol = (id: number, rol: string) =>
-  pedir<UsuarioConPermisos>(`/api/usuarios/${id}/rol`, { metodo: "PATCH", cuerpo: { rol } });
+  pedir<UsuarioConPermisos>(`/usuarios/${id}/rol`, { metodo: "PATCH", cuerpo: { rol } });

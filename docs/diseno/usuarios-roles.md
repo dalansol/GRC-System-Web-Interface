@@ -111,8 +111,8 @@ cuenta como dominio autorizado.
 ### Variables de entorno (`backend/.env`)
 
 `PORT`, `AUTH_MODE`, `DATA_MODE` (`sql` / `memoria`), `DOMINIOS_PERMITIDOS`,
-`ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `SQL_SERVER`, `SQL_DATABASE`, `SQL_USER`,
-`SQL_PASSWORD`, `CORS_ORIGIN`.
+`ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `DB_SERVER`, `DB_NAME`, `DB_USER`,
+`DB_PASSWORD`, `DB_PORT`, `DB_TRUST_CERT`, `CORS_ORIGIN`.
 
 ## Frontend
 

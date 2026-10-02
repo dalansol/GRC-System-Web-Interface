@@ -11,5 +11,7 @@ export default defineConfig({
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["./src/test/setup.ts"],
+    // Las pruebas no dependen del .env de cada máquina.
+    env: { VITE_API_URL: "http://api.prueba/api" },
   },
 });

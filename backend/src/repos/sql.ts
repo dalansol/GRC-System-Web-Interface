@@ -42,7 +42,7 @@ function aUsuario(fila: FilaUsuario): Usuario {
 
 // Repositorio sobre Azure SQL. Todas las consultas usan parámetros.
 export class RepositorioSql implements RepositorioUsuarios {
-  private constructor(private readonly pool: sql.ConnectionPool) {}
+  private constructor(readonly pool: sql.ConnectionPool) {}
 
   static async conectar(conexion: ConexionSql): Promise<RepositorioSql> {
     const pool = await new sql.ConnectionPool({

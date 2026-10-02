@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "Express and SQL Server backend for Expedite GRC",
   "main": "dist/server.js",
   "scripts": {
     "test": "vitest run",
@@ -16,7 +16,7 @@
   "type": "module",
   "dependencies": {
     "cors": "^2.8.6",
-    "dotenv": "^18.0.4",
+    "dotenv": "^18.0.5",
     "express": "^5.2.1",
     "jose": "^6.2.12",
     "mssql": "^12.7.2"
