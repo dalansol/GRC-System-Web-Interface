@@ -75,6 +75,7 @@ export function cargarConfig(env: Entorno): Config {
     auth,
     datos,
     dominiosPermitidos,
-    corsOrigin: corsOrigin.length > 0 ? corsOrigin : ["http://localhost:5173"],
+    // Vite usa el 5174 si el 5173 está ocupado.
+    corsOrigin: corsOrigin.length > 0 ? corsOrigin : ["http://localhost:5173", "http://localhost:5174"],
   };
 }

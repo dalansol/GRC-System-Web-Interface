@@ -108,7 +108,7 @@ Variable `DOMINIOS_PERMITIDOS` (lista separada por comas). La comparación es ex
 sobre la parte posterior a la `@`, sin distinguir mayúsculas; un subdominio no
 cuenta como dominio autorizado.
 
-### Variables de entorno (`backend/.env.example`)
+### Variables de entorno (`backend/.env`)
 
 `PORT`, `AUTH_MODE`, `DATA_MODE` (`sql` / `memoria`), `DOMINIOS_PERMITIDOS`,
 `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `SQL_SERVER`, `SQL_DATABASE`, `SQL_USER`,

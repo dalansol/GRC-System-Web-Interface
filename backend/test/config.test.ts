@@ -23,7 +23,7 @@ describe("cargarConfig", () => {
       auth: { modo: "dev" },
       datos: { modo: "memoria" },
       dominiosPermitidos: ["expedite.com"],
-      corsOrigin: ["http://localhost:5173"],
+      corsOrigin: ["http://localhost:5173", "http://localhost:5174"],
     });
   });
 

@@ -22,7 +22,7 @@ try {
     <div role="alert" style={{ padding: 32, fontFamily: "sans-serif" }}>
       <strong>Expedite no pudo iniciar.</strong>
       <p>{error instanceof Error ? error.message : "Error de configuración."}</p>
-      <p>Copia <code>.env.example</code> a <code>.env</code> y reinicia el servidor de desarrollo.</p>
+      <p>Revisa las variables del archivo <code>.env</code> (ver README) y reinicia el servidor de desarrollo.</p>
     </div>,
   );
 }

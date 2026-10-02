@@ -29,7 +29,7 @@
 - React 18 + TypeScript + **Vite 6**, Tailwind CSS v4 (`@tailwindcss/vite`), componentes **shadcn/ui** (Radix) en `src/app/components/ui/`, iconos `lucide-react`, gráficas `recharts`, toasts `sonner`, también MUI instalado.
 - **Backend** en `backend/`: Node + Express 5 + TypeScript (módulos ES), `mssql` para Azure SQL, `jose` para validar tokens de Entra ID. Usa **pnpm** (`corepack pnpm ...`); la raíz usa **npm**.
 - Comandos frontend: `npm i`, `npm run dev`, `npm run build`, `npm test` (Vitest + Testing Library). Comandos backend: `corepack pnpm dev`, `test`, `typecheck`, `build`. No hay linter ni revisión de tipos en el frontend.
-- La app exige sesión: sin el backend corriendo muestra un error de conexión. Para desarrollo local, copiar `.env.example` a `.env` en la raíz y en `backend/` (modo `dev`, sin Azure). Nunca leer ni versionar los `.env`.
+- La app exige sesión: sin el backend corriendo muestra un error de conexión. Para desarrollo local hace falta un `.env` en la raíz y otro en `backend/` (variables en el README; modo `dev`, sin Azure). Nunca leer ni versionar los `.env`.
 - Diseño y pruebas de usuarios y roles: `docs/diseno/usuarios-roles.md`, `docs/pruebas/usuarios-roles.md`.
 - Alias `@` → `src/`. Plugin `figma:asset/…` → `src/assets/`. **No quitar** los plugins `react()` ni `tailwindcss()` de `vite.config.ts`.
 

@@ -112,7 +112,7 @@ configurado: `expedite.com`.
 |---|---|---|---|---|
 | DEF-01 | Alta | En `master`, al abrir "Usuarios & Roles" la pantalla queda en blanco con el error `DEFAULT_PERMISSIONS is not defined`. `App.tsx` usaba `ROLES`, `DEFAULT_PERMISSIONS` y `UserRecord` sin importarlos tras separar los datos de prueba a `mock_data.tsx`. | Revisión de código y ejecución de `master` en el navegador | Corregido: la vista se reemplazó por `UsuariosRolesView.tsx`, que obtiene los datos de la API |
 | DEF-02 | Alta | `001_schema.sql` fallaba al ejecutarse con `sqlcmd` (`CREATE INDEX failed ... QUOTED_IDENTIFIER`) y dejaba la tabla `users` creada sin sus índices; al repetir el script los índices nunca se creaban, por lo que dos usuarios podían compartir la misma identidad de Entra. | CP-30, al ejecutar los scripts con `sqlcmd` | Corregido: los scripts activan las opciones requeridas y crean cada índice solo si falta. Cubierto por prueba automatizada |
-| DEF-03 | Baja | Si el puerto 5173 está ocupado, Vite arranca en el 5174 y el backend rechaza las peticiones por CORS; la aplicación muestra "No se pudo conectar con el servidor de Expedite." | Prueba de punta a punta con otro proyecto usando el 5173 | Mitigado: `backend/.env.example` permite ambos orígenes |
+| DEF-03 | Baja | Si el puerto 5173 está ocupado, Vite arranca en el 5174 y el backend rechaza las peticiones por CORS; la aplicación muestra "No se pudo conectar con el servidor de Expedite." | Prueba de punta a punta con otro proyecto usando el 5173 | Corregido: el backend acepta ambos orígenes por omisión |
 
 ## Riesgos conocidos
 
