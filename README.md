@@ -1,90 +1,148 @@
+# Expedite GRC
 
-  # Expedite GRC
+Plataforma web de Gobernanza, Riesgo y Cumplimiento para la Dirección de Auditoría
+Interna. El diseño original está en
+https://www.figma.com/design/81zRCWhIiue8fy0HTI3WPN/Expedite-GRC.
 
-  This is a code bundle for Expedite GRC. The original project is available at https://www.figma.com/design/81zRCWhIiue8fy0HTI3WPN/Expedite-GRC.
+El proyecto tiene dos partes que se levantan por separado:
 
-  ## Running the code
+- **Frontend** (raíz del repo): React + Vite.
+- **Backend** (`backend/`): Node + Express.
 
-  The app needs both the frontend and the backend running, each with its own `.env`
-  file. The `.env` files are not committed.
+La aplicación pide iniciar sesión, así que **hay que levantar las dos**. Si solo
+corre el frontend, aparece el mensaje "No se pudo conectar con el servidor de
+Expedite".
 
-  ### Backend
+## Cómo levantar el proyecto
 
-  Create `backend/.env`:
+### Requisitos
 
-  ```
-  PORT=3001
-  DOMINIOS_PERMITIDOS=expedite.com
-  AUTH_MODE=dev
-  DATA_MODE=memoria
-  ```
+- Node.js 22 o 24 en una versión reciente (incluyen `npm` y `corepack`). Las
+  herramientas de prueba exigen 22.22 o superior; el proyecto se desarrolló con la 24.19.
+- No hace falta nada de Azure para trabajar en local.
 
-  ```bash
-  cd backend
-  corepack pnpm install
-  corepack pnpm dev       # http://localhost:3001
-  ```
+### 1. Crear los archivos `.env`
 
-  ### Frontend
+Los `.env` no se suben a git, así que cada quien los crea en su máquina la primera vez.
 
-  Create `.env` in the project root:
+`backend/.env`:
 
-  ```
-  VITE_API_URL=http://localhost:3001
-  VITE_AUTH_MODE=dev
-  ```
+```
+PORT=3001
+DOMINIOS_PERMITIDOS=expedite.com
+AUTH_MODE=dev
+DATA_MODE=memoria
+```
 
-  ```bash
-  npm i
-  npm run dev             # http://localhost:5173
-  ```
+`.env` (en la raíz):
 
-  With these values the app runs in local development mode: no Azure resources
-  needed, sign in with a test user such as `s.ramirez@expedite.com` (Administrador)
-  or `a.rodriguez@expedite.com` (Auditor). Data lives in memory and resets when the
-  backend restarts.
+```
+VITE_API_URL=http://localhost:3001
+VITE_AUTH_MODE=dev
+```
 
-  ### Environment variables
+### 2. Levantar el backend
 
-  Backend (`backend/.env`):
+En una terminal:
 
-  | Variable | Description |
-  |---|---|
-  | `PORT` | API port. Default `3001`. |
-  | `CORS_ORIGIN` | Allowed frontend origins, comma separated. Default `http://localhost:5173,http://localhost:5174`. |
-  | `DOMINIOS_PERMITIDOS` | Corporate email domains allowed when creating users, comma separated. Required. |
-  | `AUTH_MODE` | `entra` (Microsoft Entra ID, default) or `dev` (local only, refused in production). |
-  | `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` | Required when `AUTH_MODE=entra`. |
-  | `DATA_MODE` | `sql` (Azure SQL, default) or `memoria` (local only, refused in production). |
-  | `SQL_SERVER`, `SQL_DATABASE`, `SQL_USER`, `SQL_PASSWORD` | Required when `DATA_MODE=sql`. |
-  | `SQL_PORT`, `SQL_TRUST_CERT` | Optional, only for a local SQL Server (e.g. Docker). |
+```bash
+cd backend
+corepack pnpm install     # solo la primera vez
+corepack pnpm dev
+```
 
-  Frontend (`.env`):
+Debe imprimir `API Expedite en http://localhost:3001 (autenticación: dev, datos: memoria)`.
 
-  | Variable | Description |
-  |---|---|
-  | `VITE_API_URL` | Backend URL. Default `http://localhost:3001`. |
-  | `VITE_AUTH_MODE` | `entra` (default) or `dev` (requires the backend in `AUTH_MODE=dev`). |
-  | `VITE_ENTRA_TENANT_ID`, `VITE_ENTRA_CLIENT_ID` | Required when `VITE_AUTH_MODE=entra`. |
-  | `VITE_ENTRA_API_SCOPE` | Optional. Default `api://<VITE_ENTRA_CLIENT_ID>/access_as_user`. |
+El backend usa **pnpm**. Si `corepack` no está disponible, instálalo con
+`npm install -g pnpm` y usa `pnpm` en lugar de `corepack pnpm`.
 
-  ### Connecting Azure SQL and Microsoft Entra ID
+### 3. Levantar el frontend
 
-  1. Run `backend/sql/001_schema.sql`, `002_seed.sql` and `003_primer_administrador.sql`
-     (edit the name and email first) on the Azure SQL database.
-  2. In `backend/.env` set `DATA_MODE=sql`, the `SQL_*` variables, `AUTH_MODE=entra`,
-     `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` and `DOMINIOS_PERMITIDOS`.
-  3. In `.env` set `VITE_AUTH_MODE=entra`, `VITE_ENTRA_TENANT_ID` and `VITE_ENTRA_CLIENT_ID`.
+En otra terminal, desde la raíz:
 
-  The Entra ID app registration must expose the scope `access_as_user` and list the
-  frontend URL as a single-page application redirect URI.
+```bash
+npm install               # solo la primera vez
+npm run dev
+```
 
-  ## Tests
+Abre la dirección que imprime Vite, normalmente http://localhost:5173. Si ese
+puerto está ocupado Vite usa el 5174; el backend acepta ambos.
 
-  ```bash
-  npm test                          # frontend
-  cd backend && corepack pnpm test  # backend
-  ```
+### 4. Entrar
 
-  Design and test documentation for users and roles: `docs/diseno/usuarios-roles.md`
-  and `docs/pruebas/usuarios-roles.md`.
+En modo de desarrollo se entra escribiendo el correo de un usuario de prueba:
+
+| Correo | Rol | Qué ve |
+|---|---|---|
+| `s.ramirez@expedite.com` | Administrador | Todo, incluido "Usuarios & Roles" |
+| `m.garcia@expedite.com` | Jefe de Auditoría | Todo menos "Usuarios & Roles" |
+| `a.rodriguez@expedite.com` | Auditor | Todo menos "Usuarios & Roles" |
+| `p.sanchez@expedite.com` | Consultor (inactivo) | No puede entrar |
+
+En este modo los datos de usuarios viven en memoria: se reinician cada vez que se
+apaga el backend.
+
+### Problemas comunes
+
+| Síntoma | Causa y solución |
+|---|---|
+| "No se pudo conectar con el servidor de Expedite" | El backend no está corriendo, o `VITE_API_URL` no apunta a su puerto. |
+| "Expedite no pudo iniciar" al abrir la página | Falta el `.env` de la raíz. Después de crearlo hay que reiniciar `npm run dev`. |
+| El backend termina con "Falta la variable de entorno ..." | Falta `backend/.env` o alguna de sus variables. |
+| "Acceso no autorizado" | El correo no es de un usuario registrado o está inactivo. |
+
+## Pruebas
+
+```bash
+npm test                          # frontend
+cd backend && corepack pnpm test  # backend
+```
+
+Las pruebas del backend contra una base de datos real se omiten si no hay conexión
+configurada; `docs/pruebas/usuarios-roles.md` explica cómo activarlas.
+
+## Variables de entorno
+
+Backend (`backend/.env`):
+
+| Variable | Descripción |
+|---|---|
+| `PORT` | Puerto de la API. Por omisión `3001`. |
+| `CORS_ORIGIN` | Orígenes del frontend permitidos, separados por coma. Por omisión `http://localhost:5173,http://localhost:5174`. |
+| `DOMINIOS_PERMITIDOS` | Dominios de correo corporativo aceptados al dar de alta usuarios, separados por coma. Obligatoria. |
+| `AUTH_MODE` | `entra` (Microsoft Entra ID, por omisión) o `dev` (solo local; no arranca en producción). |
+| `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` | Obligatorias con `AUTH_MODE=entra`. |
+| `DATA_MODE` | `sql` (Azure SQL, por omisión) o `memoria` (solo local; no arranca en producción). |
+| `SQL_SERVER`, `SQL_DATABASE`, `SQL_USER`, `SQL_PASSWORD` | Obligatorias con `DATA_MODE=sql`. |
+| `SQL_PORT`, `SQL_TRUST_CERT` | Opcionales, solo para un SQL Server local (por ejemplo en Docker). |
+
+Frontend (`.env`):
+
+| Variable | Descripción |
+|---|---|
+| `VITE_API_URL` | URL del backend. Por omisión `http://localhost:3001`. |
+| `VITE_AUTH_MODE` | `entra` (por omisión) o `dev` (requiere el backend con `AUTH_MODE=dev`). |
+| `VITE_ENTRA_TENANT_ID`, `VITE_ENTRA_CLIENT_ID` | Obligatorias con `VITE_AUTH_MODE=entra`. |
+| `VITE_ENTRA_API_SCOPE` | Opcional. Por omisión `api://<VITE_ENTRA_CLIENT_ID>/access_as_user`. |
+
+## Conectar Azure SQL y Microsoft Entra ID
+
+Cuando existan los recursos en Azure:
+
+1. Ejecutar en la base de Azure SQL, en este orden, `backend/sql/001_schema.sql`,
+   `002_seed.sql` y `003_primer_administrador.sql` (este último hay que editarlo
+   antes con el nombre y correo del primer Administrador).
+2. En `backend/.env`: `DATA_MODE=sql` con las variables `SQL_*`, `AUTH_MODE=entra`
+   con `ENTRA_TENANT_ID` y `ENTRA_CLIENT_ID`, y el dominio real en
+   `DOMINIOS_PERMITIDOS`.
+3. En el `.env` de la raíz: `VITE_AUTH_MODE=entra`, `VITE_ENTRA_TENANT_ID` y
+   `VITE_ENTRA_CLIENT_ID`.
+
+El registro de aplicación en Entra ID debe exponer el permiso `access_as_user` y
+tener la URL del frontend como URI de redirección de tipo aplicación de página única.
+
+## Documentación
+
+- `docs/diseno/usuarios-roles.md`: diseño de la gestión de usuarios y roles.
+- `docs/pruebas/usuarios-roles.md`: casos de prueba, resultados y defectos.
+- `Visión y Alcance Sistema Auditoría.md`: requerimientos originales.
