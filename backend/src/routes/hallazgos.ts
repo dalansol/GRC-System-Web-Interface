@@ -7,7 +7,13 @@ const router = Router();
 router.get("/hallazgos", async (req: Request, res: Response) => {
   try {
     const pool = await poolPromise;
-    const result = await pool.request().query("SELECT * FROM findings ORDER BY created_at DESC");
+    const result = await pool.request().query(`
+      SELECT *
+      FROM findings
+      ORDER BY
+        CASE WHEN status = N'Cerrado' THEN 1 ELSE 0 END,
+        created_at DESC;
+    `);
     res.json(result.recordset);
   } catch (error) {
     res.status(500).json({ error: "Error fetching findings from database." });
@@ -16,7 +22,21 @@ router.get("/hallazgos", async (req: Request, res: Response) => {
 
 // POST: Create a new finding
 router.post("/hallazgos", async (req: Request, res: Response) => {
-  const { id, folio, title, description, type, severity, status, auditId, controlId, ownerId } = req.body;
+  const {
+    id,
+    folio,
+    title,
+    description,
+    type,
+    severity,
+    status,
+    auditId,
+    controlId,
+    failedControlId,
+    failedControl,
+    residualRisk,
+    ownerId,
+  } = req.body;
 
   try {
     const pool = await poolPromise;
@@ -30,17 +50,22 @@ router.post("/hallazgos", async (req: Request, res: Response) => {
       .input("severity", sql.NVarChar, severity)
       .input("status", sql.NVarChar, status || "Abierto")
       .input("auditId", sql.NVarChar, auditId || null)
-      .input("controlId", sql.NVarChar, controlId || null)
+      .input("controlId", sql.NVarChar, controlId || failedControlId || null)
+      .input("failedControl", sql.NVarChar, failedControl || null)
+      .input("residualRisk", sql.NVarChar, residualRisk || null)
       .input("ownerId", sql.NVarChar, ownerId || null)
       .query(`
-        INSERT INTO findings (id, folio, title, description, type, severity, status, auditId, controlId, ownerId)
-        VALUES (@id, @folio, @title, @description, @type, @severity, @status, @auditId, @controlId, @ownerId);
+        INSERT INTO findings (id, folio, title, description, type, severity, status, auditId, controlId, failedControl, residualRisk, ownerId)
+        VALUES (@id, @folio, @title, @description, @type, @severity, @status, @auditId, @controlId, @failedControl, @residualRisk, @ownerId);
 
         SELECT * FROM findings WHERE id = @id;
       `);
 
     res.status(201).json(result.recordset[0]);
   } catch (error) {
+    if ((error as { number?: number }).number === 2601 || (error as { number?: number }).number === 2627) {
+      return res.status(409).json({ error: "El folio del hallazgo ya existe." });
+    }
     res.status(500).json({ error: "Error creating finding." });
   }
 });
@@ -86,13 +111,30 @@ router.delete("/hallazgos/:id", async (req: Request, res: Response) => {
 
   try {
     const pool = await poolPromise;
+    const finding = await pool
+      .request()
+      .input("id", sql.NVarChar, id)
+      .query("SELECT status FROM findings WHERE id = @id");
+
+    if (finding.recordset.length === 0) {
+      return res.status(404).json({ error: "Finding not found." });
+    }
+
+    if (finding.recordset[0].status === "En Revisión") {
+      return res.status(409).json({
+        error: "Este hallazgo ya fue enviado a revisión por la jefatura y no puede eliminarse.",
+      });
+    }
+
     const result = await pool
       .request()
       .input("id", sql.NVarChar, id)
-      .query("DELETE FROM findings WHERE id = @id");
+      .query("DELETE FROM findings WHERE id = @id AND status <> N'En Revisión'");
 
     if (result.rowsAffected[0] === 0) {
-      return res.status(404).json({ error: "Finding not found." });
+      return res.status(409).json({
+        error: "Este hallazgo ya fue enviado a revisión por la jefatura y no puede eliminarse.",
+      });
     }
 
     res.json({ message: "Finding deleted successfully." });

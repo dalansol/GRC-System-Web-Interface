@@ -24,7 +24,7 @@ export interface Hallazgo {
   description?: string;
   type?: string;
   severity: "Crítico" | "Alto" | "Medio" | "Bajo";
-  status: "Abierto" | "En Proceso" | "Cerrado";
+  status: "Abierto" | "En Proceso" | "En Revisión" | "Asignado" | "Cerrado";
   auditId?: string;
   controlId?: string;
   ownerId?: string;
@@ -33,6 +33,18 @@ export interface Hallazgo {
 const metaEnv = (import.meta as any).env;
 const API_BASE_URL = metaEnv?.VITE_API_URL || "http://localhost:3000/api";
 const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND === "true";
+
+const orderFindings = (findings: Hallazgo[]) =>
+  [...findings].sort((left, right) => {
+    const leftIsClosed = left.status === "Cerrado";
+    const rightIsClosed = right.status === "Cerrado";
+
+    if (leftIsClosed !== rightIsClosed) {
+      return leftIsClosed ? 1 : -1;
+    }
+
+    return 0;
+  });
 
 export default function VistaHallazgo() {
   const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
@@ -52,10 +64,10 @@ export default function VistaHallazgo() {
           throw new Error("No se pudieron obtener los hallazgos del servidor.");
         }
         const data = await response.json();
-        setHallazgos(data);
+        setHallazgos(orderFindings(data));
       } else {
         // Fallback a mock_data.tsx
-        setHallazgos(INITIAL_FINDINGS as unknown as Hallazgo[]);
+        setHallazgos(orderFindings(INITIAL_FINDINGS as unknown as Hallazgo[]));
       }
     } catch (error: any) {
       toast.error(error.message || "Error al cargar los hallazgos.");
@@ -84,34 +96,50 @@ export default function VistaHallazgo() {
   ).padStart(3, "0")}`;
 
   const handleFindingCreated = (finding: CreatedFinding) => {
-    setHallazgos((current) => [finding, ...current]);
+    setHallazgos((current) => orderFindings([finding, ...current]));
   };
 
   // 2. DELETE: Eliminar hallazgo por ID
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("¿Estás seguro de que deseas eliminar este hallazgo?")) return;
+const handleDelete = async (id: string) => {
+  const finding = hallazgos.find((item) => item.id === id);
 
-    setDeletingId(id);
-    try {
-      if (USE_REAL_BACKEND) {
-        const response = await fetch(`${API_BASE_URL}/hallazgos/${id}`, {
-          method: "DELETE",
-        });
+  if (finding?.status === "En Revisión") {
+    toast.error(
+      "Este hallazgo ya fue enviado a revisión por la jefatura y no puede eliminarse.",
+    );
+    return;
+  }
 
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Error al eliminar el hallazgo.");
-        }
+  if (
+    !window.confirm("¿Estás seguro de que deseas eliminar este hallazgo?")
+  ) {
+    return;
+  }
+
+  setDeletingId(id);
+
+  try {
+    if (USE_REAL_BACKEND) {
+      const response = await fetch(`${API_BASE_URL}/hallazgos/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(
+          errData.error || "Error al eliminar el hallazgo.",
+        );
       }
-
-      setHallazgos((prev) => prev.filter((item) => item.id !== id));
-      toast.success("Hallazgo eliminado correctamente.");
-    } catch (error: any) {
-      toast.error(error.message || "Error al eliminar el hallazgo.");
-    } finally {
-      setDeletingId(null);
     }
-  };
+
+    setHallazgos((prev) => prev.filter((item) => item.id !== id));
+    toast.success("Hallazgo eliminado correctamente.");
+  } catch (error: any) {
+    toast.error(error.message || "Error al eliminar el hallazgo.");
+  } finally {
+    setDeletingId(null);
+  }
+};
 
   // 3. PUT: Actualizar hallazgo desde el modal/formulario de edición
   const handleUpdate = async (e: React.FormEvent) => {
@@ -236,7 +264,7 @@ export default function VistaHallazgo() {
                     <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                       {item.status === "Cerrado" ? (
                         <CheckCircle2 size={14} className="text-green-500" />
-                      ) : item.status === "En Proceso" ? (
+                      ) : item.status === "En Revisión" ? (
                         <Clock size={14} className="text-yellow-500" />
                       ) : (
                         <AlertCircle size={14} className="text-red-500" />
@@ -253,9 +281,18 @@ export default function VistaHallazgo() {
                         <Edit3 size={16} />
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleDelete(item.id)}
                         disabled={deletingId === item.id}
-                        className="rounded p-1 text-muted-foreground hover:bg-red-500/10 hover:text-red-600 disabled:opacity-50"
+                        title={
+                          item.status === "En Revisión"
+                            ? "Este hallazgo ya fue enviado a revisión y no puede eliminarse"
+                            : "Eliminar hallazgo"
+                        }
+                        className={`rounded p-1 disabled:opacity-50 ${item.status === "En Revisión"
+                            ? "cursor-not-allowed text-muted-foreground/40"
+                            : "text-muted-foreground hover:bg-red-500/10 hover:text-red-600"
+                          }`}
                       >
                         {deletingId === item.id ? (
                           <Loader2 size={16} className="animate-spin" />
@@ -333,6 +370,7 @@ export default function VistaHallazgo() {
               >
                 <option value="Abierto">Abierto</option>
                 <option value="En Proceso">En Proceso</option>
+                <option value="En Revisión">En Revisión</option>
                 <option value="Cerrado">Cerrado</option>
               </select>
             </div>
