@@ -28,7 +28,7 @@ router.get("/evidencias", async (req: Request, res: Response) => {
       .request()
       .input("entityId", sql.NVarChar, entityId as string)
       .query(
-        "SELECT * FROM evidencias WHERE entity_id = @entityId ORDER BY created_at DESC"
+        "SELECT * FROM evidence WHERE entity_id = @entityId ORDER BY created_at DESC"
       );
 
     res.json(result.recordset);
@@ -88,8 +88,11 @@ router.post(
 
       // Build a unique filename to avoid collisions
       const ext = path.extname(file.originalname).toLowerCase();
-      const id = `EV-${Date.now()}`;
-      const storedName = `${id}${ext}`;
+      const idResult = await (await poolPromise)
+        .request()
+        .query("SELECT ISNULL(MAX(id), 0) + 1 AS id FROM evidence");
+      const id = idResult.recordset[0].id as number;
+      const storedName = `EV-${Date.now()}${ext}`;
       const storagePath = path.join(UPLOADS_DIR, storedName);
 
       // Write file to disk
@@ -102,7 +105,7 @@ router.post(
       const pool = await poolPromise;
       const result = await pool
         .request()
-        .input("id", sql.NVarChar, id)
+        .input("id", sql.Int, id)
         .input("entityId", sql.NVarChar, entityId)
         .input("entityType", sql.NVarChar, entityType)
         .input("fileName", sql.NVarChar, file.originalname)
@@ -111,11 +114,13 @@ router.post(
         .input("fileHash", sql.NVarChar, hash)
         .input("storagePath", sql.NVarChar, storedName)
         .input("uploadedBy", sql.NVarChar, uploadedBy || null)
+        .input("controlId", sql.Int, entityType === "control" ? Number(entityId) : null)
+        .input("findingId", sql.Int, entityType === "hallazgo" ? Number(entityId) : null)
         .query(`
-          INSERT INTO evidencias (id, entity_id, entity_type, file_name, mime_type, file_size, file_hash, storage_path, uploaded_by)
-          VALUES (@id, @entityId, @entityType, @fileName, @mimeType, @fileSize, @fileHash, @storagePath, @uploadedBy);
+          INSERT INTO evidence (id, file_name, control_id, finding_id, entity_id, entity_type, mime_type, file_size, file_hash, storage_path, uploaded_by)
+          VALUES (@id, @fileName, @controlId, @findingId, @entityId, @entityType, @mimeType, @fileSize, @fileHash, @storagePath, @uploadedBy);
 
-          SELECT * FROM evidencias WHERE id = @id;
+          SELECT * FROM evidence WHERE id = @id;
         `);
 
       res.status(201).json(result.recordset[0]);
@@ -136,8 +141,8 @@ router.delete("/evidencias/:id", async (req: Request, res: Response) => {
     // Fetch the record first to get the storage path
     const lookup = await pool
       .request()
-      .input("id", sql.NVarChar, id)
-      .query("SELECT storage_path FROM evidencias WHERE id = @id");
+      .input("id", sql.Int, Number(id))
+      .query("SELECT storage_path FROM evidence WHERE id = @id");
 
     if (lookup.recordset.length === 0) {
       return res.status(404).json({ error: "Evidence not found." });
@@ -153,8 +158,8 @@ router.delete("/evidencias/:id", async (req: Request, res: Response) => {
     // Delete the database record
     await pool
       .request()
-      .input("id", sql.NVarChar, id)
-      .query("DELETE FROM evidencias WHERE id = @id");
+      .input("id", sql.Int, Number(id))
+      .query("DELETE FROM evidence WHERE id = @id");
 
     res.json({ message: "Evidence deleted successfully." });
   } catch (error) {

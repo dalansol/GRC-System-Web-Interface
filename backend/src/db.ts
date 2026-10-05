@@ -3,16 +3,21 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const configuredServer = process.env.DB_SERVER || "127.0.0.1";
+const [server, instanceName] = configuredServer.split("\\", 2);
+
 const dbConfig: sql.config = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  server: process.env.DB_SERVER || "127.0.0.1",
+  server,
   database: process.env.DB_NAME || "ExpediteGRC",
-  port: parseInt(process.env.DB_PORT || "1433", 10),
+  ...(instanceName
+    ? {}
+    : { port: parseInt(process.env.DB_PORT || "1433", 10) }),
   options: {
     encrypt: false,
     trustServerCertificate: true,
-    // Do NOT include instanceName here when port 1433 is explicitly defined
+    ...(instanceName ? { instanceName } : {}),
   },
 };
 

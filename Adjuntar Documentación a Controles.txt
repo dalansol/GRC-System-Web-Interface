@@ -1,0 +1,5 @@
+Adjuntar Documentación a Controles y Hallazgos
+Como auditor necesito adjuntar evidencias y documentos, para vincularlos directamente a controles y hallazgos específicos y respaldar la validez de las evaluaciones realizadas durante la auditoría.
+- Dado que soy un auditor con un catálogo de controles y registro de hallazgos, cuando selecciono un control y hallazgo específico y le adjunto un documento .pdf y .xlsx menor a 50 mb en su apartado, la plataforma deberá revisar que es válido, generar un hash y subir el archivo con la vinculación al control seleccionado y su metadata correspondiente.
+- Dado que soy un auditor con un catálogo de controles y registro de hallazgos, cuando selecciono uno específico y subo un documento ejecutable (.exe, .bat, .js) o de tamaño mayor a 50mb en su apartado, la plataforma deberá revisar que es inválido, no subir el archivo y mostrar un mensaje de error correspondiente.
+
