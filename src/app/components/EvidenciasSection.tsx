@@ -1,10 +1,11 @@
-import React, { useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Ban,
   FileCheck2,
   FileSpreadsheet,
   FileText,
   Hash,
+  Loader2,
   Trash2,
   UploadCloud,
 } from "lucide-react";
@@ -15,6 +16,8 @@ import SpreadsheetEditor from "./SpreadsheetEditor.tsx";
 
 // ─── Evidencias Section ───────────────────────────────────────────────────────
 const BLOCKED_EXTENSIONS = [".exe", ".bat", ".js", ".msi", ".sh", ".cmd", ".vbs", ".ps1"];
+
+const API_BASE = "http://localhost:3000/api";
 
 interface EvidenceFile {
   id: string;
@@ -28,27 +31,68 @@ interface EvidenceFile {
   version?: number;
 }
 
-// ─── Evidence Files Data ───────────────────────────────────────────────────────
-const INITIAL_EVIDENCES: EvidenceFile[] = [
+// ─── Fallback mock data (used when the API is unavailable) ────────────────────
+const FALLBACK_EVIDENCES: EvidenceFile[] = [
   { id: "EV-001", name: "Conciliacion_Bancaria_Jun2025.xlsx", size: "2.1 MB", mimeType: "xlsx", hash: "sha256:a3f9c12e…4f2a1c0e", uploadDate: "2025-07-12", uploadedBy: "M. García", entityId: "CTR-001" },
   { id: "EV-002", name: "Listado_Accesos_SAP_Q2.pdf", size: "890 KB", mimeType: "pdf", hash: "sha256:b8e4d7c9…e1c8d4b7", uploadDate: "2025-07-15", uploadedBy: "C. Morales", entityId: "CTR-002" },
   { id: "EV-003", name: "Reporte_Accesos_Privilegiados_Jul.pdf", size: "1.4 MB", mimeType: "pdf", hash: "sha256:c9f5e2a8…c1e4f7a0", uploadDate: "2025-07-18", uploadedBy: "L. Fernández", entityId: "CTR-003" },
   { id: "EV-004", name: "Hallazgo_Segregacion_Evidencia.pdf", size: "560 KB", mimeType: "pdf", hash: "sha256:d7a3b9e1…f8c2d5b4", uploadDate: "2025-07-11", uploadedBy: "M. García", entityId: "FND-001" },
 ];
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function formatFileSize(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return mb < 1 ? `${Math.round(bytes / 1024)} KB` : `${mb.toFixed(1)} MB`;
+}
 
-export default function EvidenciasSection({ entityId }: { entityId: string }) {
-  const [files, setFiles] = useState<EvidenceFile[]>(
-    () => INITIAL_EVIDENCES.filter(e => e.entityId === entityId).map(e => ({ ...e, version: e.version ?? 3 }))
-  );
+/** Map a DB row returned by the API into an EvidenceFile for the UI. */
+function mapApiRow(row: any): EvidenceFile {
+  return {
+    id: row.id,
+    name: row.file_name,
+    size: formatFileSize(Number(row.file_size)),
+    mimeType: row.mime_type,
+    hash: `sha256:${String(row.file_hash).slice(0, 8)}…${String(row.file_hash).slice(-8)}`,
+    uploadDate: row.created_at ? new Date(row.created_at).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+    uploadedBy: row.uploaded_by || "Auditor",
+    entityId: row.entity_id,
+    version: 1,
+  };
+}
+
+export default function EvidenciasSection({ entityId, entityType = "control" }: { entityId: string; entityType?: "control" | "hallazgo" }) {
+  const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const [xlsxTarget, setXlsxTarget] = useState<EvidenceFile | null>(null);
+  const [usingFallback, setUsingFallback] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ─── Fetch evidences from API (or fall back to mock data) ─────────────────
+  const fetchEvidences = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/evidencias?entityId=${encodeURIComponent(entityId)}`);
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json();
+      setFiles(data.map(mapApiRow));
+      setUsingFallback(false);
+    } catch {
+      // API unavailable — fall back to local mock data
+      setFiles(FALLBACK_EVIDENCES.filter(e => e.entityId === entityId).map(e => ({ ...e, version: e.version ?? 3 })));
+      setUsingFallback(true);
+    }
+  }, [entityId]);
+
+  useEffect(() => {
+    fetchEvidences();
+  }, [fetchEvidences]);
+
+  // ─── Client-side validation + upload ──────────────────────────────────────
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
+
     const ext = "." + file.name.split(".").pop()?.toLowerCase();
     if (BLOCKED_EXTENSIONS.includes(ext)) {
       setError(`Tipo de archivo no permitido (${ext}). Solo se aceptan .pdf y .xlsx.`);
@@ -66,20 +110,72 @@ export default function EvidenciasSection({ entityId }: { entityId: string }) {
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
-    const fakeHash = "sha256:" + Math.random().toString(36).slice(2,10) + "…" + Math.random().toString(36).slice(2,10);
-    const newEv: EvidenceFile = {
-      id: `EV-${Date.now()}`, name: file.name,
-      size: sizeMB < 1 ? `${Math.round(file.size / 1024)} KB` : `${sizeMB.toFixed(1)} MB`,
-      mimeType: file.name.split(".").pop()?.toLowerCase() ?? "bin",
-      hash: fakeHash, uploadDate: new Date().toISOString().slice(0,10),
-      uploadedBy: "M. García", entityId, version: 1,
-    };
-    setFiles(prev => [newEv, ...prev]);
-    toast.success(`Evidencia "${file.name}" cargada correctamente`);
-    if (inputRef.current) inputRef.current.value = "";
+
+    // If the API is unavailable, fall back to local-only behavior
+    if (usingFallback) {
+      const fakeHash = "sha256:" + Math.random().toString(36).slice(2,10) + "…" + Math.random().toString(36).slice(2,10);
+      const newEv: EvidenceFile = {
+        id: `EV-${Date.now()}`, name: file.name,
+        size: formatFileSize(file.size),
+        mimeType: file.name.split(".").pop()?.toLowerCase() ?? "bin",
+        hash: fakeHash, uploadDate: new Date().toISOString().slice(0,10),
+        uploadedBy: "M. García", entityId, version: 1,
+      };
+      setFiles(prev => [newEv, ...prev]);
+      toast.success(`Evidencia "${file.name}" cargada correctamente`);
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+
+    // Upload via API
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityId", entityId);
+      formData.append("entityType", entityType);
+      formData.append("uploadedBy", "M. García");
+
+      const res = await fetch(`${API_BASE}/evidencias/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Error al subir archivo." }));
+        setError(data.error || "Error al subir archivo.");
+        return;
+      }
+
+      toast.success(`Evidencia "${file.name}" cargada correctamente`);
+      await fetchEvidences();
+    } catch {
+      setError("Error de conexión al subir archivo.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
   };
 
-  const removeFile = (id: string) => setFiles(prev => prev.filter(f => f.id !== id));
+  // ─── Delete ───────────────────────────────────────────────────────────────
+  const removeFile = async (id: string) => {
+    if (usingFallback) {
+      setFiles(prev => prev.filter(f => f.id !== id));
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/evidencias/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) {
+        toast.error("Error al eliminar evidencia.");
+        return;
+      }
+      toast.success("Evidencia eliminada.");
+      await fetchEvidences();
+    } catch {
+      toast.error("Error de conexión al eliminar evidencia.");
+    }
+  };
 
   const handleHashUpdate = (fileId: string, newHash: string, newVersion: number) => {
     setFiles(prev => prev.map(f => f.id === fileId ? { ...f, hash: newHash, version: newVersion } : f));
@@ -105,9 +201,10 @@ export default function EvidenciasSection({ entityId }: { entityId: string }) {
             <div className="text-sm font-semibold text-foreground">Evidencias Documentales</div>
             <span className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-semibold">{files.length}</span>
           </div>
-          <label className="inline-flex items-center gap-1.5 cursor-pointer px-3 py-1.5 bg-secondary text-secondary-foreground text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors">
-            <UploadCloud size={12} /> Adjuntar archivo
-            <input ref={inputRef} type="file" accept=".pdf,.xlsx" className="hidden" onChange={handleUpload} />
+          <label className={`inline-flex items-center gap-1.5 cursor-pointer px-3 py-1.5 bg-secondary text-secondary-foreground text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors ${uploading ? "opacity-60 pointer-events-none" : ""}`}>
+            {uploading ? <Loader2 size={12} className="animate-spin" /> : <UploadCloud size={12} />}
+            {uploading ? "Subiendo…" : "Adjuntar archivo"}
+            <input ref={inputRef} type="file" accept=".pdf,.xlsx" className="hidden" onChange={handleUpload} disabled={uploading} />
           </label>
         </div>
         {error && (

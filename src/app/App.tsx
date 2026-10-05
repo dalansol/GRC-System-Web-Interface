@@ -2128,7 +2128,7 @@ function ControlDetailView({
           </div>
         )}
       </Card>
-      <EvidenciasSection entityId={ctrl.id} />
+      <EvidenciasSection entityId={ctrl.id} entityType="control" />
       <AISummaryCard entityId={ctrl.id} entityType="Control" />
     </div>
   );
@@ -4627,7 +4627,7 @@ function AuditadoPortalView() {
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t border-border">
-                <EvidenciasSection entityId={f.id} />
+                <EvidenciasSection entityId={f.id} entityType="hallazgo" />
               </div>
             </Card>
           ))}
