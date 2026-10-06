@@ -31,39 +31,42 @@ export {
   CHART_COLORS,
   SPECIFIC_RISKS,
   PLAN_ENTITIES,
-  PROCEDURE_TRACKING
+  PROCEDURE_TRACKING,
+  BITACORA_DATA,
+  DEFAULT_PERMISSIONS,
+  ROLES
 };
 
 
 // ─── Findings (Hallazgos) Data ─────────────────────────────────────────────────
 const INITIAL_FINDINGS: Finding[] = [
   {
-    id: "FND-001", folio: "HAL-2025-001",
+    id: "HAL-2025-001", folio: "HAL-2025-001",
     title: "Segregación de funciones insuficiente en cierre contable",
     severity: "Crítico", failedControl: "Segregación de Funciones — Cierre Contable", failedControlId: "CTR-002",
     residualRisk: "Alto", status: "Asignado", auditId: "AUD-001", date: "2025-07-10",
     actionPlan: { description: "Revisar y reasignar roles en SAP para eliminar conflictos de acceso. Implementar aprobación dual en todas las conciliaciones.", responsible: "Carlos Morales — Finanzas Corporativas", dueDate: "2025-09-15", status: "Asignado" },
   },
   {
-    id: "FND-002", folio: "HAL-2025-002",
+    id: "HAL-2025-002", folio: "HAL-2025-002",
     title: "Cuentas privilegiadas de ex-empleados activas en producción",
     severity: "Alto", failedControl: "Revisión de Accesos Privilegiados", failedControlId: "CTR-003",
     residualRisk: "Alto", status: "En Revisión", auditId: "AUD-001", date: "2025-07-14",
   },
   {
-    id: "FND-003", folio: "HAL-2025-003",
+    id: "HAL-2025-003", folio: "HAL-2025-003",
     title: "Calendario normativo desactualizado — SFC Colombia",
     severity: "Medio", failedControl: "Monitoreo de Obligaciones Regulatorias", failedControlId: "CTR-004",
     residualRisk: "Medio", status: "Abierto", auditId: "AUD-003", date: "2025-07-18",
   },
   {
-    id: "FND-004", folio: "HAL-2025-004",
+    id: "HAL-2025-004", folio: "HAL-2025-004",
     title: "Firewall con configuración obsoleta — Oficina Colombia",
     severity: "Alto", failedControl: "Revisión de Accesos Privilegiados", failedControlId: "CTR-003",
     residualRisk: "Alto", status: "Abierto", auditId: "AUD-002", date: "2025-07-20",
   },
   {
-    id: "FND-005", folio: "HAL-2024-018",
+    id: "HAL-2024-018", folio: "HAL-2024-018",
     title: "Proceso de nómina sin doble aprobación — Operaciones",
     severity: "Bajo", failedControl: "Conciliación Bancaria Mensual", failedControlId: "CTR-001",
     residualRisk: "Bajo", status: "Cerrado", auditId: "AUD-004", date: "2024-11-05",
@@ -557,16 +560,16 @@ const BITACORA_DATA: BilacoraEntry[] = [
   // Hoy (2026-09-10)
   { id: "BIT-001", user: "María García", action: "Aprobó plan de auditoría", entity: "PAI-2026-003", entityId: "AP-003", date: "2026-09-10 09:14" },
   { id: "BIT-002", user: "Carlos Morales", action: "Cargó evidencia", entity: "CTR-003", entityId: "CTR-003", date: "2026-09-10 11:40" },
-  { id: "BIT-003", user: "Ana Rodríguez", action: "Creó hallazgo", entity: "HAL-2026-007", entityId: "FND-007", date: "2026-09-10 14:55" },
+  { id: "BIT-003", user: "Ana Rodríguez", action: "Creó hallazgo", entity: "HAL-2026-007", entityId: "HAL-2025-007", date: "2026-09-10 14:55" },
   // Últimos 7 días (2026-09-04 – 2026-09-09)
   { id: "BIT-004", user: "Laura Fernández", action: "Modificó control", entity: "CTR-004", entityId: "CTR-004", date: "2026-09-09 10:22" },
-  { id: "BIT-005", user: "Diego Torres", action: "Consultó hallazgo", entity: "HAL-2026-005", entityId: "FND-005", date: "2026-09-08 16:05" },
+  { id: "BIT-005", user: "Diego Torres", action: "Consultó hallazgo", entity: "HAL-2026-005", entityId: "HAL-2025-005", date: "2026-09-08 16:05" },
   { id: "BIT-006", user: "María García", action: "Exportó CSV — Riesgos", entity: "Catálogo Organizacional", entityId: "HIER", date: "2026-09-07 08:48" },
   { id: "BIT-007", user: "Carlos Morales", action: "Creó plan de auditoría", entity: "PAI-2026-004", entityId: "AP-004", date: "2026-09-05 13:30" },
   // Últimos 30 días, fuera de últimos 7 (2026-08-11 – 2026-09-03)
-  { id: "BIT-008", user: "Ana Rodríguez", action: "Cargó evidencia", entity: "HAL-2026-004", entityId: "FND-004", date: "2026-09-01 15:10" },
+  { id: "BIT-008", user: "Ana Rodríguez", action: "Cargó evidencia", entity: "HAL-2026-004", entityId: "HAL-2025-004", date: "2026-09-01 15:10" },
   { id: "BIT-009", user: "Laura Fernández", action: "Modificó permisos de rol", entity: "Auditor Senior", entityId: "ROLE-003", date: "2026-08-27 09:55" },
-  { id: "BIT-010", user: "Diego Torres", action: "Aprobó hallazgo", entity: "HAL-2026-003", entityId: "FND-003", date: "2026-08-20 11:18" },
+  { id: "BIT-010", user: "Diego Torres", action: "Aprobó hallazgo", entity: "HAL-2026-003", entityId: "HAL-2025-003", date: "2026-08-20 11:18" },
   { id: "BIT-011", user: "Carlos Morales", action: "Exportó PDF — Informe Q2", entity: "Dashboard", entityId: "DASH", date: "2026-08-15 14:40" },
   // Anteriores (más de 30 días)
   { id: "BIT-012", user: "María García", action: "Marcó riesgo como completado", entity: "RIE-0187", entityId: "RIE-0187", date: "2026-07-30 10:05" },

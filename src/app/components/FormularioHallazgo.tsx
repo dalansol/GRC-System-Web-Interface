@@ -170,7 +170,7 @@ export default function FormularioHallazgo({
       } else {
         // Fallback local en memoria
         createdFinding = {
-          id: `FND-${Date.now()}`,
+          id: `HAL-${Date.now()}`,
           ...payload,
         } as CreatedFinding;
       }

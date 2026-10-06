@@ -13,6 +13,9 @@ export {
   exportToCSV,
 };
 
+import { useState } from "react";
+import { toast } from "sonner";
+
 import {
   ChevronRight,
   FileText,
@@ -62,7 +65,7 @@ type StatusKey =
 
 type NavView =
   "dashboard" | "filter" | "editor" | "hierarchy" | "settings" | "users"
-  | "plans" | "findings" | "auditado" | "bitacora";
+  | "plans" | "findings" | "auditado" | "bitacora" | "controles";
 
 type View = NavView; // alias kept for existing components
 

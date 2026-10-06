@@ -16,7 +16,7 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 
 // ─── GET: Fetch evidences for an entity ──────────────────────────────────────
 router.get("/evidencias", async (req: Request, res: Response) => {
-  const { entityId } = req.query;
+  const { entityId, entityType } = req.query;
 
   if (!entityId) {
     return res.status(400).json({ error: "entityId query parameter is required." });
@@ -24,12 +24,18 @@ router.get("/evidencias", async (req: Request, res: Response) => {
 
   try {
     const pool = await poolPromise;
+    let query = "SELECT * FROM evidence WHERE entity_id = @entityId ORDER BY created_at DESC";
+    
+    if (entityType === "control") {
+      query = "SELECT * FROM evidence WHERE control_id = @entityId ORDER BY created_at DESC";
+    } else if (entityType === "hallazgo") {
+      query = "SELECT * FROM evidence WHERE finding_id = @entityId ORDER BY created_at DESC";
+    }
+
     const result = await pool
       .request()
       .input("entityId", sql.NVarChar, entityId as string)
-      .query(
-        "SELECT * FROM evidence WHERE entity_id = @entityId ORDER BY created_at DESC"
-      );
+      .query(query);
 
     res.json(result.recordset);
   } catch (error) {
@@ -65,7 +71,7 @@ router.post(
       return res.status(400).json({ error: "No file provided." });
     }
 
-    const { entityId, entityType, uploadedBy } = req.body;
+    const { entityId, entityType, uploadedBy, controlId, findingId, auditId, businessEntityId } = req.body;
 
     if (!entityId || !entityType) {
       return res
@@ -106,7 +112,7 @@ router.post(
       const result = await pool
         .request()
         .input("id", sql.Int, id)
-        .input("entityId", sql.NVarChar, entityId)
+        .input("entityId", sql.NVarChar, businessEntityId || null)
         .input("entityType", sql.NVarChar, entityType)
         .input("fileName", sql.NVarChar, file.originalname)
         .input("mimeType", sql.NVarChar, mimeType)
@@ -114,11 +120,12 @@ router.post(
         .input("fileHash", sql.NVarChar, hash)
         .input("storagePath", sql.NVarChar, storedName)
         .input("uploadedBy", sql.NVarChar, uploadedBy || null)
-        .input("controlId", sql.Int, entityType === "control" ? Number(entityId) : null)
-        .input("findingId", sql.Int, entityType === "hallazgo" ? Number(entityId) : null)
+        .input("controlId", sql.NVarChar, controlId || (entityType === "control" ? entityId : null))
+        .input("findingId", sql.NVarChar, findingId || (entityType === "hallazgo" ? entityId : null))
+        .input("auditId", sql.NVarChar, auditId || null)
         .query(`
-          INSERT INTO evidence (id, file_name, control_id, finding_id, entity_id, entity_type, mime_type, file_size, file_hash, storage_path, uploaded_by)
-          VALUES (@id, @fileName, @controlId, @findingId, @entityId, @entityType, @mimeType, @fileSize, @fileHash, @storagePath, @uploadedBy);
+          INSERT INTO evidence (id, file_name, control_id, finding_id, audit_id, entity_id, entity_type, mime_type, file_size, file_hash, storage_path, uploaded_by)
+          VALUES (@id, @fileName, @controlId, @findingId, @auditId, @entityId, @entityType, @mimeType, @fileSize, @fileHash, @storagePath, @uploadedBy);
 
           SELECT * FROM evidence WHERE id = @id;
         `);

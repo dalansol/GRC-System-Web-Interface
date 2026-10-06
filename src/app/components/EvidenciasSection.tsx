@@ -36,7 +36,7 @@ const FALLBACK_EVIDENCES: EvidenceFile[] = [
   { id: "EV-001", name: "Conciliacion_Bancaria_Jun2025.xlsx", size: "2.1 MB", mimeType: "xlsx", hash: "sha256:a3f9c12e…4f2a1c0e", uploadDate: "2025-07-12", uploadedBy: "M. García", entityId: "CTR-001" },
   { id: "EV-002", name: "Listado_Accesos_SAP_Q2.pdf", size: "890 KB", mimeType: "pdf", hash: "sha256:b8e4d7c9…e1c8d4b7", uploadDate: "2025-07-15", uploadedBy: "C. Morales", entityId: "CTR-002" },
   { id: "EV-003", name: "Reporte_Accesos_Privilegiados_Jul.pdf", size: "1.4 MB", mimeType: "pdf", hash: "sha256:c9f5e2a8…c1e4f7a0", uploadDate: "2025-07-18", uploadedBy: "L. Fernández", entityId: "CTR-003" },
-  { id: "EV-004", name: "Hallazgo_Segregacion_Evidencia.pdf", size: "560 KB", mimeType: "pdf", hash: "sha256:d7a3b9e1…f8c2d5b4", uploadDate: "2025-07-11", uploadedBy: "M. García", entityId: "FND-001" },
+  { id: "EV-004", name: "Hallazgo_Segregacion_Evidencia.pdf", size: "560 KB", mimeType: "pdf", hash: "sha256:d7a3b9e1…f8c2d5b4", uploadDate: "2025-07-11", uploadedBy: "M. García", entityId: "HAL-001" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,7 +60,21 @@ function mapApiRow(row: any): EvidenceFile {
   };
 }
 
-export default function EvidenciasSection({ entityId, entityType = "control" }: { entityId: string; entityType?: "control" | "hallazgo" }) {
+export default function EvidenciasSection({ 
+  entityId, 
+  entityType = "control",
+  controlId,
+  findingId,
+  auditId,
+  businessEntityId
+}: { 
+  entityId: string; 
+  entityType?: "control" | "hallazgo";
+  controlId?: string;
+  findingId?: string;
+  auditId?: string;
+  businessEntityId?: string;
+}) {
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -71,7 +85,7 @@ export default function EvidenciasSection({ entityId, entityType = "control" }: 
   // ─── Fetch evidences from API (or fall back to mock data) ─────────────────
   const fetchEvidences = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/evidencias?entityId=${encodeURIComponent(entityId)}`);
+      const res = await fetch(`${API_BASE}/evidencias?entityId=${encodeURIComponent(entityId)}&entityType=${encodeURIComponent(entityType)}`);
       if (!res.ok) throw new Error("API error");
       const data = await res.json();
       setFiles(data.map(mapApiRow));
@@ -135,6 +149,11 @@ export default function EvidenciasSection({ entityId, entityType = "control" }: 
       formData.append("entityId", entityId);
       formData.append("entityType", entityType);
       formData.append("uploadedBy", "M. García");
+      
+      if (controlId) formData.append("controlId", controlId);
+      if (findingId) formData.append("findingId", findingId);
+      if (auditId) formData.append("auditId", auditId);
+      if (businessEntityId) formData.append("businessEntityId", businessEntityId);
 
       const res = await fetch(`${API_BASE}/evidencias/upload`, {
         method: "POST",

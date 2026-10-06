@@ -35,14 +35,16 @@
 ```
 src/
   main.tsx
-  app/App.tsx              ← TODA la app (~7,100 líneas): tipos, mocks, vistas, componentes
+  app/App.tsx              ← Aplicación principal (en proceso de refactorización para reducir su tamaño)
+  app/components/          ← Vistas modulares (VistaHallazgo, VistaControles) y componentes compartidos (SharedComponents)
   app/components/ui/       ← shadcn/ui (no editar salvo necesidad)
-  app/components/figma/    ← ImageWithFallback
+  app/domain/              ← Lógica de estado/ViewModels (ej. useHallazgosViewModel)
+  app/data/                ← Constantes y mock data (mock_data.tsx)
   imports/logo.svg         ← logo Expedite
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
 ```
 
-Nota: en la rama `Version-2` se eliminaron `src/app/views/*` y `components/shared/SharedComponents.tsx`; todo vive ahora en `App.tsx`.
+Nota: La aplicación está en proceso de refactorización hacia un enfoque MVVM modular. Se están extrayendo vistas, lógicas de dominio y constantes desde el monolito `App.tsx` hacia los directorios `components/`, `domain/` y `data/`.
 
 ### Mapa de `App.tsx` (buscar por nombre, las líneas cambian)
 

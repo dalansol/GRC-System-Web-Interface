@@ -15,7 +15,7 @@ const dbConfig: sql.config = {
     ? {}
     : { port: parseInt(process.env.DB_PORT || "1433", 10) }),
   options: {
-    encrypt: false,
+    encrypt: true,
     trustServerCertificate: true,
     ...(instanceName ? { instanceName } : {}),
   },

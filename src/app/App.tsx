@@ -64,6 +64,7 @@ import {
   FileCheck2,
   Ban,
   Activity,
+  ShieldCheck,
 } from "lucide-react";
 
 import {
@@ -104,6 +105,8 @@ import type {
   AuditDocument,
   AuditRecord,
   Finding,
+  UserRecord,
+  BilacoraEntry,
 } from "./components/SharedComponents";
 
 import {
@@ -121,10 +124,14 @@ import {
   SPECIFIC_RISKS,
   PLAN_ENTITIES,
   PROCEDURE_TRACKING,
-  CONTROLS
+  CONTROLS,
+  BITACORA_DATA,
+  DEFAULT_PERMISSIONS,
+  ROLES
 } from "./data/mock_data";
 
 import VistaHallazgo from "./components/VistaHallazgo";
+import VistaControles from "./components/VistaControles";
 import EvidenciasSection from "./components/EvidenciasSection";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
 
@@ -227,6 +234,7 @@ function Sidebar({
         {([
           { id: "plans" as NavView, label: "Planes de Auditoría", icon: <BookOpen size={16} /> },
           { id: "findings" as NavView, label: "Hallazgos", icon: <Flag size={16} /> },
+          { id: "controles" as NavView, label: "Controles", icon: <ShieldCheck size={16} /> },
           { id: "auditado" as NavView, label: "Portal del Auditado", icon: <UserCheck size={16} /> },
         ] as { id: NavView; label: string; icon: React.ReactNode }[]).map(item => (
           <button
@@ -2128,7 +2136,12 @@ function ControlDetailView({
           </div>
         )}
       </Card>
-      <EvidenciasSection entityId={ctrl.id} entityType="control" />
+      <EvidenciasSection 
+        entityId={ctrl.id} 
+        entityType="control"
+        controlId={ctrl.id}
+        businessEntityId={ctrl.auditEntityId} 
+      />
       <AISummaryCard entityId={ctrl.id} entityType="Control" />
     </div>
   );
@@ -3032,7 +3045,9 @@ function TreeRow({
           {node.label}
         </span>
         {allCompletedTree && (
-          <CheckCircle2 size={13} className="text-emerald-500 flex-shrink-0" title="Todos los riesgos completados" />
+          <div title="Todos los riesgos completados" className="flex-shrink-0 flex items-center">
+            <CheckCircle2 size={13} className="text-emerald-500" />
+          </div>
         )}
         {partialCompletedTree && (
           <div
@@ -4627,7 +4642,13 @@ function AuditadoPortalView() {
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t border-border">
-                <EvidenciasSection entityId={f.id} entityType="hallazgo" />
+                <EvidenciasSection 
+                  entityId={f.id} 
+                  entityType="hallazgo" 
+                  findingId={f.id}
+                  auditId={f.auditId}
+                  controlId={f.failedControlId}
+                />
               </div>
             </Card>
           ))}
@@ -5032,6 +5053,7 @@ const NAV_LABELS: Record<NavView, string> = {
   bitacora: "Bitácora de Actividad",
   plans: "Planes de Auditoría",
   findings: "Hallazgos",
+  controles: "Catálogo de Controles",
   auditado: "Portal del Auditado",
 };
 
@@ -5168,6 +5190,8 @@ export default function App() {
         return <AuditPlansView canCreate={true} />;
       case "findings":
         return <VistaHallazgo />;
+      case "controles":
+        return <VistaControles navigate={navigate} />;
       case "auditado":
         return <AuditadoPortalView />;
     }
