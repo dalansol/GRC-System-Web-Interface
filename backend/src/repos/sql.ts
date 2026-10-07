@@ -45,13 +45,19 @@ export class RepositorioSql implements RepositorioUsuarios {
   private constructor(readonly pool: sql.ConnectionPool) {}
 
   static async conectar(conexion: ConexionSql): Promise<RepositorioSql> {
+    // DB_SERVER puede traer una instancia con nombre (HOST\SQLEXPRESS); ahí no se usa el puerto.
+    const [servidor = conexion.servidor, instancia] = conexion.servidor.split("\\", 2);
     const pool = await new sql.ConnectionPool({
-      server: conexion.servidor,
-      port: conexion.puerto,
+      server: servidor,
+      ...(instancia ? {} : { port: conexion.puerto }),
       database: conexion.baseDatos,
       user: conexion.usuario,
       password: conexion.contrasena,
-      options: { encrypt: true, trustServerCertificate: conexion.confiarCertificado ?? false },
+      options: {
+        encrypt: true,
+        trustServerCertificate: conexion.confiarCertificado ?? false,
+        ...(instancia ? { instanceName: instancia } : {}),
+      },
     }).connect();
     return new RepositorioSql(pool);
   }

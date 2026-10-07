@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { Fragment } from "react";
 import {
   Trash2,
   Edit3,
@@ -7,150 +7,51 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
-  Plus
+  Plus,
+  ChevronRight,
+  Filter
 } from "lucide-react";
 import { toast } from "sonner";
-import { INITIAL_FINDINGS, CONTROLS } from "../data/mock_data";
+import { CONTROLS } from "../data/mock_data";
 
 import FormularioHallazgo, {
   CreatedFinding,
   FindingControlOption,
 } from "./FormularioHallazgo";
+import EvidenciasSection from "./EvidenciasSection";
+import { useHallazgosViewModel, HallazgoViewModel } from "../domain/hallazgos/useHallazgosViewModel";
 
-export interface Hallazgo {
-  id: string;
-  folio?: string;
-  title: string;
-  description?: string;
-  type?: string;
-  severity: "Crítico" | "Alto" | "Medio" | "Bajo";
-  status: "Abierto" | "En Proceso" | "Cerrado";
-  auditId?: string;
-  controlId?: string;
-  ownerId?: string;
-}
-
-const metaEnv = (import.meta as any).env;
-const API_BASE_URL = metaEnv?.VITE_API_URL || "http://localhost:3000/api";
-const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND === "true";
+export type Hallazgo = HallazgoViewModel;
 
 export default function VistaHallazgo() {
-  const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [editingHallazgo, setEditingHallazgo] = useState<Hallazgo | null>(null);
-  const [isUpdating, setIsUpdating] = useState<boolean>(false);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-
-  // 1. GET: Cargar hallazgos desde el Backend o Mock Data
-  const fetchHallazgos = async () => {
-    setLoading(true);
-    try {
-      if (USE_REAL_BACKEND) {
-        const response = await fetch(`${API_BASE_URL}/hallazgos`);
-        if (!response.ok) {
-          throw new Error("No se pudieron obtener los hallazgos del servidor.");
-        }
-        const data = await response.json();
-        setHallazgos(data);
-      } else {
-        // Fallback a mock_data.tsx
-        setHallazgos(INITIAL_FINDINGS as unknown as Hallazgo[]);
-      }
-    } catch (error: any) {
-      toast.error(error.message || "Error al cargar los hallazgos.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchHallazgos();
-  }, []);
+  const {
+    hallazgos,
+    loading,
+    deletingId,
+    editingHallazgo,
+    isUpdating,
+    showCreateForm,
+    expandedFinding,
+    sevFilter,
+    statusFilter,
+    USE_REAL_BACKEND,
+    nextFolio,
+    setEditingHallazgo,
+    setShowCreateForm,
+    setExpandedFinding,
+    setSevFilter,
+    setStatusFilter,
+    fetchHallazgos,
+    handleDelete,
+    handleUpdate,
+    handleFindingCreated,
+  } = useHallazgosViewModel();
 
   const findingControls: FindingControlOption[] = CONTROLS.map((control) => ({
     id: control.id,
     name: control.controlProcedureName,
     vulnerability: control.currentVulnerability as FindingControlOption["vulnerability"],
   }));
-
-  const nextFolioNumber = hallazgos.reduce((max, finding) => {
-    const number = Number(finding.folio?.split("-").pop());
-    return Number.isFinite(number) ? Math.max(max, number) : max;
-  }, 0) + 1;
-
-  const nextFolio = `HAL-${new Date().getFullYear()}-${String(
-    nextFolioNumber,
-  ).padStart(3, "0")}`;
-
-  const handleFindingCreated = (finding: CreatedFinding) => {
-    setHallazgos((current) => [finding, ...current]);
-  };
-
-  // 2. DELETE: Eliminar hallazgo por ID
-  const handleDelete = async (id: string) => {
-    if (!window.confirm("¿Estás seguro de que deseas eliminar este hallazgo?")) return;
-
-    setDeletingId(id);
-    try {
-      if (USE_REAL_BACKEND) {
-        const response = await fetch(`${API_BASE_URL}/hallazgos/${id}`, {
-          method: "DELETE",
-        });
-
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Error al eliminar el hallazgo.");
-        }
-      }
-
-      setHallazgos((prev) => prev.filter((item) => item.id !== id));
-      toast.success("Hallazgo eliminado correctamente.");
-    } catch (error: any) {
-      toast.error(error.message || "Error al eliminar el hallazgo.");
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  // 3. PUT: Actualizar hallazgo desde el modal/formulario de edición
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingHallazgo) return;
-
-    setIsUpdating(true);
-    try {
-      if (USE_REAL_BACKEND) {
-        const response = await fetch(`${API_BASE_URL}/hallazgos/${editingHallazgo.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(editingHallazgo),
-        });
-
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Error al actualizar el hallazgo.");
-        }
-
-        const updatedData = await response.json();
-        setHallazgos((prev) =>
-          prev.map((item) => (item.id === updatedData.id ? updatedData : item))
-        );
-      } else {
-        // Fallback local
-        setHallazgos((prev) =>
-          prev.map((item) => (item.id === editingHallazgo.id ? editingHallazgo : item))
-        );
-      }
-
-      toast.success("Hallazgo actualizado con éxito.");
-      setEditingHallazgo(null);
-    } catch (error: any) {
-      toast.error(error.message || "Error al actualizar.");
-    } finally {
-      setIsUpdating(false);
-    }
-  };
 
   return (
     <div className="w-full space-y-4 p-6">
@@ -191,6 +92,26 @@ export default function VistaHallazgo() {
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap mb-5">
+        <Filter size={12} className="text-muted-foreground" />
+        <span className="text-xs text-muted-foreground font-medium">Gravedad:</span>
+        {["all", "Crítico", "Alto", "Medio", "Bajo"].map(f => (
+          <button key={f} onClick={() => setSevFilter(f)}
+            className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${sevFilter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>
+            {f === "all" ? "Todos" : f}
+          </button>
+        ))}
+        <div className="w-px h-4 bg-border mx-1" />
+        <span className="text-xs text-muted-foreground font-medium">Estado:</span>
+        {["all", "Abierto", "En Proceso", "Cerrado"].map(f => (
+          <button key={f} onClick={() => setStatusFilter(f)}
+            className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${statusFilter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>
+            {f === "all" ? "Todos" : f}
+          </button>
+        ))}
+      </div>
+
       {/* Tabla de Hallazgos */}
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         {loading ? (
@@ -214,59 +135,87 @@ export default function VistaHallazgo() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {hallazgos.map((item) => (
-                <tr key={item.id} className="hover:bg-muted/30">
-                  <td className="px-4 py-3 font-mono text-xs font-semibold">
-                    {item.folio || item.id}
-                  </td>
-                  <td className="px-4 py-3 font-medium text-foreground">{item.title}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${item.severity === "Crítico" || item.severity === "Alto"
-                        ? "bg-red-500/10 text-red-600"
-                        : item.severity === "Medio"
-                          ? "bg-yellow-500/10 text-yellow-600"
-                          : "bg-green-500/10 text-green-600"
-                        }`}
+              {hallazgos.map((item) => {
+                const isExpanded = expandedFinding === item.id;
+                return (
+                  <Fragment key={item.id}>
+                    <tr 
+                      className={`transition-colors cursor-pointer group ${isExpanded ? "bg-secondary/40" : "hover:bg-muted/30"}`}
+                      onClick={() => setExpandedFinding(isExpanded ? null : item.id)}
                     >
-                      {item.severity}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                      {item.status === "Cerrado" ? (
-                        <CheckCircle2 size={14} className="text-green-500" />
-                      ) : item.status === "En Proceso" ? (
-                        <Clock size={14} className="text-yellow-500" />
-                      ) : (
-                        <AlertCircle size={14} className="text-red-500" />
-                      )}
-                      {item.status || "Abierto"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => setEditingHallazgo(item)}
-                        className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                      >
-                        <Edit3 size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(item.id)}
-                        disabled={deletingId === item.id}
-                        className="rounded p-1 text-muted-foreground hover:bg-red-500/10 hover:text-red-600 disabled:opacity-50"
-                      >
-                        {deletingId === item.id ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <Trash2 size={16} />
-                        )}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      <td className="px-4 py-3 font-mono text-xs font-semibold">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-muted-foreground transition-transform" style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", display: "inline-block" }}>
+                            <ChevronRight size={12} />
+                          </span>
+                          {item.folio || item.id}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-foreground">{item.title}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${item.severity === "Crítico" || item.severity === "Alto"
+                            ? "bg-red-500/10 text-red-600"
+                            : item.severity === "Medio"
+                              ? "bg-yellow-500/10 text-yellow-600"
+                              : "bg-green-500/10 text-green-600"
+                            }`}
+                        >
+                          {item.severity}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                          {item.status === "Cerrado" ? (
+                            <CheckCircle2 size={14} className="text-green-500" />
+                          ) : item.status === "En Proceso" ? (
+                            <Clock size={14} className="text-yellow-500" />
+                          ) : (
+                            <AlertCircle size={14} className="text-red-500" />
+                          )}
+                          {item.status || "Abierto"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => setEditingHallazgo(item)}
+                            className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                          >
+                            <Edit3 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            disabled={deletingId === item.id}
+                            className="rounded p-1 text-muted-foreground hover:bg-red-500/10 hover:text-red-600 disabled:opacity-50"
+                          >
+                            {deletingId === item.id ? (
+                              <Loader2 size={16} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={16} />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={5} className="px-4 pb-4 bg-secondary/20 border-b border-border">
+                          <div className="pt-3 space-y-3" onClick={(e) => e.stopPropagation()}>
+                            <EvidenciasSection 
+                              entityId={item.id} 
+                              entityType="hallazgo" 
+                              findingId={item.id}
+                              auditId={item.auditId}
+                              controlId={item.failedControlId || item.controlId}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -305,7 +254,7 @@ export default function VistaHallazgo() {
                 onChange={(e) =>
                   setEditingHallazgo({
                     ...editingHallazgo,
-                    severity: e.target.value as Hallazgo["severity"],
+                    severity: e.target.value as HallazgoViewModel["severity"],
                   })
                 }
                 className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
@@ -326,7 +275,7 @@ export default function VistaHallazgo() {
                 onChange={(e) =>
                   setEditingHallazgo({
                     ...editingHallazgo,
-                    status: e.target.value as Hallazgo["status"],
+                    status: e.target.value as HallazgoViewModel["status"],
                   })
                 }
                 className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"

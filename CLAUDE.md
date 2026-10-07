@@ -38,13 +38,14 @@
 ```
 src/
   main.tsx                 ← monta la sesión (ProveedorSesion + PuertaSesion) y la app
-  app/App.tsx              ← la mayoría de las vistas (~5,100 líneas)
+  app/App.tsx              ← la mayoría de las vistas (en proceso de refactorización para reducir su tamaño)
   app/api/                 ← cliente HTTP y llamadas a la API
   app/auth/                ← sesión, inicio de sesión (MSAL / modo dev)
-  app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, EvidenciasSection, SpreadsheetEditor
+  app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, VistaControles, EvidenciasSection, SpreadsheetEditor
   app/components/ui/       ← shadcn/ui (no editar salvo necesidad)
   app/components/figma/    ← ImageWithFallback
-  app/data/mock_data.tsx   ← datos de prueba
+  app/domain/              ← lógica de estado/ViewModels (ej. useHallazgosViewModel)
+  app/data/mock_data.tsx   ← constantes y datos de prueba
   imports/logo.svg         ← logo Expedite
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
 backend/
@@ -52,11 +53,13 @@ backend/
   src/server.ts            ← único punto de arranque; abre la conexión a la base y monta las rutas
   src/app.ts               ← app Express; recibe repositorio, verificador de tokens y rutas
   src/db.ts                ← conexión compartida (la registra server.ts)
-  src/routes/              ← endpoints: usuarios.ts (con sesión) y hallazgos.ts (aún sin sesión, solo con DATA_MODE=sql)
-  src/middleware/          ← autenticar (token → usuario) y autorizar (por rol)
+  src/routes/              ← endpoints: usuarios.ts (con sesión); hallazgos.ts y evidencias.ts (aún sin sesión, solo con DATA_MODE=sql)
+  src/middleware/          ← autenticar (token → usuario), autorizar (por rol) y upload (archivos de evidencia)
   src/repos/               ← repositorio SQL y en memoria
   test/                    ← pruebas (las de SQL requieren SQL_TEST_*)
 ```
+
+Nota: La aplicación está en proceso de refactorización hacia un enfoque MVVM modular. Se están extrayendo vistas, lógicas de dominio y constantes desde el monolito `App.tsx` hacia los directorios `components/`, `domain/` y `data/`.
 
 ### Mapa de `App.tsx` (buscar por nombre, las líneas cambian)
 

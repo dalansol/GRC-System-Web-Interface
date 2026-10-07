@@ -16,11 +16,12 @@ const rutasSinSesion: Router[] = [];
 if (config.datos.modo === "sql") {
   const repoSql = await RepositorioSql.conectar(config.datos);
   repo = repoSql;
-  // Las rutas de hallazgos usan la misma conexión que las de usuarios.
+  // Las rutas de hallazgos y evidencias usan la misma conexión que las de usuarios.
   registrarPool(repoSql.pool);
   rutasSinSesion.push((await import("./routes/hallazgos.js")).default);
+  rutasSinSesion.push((await import("./routes/evidencias.js")).default);
 } else {
-  // Sin base de datos no hay rutas de hallazgos; el frontend usa sus datos de prueba.
+  // Sin base de datos no hay rutas de hallazgos ni de evidencias; el frontend usa sus datos de prueba.
   repo = new RepositorioMemoria();
 }
 
