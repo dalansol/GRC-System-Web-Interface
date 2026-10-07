@@ -5,6 +5,12 @@ import { crearApp } from "../src/app.js";
 import { crearVerificadorDev } from "../src/auth/verificador.js";
 import type { EventoBitacora } from "../src/bitacora.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
+import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
+
+function repos() {
+  const repo = new RepositorioMemoria();
+  return { repo, repoPlanes: new RepositorioPlanesMemoria(repo) };
+}
 
 const ADMIN = "s.ramirez@expedite.com";
 const JEFA = "m.garcia@expedite.com";
@@ -17,7 +23,7 @@ let eventos: EventoBitacora[];
 beforeEach(() => {
   eventos = [];
   app = crearApp({
-    repo: new RepositorioMemoria(),
+    ...repos(),
     verificador: crearVerificadorDev(),
     dominiosPermitidos: ["expedite.com"],
     corsOrigin: "http://localhost:5173",
@@ -313,7 +319,7 @@ describe("autenticación y autorización por rol", () => {
       res.json([{ id: "H-1" }]);
     });
     const conAbiertas = crearApp({
-      repo: new RepositorioMemoria(),
+      ...repos(),
       verificador: crearVerificadorDev(),
       dominiosPermitidos: ["expedite.com"],
       corsOrigin: "http://localhost:5173",

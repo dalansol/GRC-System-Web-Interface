@@ -5,6 +5,12 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { crearVerificadorEntra, type VerificadorToken } from "../src/auth/verificador.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
+import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
+
+function repos() {
+  const repo = new RepositorioMemoria();
+  return { repo, repoPlanes: new RepositorioPlanesMemoria(repo) };
+}
 
 const TENANT = "11111111-1111-1111-1111-111111111111";
 const CLIENTE = "22222222-2222-2222-2222-222222222222";
@@ -119,7 +125,7 @@ describe("verificador de tokens de Entra ID", () => {
 describe("inicio de sesión con Entra ID contra la API", () => {
   function crear() {
     return crearApp({
-      repo: new RepositorioMemoria(),
+      ...repos(),
       verificador,
       dominiosPermitidos: ["expedite.com"],
       corsOrigin: "http://localhost:5173",

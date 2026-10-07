@@ -4257,13 +4257,14 @@ function AuditPlansView({ canCreate }: { canCreate: boolean }) {
   const [plans, setPlans] = useState<AuditPlan[]>(AUDIT_PLANS_DATA);
   const [showForm, setShowForm] = useState(false);
   const [planPdfTarget, setPlanPdfTarget] = useState<AuditPlan | null>(null);
-  const [form, setForm] = useState({ code: "", name: "", period: "", startDate: "", endDate: "", estimatedHours: "", responsible: "M. García", scope: "" });
+  const [form, setForm] = useState({ code: "", name: "", type: "", period: "", startDate: "", endDate: "", estimatedHours: "", responsible: "M. García", scope: "" });
   const [formErr, setFormErr] = useState<Record<string, string>>({});
 
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!form.code.trim()) errs.code = "Requerido";
     if (!form.name.trim()) errs.name = "Requerido";
+    if (form.type !== "Anual" && form.type !== "Trimestral") errs.type = "Selecciona anual o trimestral";
     if (!form.startDate) errs.startDate = "Requerido";
     if (!form.endDate) errs.endDate = "Requerido";
     if (form.startDate && form.endDate && form.endDate <= form.startDate) errs.endDate = "Debe ser posterior a la fecha de inicio";
@@ -4277,14 +4278,14 @@ function AuditPlansView({ canCreate }: { canCreate: boolean }) {
     if (Object.keys(errs).length) { setFormErr(errs); return; }
     const newPlan: AuditPlan = {
       id: `AP-${String(plans.length + 1).padStart(3, "0")}`,
-      code: form.code, name: form.name, period: form.period,
+      code: form.code, name: form.name, type: form.type as AuditPlan["type"], period: form.period,
       startDate: form.startDate, endDate: form.endDate,
       status: "Borrador", estimatedHours: Number(form.estimatedHours),
       responsible: form.responsible, scope: form.scope,
     };
     setPlans(prev => [newPlan, ...prev]);
     setShowForm(false);
-    setForm({ code: "", name: "", period: "", startDate: "", endDate: "", estimatedHours: "", responsible: "M. García", scope: "" });
+    setForm({ code: "", name: "", type: "", period: "", startDate: "", endDate: "", estimatedHours: "", responsible: "M. García", scope: "" });
     setFormErr({});
     toast.success(`Plan "${newPlan.name}" creado correctamente`);
   };
@@ -4323,6 +4324,19 @@ function AuditPlansView({ canCreate }: { canCreate: boolean }) {
           <div className="grid grid-cols-2 gap-4 mb-4">
             {inp("Código del plan", "code", "text", "PAI-2025-004")}
             {inp("Nombre del plan", "name", "text", "Plan de Auditoría…")}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Tipo de plan</label>
+              <select
+                value={form.type}
+                onChange={e => { setForm(f => ({ ...f, type: e.target.value })); setFormErr(f => ({ ...f, type: "" })); }}
+                className={`w-full text-sm px-3 py-2 rounded-md border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${formErr.type ? "border-red-400" : "border-border"}`}
+              >
+                <option value="">— Seleccionar —</option>
+                <option value="Anual">Anual</option>
+                <option value="Trimestral">Trimestral</option>
+              </select>
+              {formErr.type && <div className="text-xs text-red-600 mt-0.5">{formErr.type}</div>}
+            </div>
             {inp("Periodo", "period", "text", "Q3–Q4 2025")}
             {inp("Responsable", "responsible")}
             {inp("Fecha de inicio", "startDate", "date")}
@@ -4350,7 +4364,7 @@ function AuditPlansView({ canCreate }: { canCreate: boolean }) {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => exportToCSV("planes_auditoria.csv", ["ID", "Código", "Nombre", "Periodo", "Inicio", "Fin", "Estado", "Horas"], plans.map(p => [p.id, p.code, p.name, p.period, p.startDate, p.endDate, p.status, String(p.estimatedHours)]))}
+              onClick={() => exportToCSV("planes_auditoria.csv", ["ID", "Código", "Nombre", "Tipo", "Periodo", "Inicio", "Fin", "Estado", "Horas"], plans.map(p => [p.id, p.code, p.name, p.type, p.period, p.startDate, p.endDate, p.status, String(p.estimatedHours)]))}
               className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-border text-muted-foreground hover:bg-secondary transition-colors"
             >
               <Download size={12} /> Exportar CSV
@@ -4375,6 +4389,7 @@ function AuditPlansView({ canCreate }: { canCreate: boolean }) {
                   rows: [
                     ["Código", planPdfTarget.code],
                     ["Nombre del plan", planPdfTarget.name],
+                    ["Tipo", planPdfTarget.type],
                     ["Período", planPdfTarget.period],
                     ["Estado", planPdfTarget.status],
                     ["Responsable", planPdfTarget.responsible],
@@ -4401,7 +4416,7 @@ function AuditPlansView({ canCreate }: { canCreate: boolean }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                {["Código", "Nombre del Plan", "Periodo", "Inicio", "Fin", "Estado", "Horas Est.", "Responsable"].map(h => (
+                {["Código", "Nombre del Plan", "Tipo", "Periodo", "Inicio", "Fin", "Estado", "Horas Est.", "Responsable"].map(h => (
                   <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -4417,6 +4432,9 @@ function AuditPlansView({ canCreate }: { canCreate: boolean }) {
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground text-sm">{p.name}</div>
                       <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{p.scope}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground whitespace-nowrap">{p.type}</span>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{p.period}</td>
                     <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{p.startDate}</td>

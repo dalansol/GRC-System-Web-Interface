@@ -168,6 +168,7 @@ interface AuditPlan {
   id: string;
   code: string;
   name: string;
+  type: "Anual" | "Trimestral";
   period: string;
   startDate: string;
   endDate: string;
