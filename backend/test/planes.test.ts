@@ -1,3 +1,4 @@
+import type { Server } from "node:http";
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
@@ -5,27 +6,30 @@ import { crearVerificadorDev } from "../src/auth/verificador.js";
 import type { EventoBitacora } from "../src/bitacora.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
 import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
+import { escuchar } from "./servidor.js";
 
 const ADMIN = "s.ramirez@expedite.com";
 const JEFA = "m.garcia@expedite.com";
 const AUDITORA = "a.rodriguez@expedite.com";
 const INACTIVO = "p.sanchez@expedite.com";
 
-let app: ReturnType<typeof crearApp>;
+let app: Server;
 let usuarios: RepositorioMemoria;
 let eventos: EventoBitacora[];
 
-beforeEach(() => {
+beforeEach(async () => {
   eventos = [];
   usuarios = new RepositorioMemoria();
-  app = crearApp({
-    repo: usuarios,
-    repoPlanes: new RepositorioPlanesMemoria(usuarios),
-    verificador: crearVerificadorDev(),
-    dominiosPermitidos: ["expedite.com"],
-    corsOrigin: "http://localhost:5173",
-    registrarEvento: (evento) => eventos.push(evento),
-  });
+  app = await escuchar(
+    crearApp({
+      repo: usuarios,
+      repoPlanes: new RepositorioPlanesMemoria(usuarios),
+      verificador: crearVerificadorDev(),
+      dominiosPermitidos: ["expedite.com"],
+      corsOrigin: "http://localhost:5173",
+      registrarEvento: (evento) => eventos.push(evento),
+    }),
+  );
 });
 
 const como = (correo: string) => ({

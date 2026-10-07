@@ -6,6 +6,7 @@ import { crearApp } from "../src/app.js";
 import { crearVerificadorEntra, type VerificadorToken } from "../src/auth/verificador.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
 import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
+import { escuchar } from "./servidor.js";
 
 function repos() {
   const repo = new RepositorioMemoria();
@@ -124,17 +125,19 @@ describe("verificador de tokens de Entra ID", () => {
 
 describe("inicio de sesión con Entra ID contra la API", () => {
   function crear() {
-    return crearApp({
-      ...repos(),
-      verificador,
-      dominiosPermitidos: ["expedite.com"],
-      corsOrigin: "http://localhost:5173",
-      registrarEvento: () => {},
-    });
+    return escuchar(
+      crearApp({
+        ...repos(),
+        verificador,
+        dominiosPermitidos: ["expedite.com"],
+        corsOrigin: "http://localhost:5173",
+        registrarEvento: () => {},
+      }),
+    );
   }
 
   it("un usuario registrado entra con su token y recibe su rol", async () => {
-    const res = await request(crear()).get("/api/me").set("Authorization", `Bearer ${await firmar()}`);
+    const res = await request(await crear()).get("/api/me").set("Authorization", `Bearer ${await firmar()}`);
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ correo: "s.ramirez@expedite.com", rol: "Administrador" });
@@ -142,7 +145,7 @@ describe("inicio de sesión con Entra ID contra la API", () => {
 
   it("un token válido de alguien no registrado no da acceso", async () => {
     const token = await firmar({ claims: { preferred_username: "intruso@expedite.com" } });
-    const res = await request(crear()).get("/api/me").set("Authorization", `Bearer ${token}`);
+    const res = await request(await crear()).get("/api/me").set("Authorization", `Bearer ${token}`);
 
     expect(res.status).toBe(403);
     expect(res.body.error.codigo).toBe("USUARIO_NO_AUTORIZADO");
@@ -150,13 +153,13 @@ describe("inicio de sesión con Entra ID contra la API", () => {
 
   it("un token inválido responde 401", async () => {
     const token = await firmar({ llave: llaveAjena });
-    const res = await request(crear()).get("/api/me").set("Authorization", `Bearer ${token}`);
+    const res = await request(await crear()).get("/api/me").set("Authorization", `Bearer ${token}`);
 
     expect(res.status).toBe(401);
   });
 
   it("tras el primer acceso, otra identidad con el mismo correo no puede entrar", async () => {
-    const app = crear();
+    const app = await crear();
     await request(app).get("/api/me").set("Authorization", `Bearer ${await firmar()}`);
 
     const impostor = await firmar({ claims: { oid: "66666666-6666-6666-6666-666666666666" } });
@@ -167,7 +170,7 @@ describe("inicio de sesión con Entra ID contra la API", () => {
   });
 
   it("el encabezado de desarrollo no sirve cuando la autenticación es Entra", async () => {
-    const res = await request(crear()).get("/api/me").set("X-Dev-Usuario", "s.ramirez@expedite.com");
+    const res = await request(await crear()).get("/api/me").set("X-Dev-Usuario", "s.ramirez@expedite.com");
 
     expect(res.status).toBe(401);
   });

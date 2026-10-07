@@ -17,6 +17,7 @@ import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
 import { RepositorioPlanesSql } from "../src/repos/planesSql.js";
 import { ErrorCorreoDuplicado } from "../src/repos/repositorio.js";
 import { RepositorioSql } from "../src/repos/sql.js";
+import { escuchar } from "./servidor.js";
 
 const env = process.env;
 const conexion = {
@@ -202,24 +203,26 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
     const ADMIN = "s.ramirez@expedite.com";
     const ANA = "a.rodriguez@expedite.com";
     const api = () =>
-      crearApp({
-        repo,
-        repoPlanes: new RepositorioPlanesMemoria(repo),
-        verificador: crearVerificadorDev(),
-        dominiosPermitidos: ["expedite.com"],
-        corsOrigin: "http://localhost:5173",
-        registrarEvento: () => {},
-      });
+      escuchar(
+        crearApp({
+          repo,
+          repoPlanes: new RepositorioPlanesMemoria(repo),
+          verificador: crearVerificadorDev(),
+          dominiosPermitidos: ["expedite.com"],
+          corsOrigin: "http://localhost:5173",
+          registrarEvento: () => {},
+        }),
+      );
 
     it("CA1: lista la tabla de usuarios", async () => {
-      const res = await request(api()).get("/api/usuarios").set("X-Dev-Usuario", ADMIN);
+      const res = await request(await api()).get("/api/usuarios").set("X-Dev-Usuario", ADMIN);
 
       expect(res.status).toBe(200);
       expect(res.body.map((u: { correo: string }) => u.correo)).toEqual([ANA, ADMIN]);
     });
 
     it("CA2: el cambio de rol se refleja en la siguiente petición del usuario", async () => {
-      const app = api();
+      const app = await api();
       const ana = (await repo.buscarPorCorreo(ANA))!;
 
       await request(app).patch(`/api/usuarios/${ana.id}/rol`).set("X-Dev-Usuario", ADMIN).send({ rol: "Jefe de Auditoría" });
@@ -230,7 +233,7 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
     });
 
     it("CA3: rechaza el dominio ajeno y acepta el corporativo", async () => {
-      const app = api();
+      const app = await api();
       const alta = (correo: string) =>
         request(app).post("/api/usuarios").set("X-Dev-Usuario", ADMIN).send({ nombre: "Luis Peña", correo, rol: "Auditor" });
 
@@ -242,7 +245,7 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
 
     it("impide dejar el sistema sin Administrador activo", async () => {
       const admin = (await repo.buscarPorCorreo(ADMIN))!;
-      const res = await request(api()).patch(`/api/usuarios/${admin.id}/rol`).set("X-Dev-Usuario", ADMIN).send({ rol: "Auditor" });
+      const res = await request(await api()).patch(`/api/usuarios/${admin.id}/rol`).set("X-Dev-Usuario", ADMIN).send({ rol: "Auditor" });
 
       expect(res.status).toBe(409);
     });

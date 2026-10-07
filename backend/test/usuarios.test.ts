@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Server } from "node:http";
 import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
@@ -6,6 +7,7 @@ import { crearVerificadorDev } from "../src/auth/verificador.js";
 import type { EventoBitacora } from "../src/bitacora.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
 import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
+import { escuchar } from "./servidor.js";
 
 function repos() {
   const repo = new RepositorioMemoria();
@@ -17,18 +19,20 @@ const JEFA = "m.garcia@expedite.com";
 const AUDITORA = "a.rodriguez@expedite.com";
 const INACTIVO = "p.sanchez@expedite.com";
 
-let app: ReturnType<typeof crearApp>;
+let app: Server;
 let eventos: EventoBitacora[];
 
-beforeEach(() => {
+beforeEach(async () => {
   eventos = [];
-  app = crearApp({
-    ...repos(),
-    verificador: crearVerificadorDev(),
-    dominiosPermitidos: ["expedite.com"],
-    corsOrigin: "http://localhost:5173",
-    registrarEvento: (evento) => eventos.push(evento),
-  });
+  app = await escuchar(
+    crearApp({
+      ...repos(),
+      verificador: crearVerificadorDev(),
+      dominiosPermitidos: ["expedite.com"],
+      corsOrigin: "http://localhost:5173",
+      registrarEvento: (evento) => eventos.push(evento),
+    }),
+  );
 });
 
 const como = (correo: string) => ({
@@ -318,14 +322,16 @@ describe("autenticación y autorización por rol", () => {
     abiertas.get("/hallazgos", (_req, res) => {
       res.json([{ id: "H-1" }]);
     });
-    const conAbiertas = crearApp({
-      ...repos(),
-      verificador: crearVerificadorDev(),
-      dominiosPermitidos: ["expedite.com"],
-      corsOrigin: "http://localhost:5173",
-      registrarEvento: () => {},
-      rutasSinSesion: [abiertas],
-    });
+    const conAbiertas = await escuchar(
+      crearApp({
+        ...repos(),
+        verificador: crearVerificadorDev(),
+        dominiosPermitidos: ["expedite.com"],
+        corsOrigin: "http://localhost:5173",
+        registrarEvento: () => {},
+        rutasSinSesion: [abiertas],
+      }),
+    );
 
     const hallazgos = await request(conAbiertas).get("/api/hallazgos");
     expect(hallazgos.status).toBe(200);
