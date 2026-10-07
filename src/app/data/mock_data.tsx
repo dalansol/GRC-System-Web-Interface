@@ -542,10 +542,10 @@ const AUDIT_RECORDS: AuditRecord[] = [
 
 // ─── Audit Plans Data ─────────────────────────────────────────────────────────
 const AUDIT_PLANS_DATA: AuditPlan[] = [
-  { id: "AP-001", code: "PAI-2025-001", name: "Plan Auditoría Financiera LATAM", period: "Q1–Q2 2025", startDate: "2025-01-15", endDate: "2025-06-30", status: "Aprobado", estimatedHours: 320, responsible: "M. García", scope: "Cierre contable, conciliaciones bancarias y reportes a casa matriz en MX, BR, CO" },
-  { id: "AP-002", code: "PAI-2025-002", name: "Plan Auditoría TI & Ciberseguridad", period: "Q2–Q3 2025", startDate: "2025-04-01", endDate: "2025-09-30", status: "En Ejecución", estimatedHours: 240, responsible: "C. Morales", scope: "Accesos privilegiados, seguridad perimetral, revisión de vulnerabilidades" },
-  { id: "AP-003", code: "PAI-2025-003", name: "Plan Auditoría Cumplimiento Regulatorio", period: "Q3–Q4 2025", startDate: "2025-07-01", endDate: "2025-12-31", status: "Borrador", estimatedHours: 180, responsible: "A. Rodríguez", scope: "Obligaciones regulatorias GDPR, SUNAT, Superintendencia Financiera Colombia" },
-  { id: "AP-004", code: "PAI-2024-012", name: "Plan Auditoría Operacional LATAM", period: "Q4 2024", startDate: "2024-10-01", endDate: "2024-12-31", status: "Cerrado", estimatedHours: 290, responsible: "M. García", scope: "Cadena de suministro, logística y distribución en toda la región" },
+  { id: "AP-001", code: "PAI-2025-001", type: "Anual", name: "Plan Auditoría Financiera LATAM", period: "Q1–Q2 2025", startDate: "2025-01-15", endDate: "2025-06-30", status: "Aprobado", estimatedHours: 320, responsible: "M. García", scope: "Cierre contable, conciliaciones bancarias y reportes a casa matriz en MX, BR, CO" },
+  { id: "AP-002", code: "PAI-2025-002", type: "Anual", name: "Plan Auditoría TI & Ciberseguridad", period: "Q2–Q3 2025", startDate: "2025-04-01", endDate: "2025-09-30", status: "En Ejecución", estimatedHours: 240, responsible: "C. Morales", scope: "Accesos privilegiados, seguridad perimetral, revisión de vulnerabilidades" },
+  { id: "AP-003", code: "PAI-2025-003", type: "Trimestral", name: "Plan Auditoría Cumplimiento Regulatorio", period: "Q3–Q4 2025", startDate: "2025-07-01", endDate: "2025-12-31", status: "Borrador", estimatedHours: 180, responsible: "A. Rodríguez", scope: "Obligaciones regulatorias GDPR, SUNAT, Superintendencia Financiera Colombia" },
+  { id: "AP-004", code: "PAI-2024-012", type: "Trimestral", name: "Plan Auditoría Operacional LATAM", period: "Q4 2024", startDate: "2024-10-01", endDate: "2024-12-31", status: "Cerrado", estimatedHours: 290, responsible: "M. García", scope: "Cadena de suministro, logística y distribución en toda la región" },
 ];
 
 

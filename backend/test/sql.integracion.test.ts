@@ -12,6 +12,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { crearVerificadorDev } from "../src/auth/verificador.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
+import { ErrorCodigoDuplicado } from "../src/repos/planes.js";
+import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
+import { RepositorioPlanesSql } from "../src/repos/planesSql.js";
 import { ErrorCorreoDuplicado } from "../src/repos/repositorio.js";
 import { RepositorioSql } from "../src/repos/sql.js";
 
@@ -53,7 +56,7 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
       options: { encrypt: true, trustServerCertificate: conexion.confiarCertificado, enableQuotedIdentifier: false },
     }).connect();
     try {
-      await comoSqlcmd.request().batch("DROP TABLE IF EXISTS dbo.users, dbo.role_permissions, dbo.permissions, dbo.roles");
+      await comoSqlcmd.request().batch("DROP TABLE IF EXISTS dbo.audit_plans, dbo.users, dbo.role_permissions, dbo.permissions, dbo.roles");
       for (const nombre of ["001_schema.sql", "002_seed.sql", "001_schema.sql", "002_seed.sql"]) {
         await comoSqlcmd.request().batch(await script(nombre));
       }
@@ -66,7 +69,7 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
   });
 
   beforeEach(async () => {
-    await pool.request().batch("DELETE FROM dbo.users");
+    await pool.request().batch("DELETE FROM dbo.audit_plans; DELETE FROM dbo.users;");
     await repo.crearUsuario({ nombre: "Sofía Ramírez", correo: "s.ramirez@expedite.com", rolId: rolId["Administrador"]! });
     await repo.crearUsuario({ nombre: "Ana Rodríguez", correo: "a.rodriguez@expedite.com", rolId: rolId["Auditor"]! });
   });
@@ -201,6 +204,7 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
     const api = () =>
       crearApp({
         repo,
+        repoPlanes: new RepositorioPlanesMemoria(repo),
         verificador: crearVerificadorDev(),
         dominiosPermitidos: ["expedite.com"],
         corsOrigin: "http://localhost:5173",
@@ -242,5 +246,21 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
 
       expect(res.status).toBe(409);
     });
+  });
+
+  it("guarda, edita y consulta planes de auditoría", async () => {
+    const planes = new RepositorioPlanesSql(pool);
+    const admin = (await repo.buscarPorCorreo("s.ramirez@expedite.com"))!;
+    const datos = {
+      codigo: "PAI-2026-001", nombre: "Plan Compras 2026", tipo: "Anual" as const, periodo: "Q1 2026", fechaInicio: "2026-01-10",
+      fechaFin: "2026-03-31", estado: "Borrador" as const, horasEstimadas: 120, responsableId: admin.id, alcance: null,
+    };
+
+    const creado = await planes.crear(datos, admin.id);
+    expect(creado).toMatchObject({ codigo: "PAI-2026-001", tipo: "Anual", fechaInicio: "2026-01-10", responsable: { nombre: "Sofía Ramírez" } });
+    await expect(planes.crear(datos, admin.id)).rejects.toBeInstanceOf(ErrorCodigoDuplicado);
+
+    expect(await planes.actualizar(creado.id, { ...datos, estado: "Aprobado" })).toMatchObject({ estado: "Aprobado" });
+    expect(await planes.listar()).toHaveLength(1);
   });
 });
