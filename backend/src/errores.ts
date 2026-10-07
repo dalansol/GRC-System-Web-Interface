@@ -7,6 +7,7 @@ export type CodigoError =
   | "CORREO_DUPLICADO"
   | "ULTIMO_ADMINISTRADOR"
   | "NO_ENCONTRADO"
+  | "CODIGO_DUPLICADO"
   | "ERROR_INTERNO";
 
 export class ErrorApi extends Error {

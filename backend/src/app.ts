@@ -4,11 +4,14 @@ import type { VerificadorToken } from "./auth/verificador.js";
 import { registrarEnConsola, type RegistrarEvento } from "./bitacora.js";
 import { ErrorApi } from "./errores.js";
 import { autenticar } from "./middleware/autenticar.js";
+import type { RepositorioPlanes } from "./repos/planes.js";
 import type { RepositorioUsuarios } from "./repos/repositorio.js";
+import { rutasPlanes } from "./routes/planes.js";
 import { rutasUsuarios } from "./routes/usuarios.js";
 
 export interface DependenciasApp {
   repo: RepositorioUsuarios;
+  repoPlanes: RepositorioPlanes;
   verificador: VerificadorToken;
   dominiosPermitidos: readonly string[];
   corsOrigin: string | string[];
@@ -33,6 +36,7 @@ const manejarErrores: ErrorRequestHandler = (error, _req, res, _next) => {
 };
 
 export function crearApp(deps: DependenciasApp): Express {
+  const registrarEvento = deps.registrarEvento ?? registrarEnConsola;
   const app = express();
   app.disable("x-powered-by");
   app.use(cors({ origin: deps.corsOrigin }));
@@ -48,8 +52,9 @@ export function crearApp(deps: DependenciasApp): Express {
     rutasUsuarios({
       repo: deps.repo,
       dominiosPermitidos: deps.dominiosPermitidos,
-      registrarEvento: deps.registrarEvento ?? registrarEnConsola,
+      registrarEvento,
     }),
+    rutasPlanes({ repo: deps.repoPlanes, usuarios: deps.repo, registrarEvento }),
     () => {
       throw new ErrorApi(404, "NO_ENCONTRADO", "La ruta no existe.");
     },
