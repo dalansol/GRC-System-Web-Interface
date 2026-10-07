@@ -13,12 +13,24 @@ export interface HallazgoViewModel {
   description?: string;
   type?: string;
   severity: "Crítico" | "Alto" | "Medio" | "Bajo";
-  status: "Abierto" | "En Proceso" | "Cerrado";
+  status: "Abierto" | "En Proceso" | "En Revisión" | "Asignado" | "Cerrado";
   auditId?: string;
   controlId?: string;
   failedControlId?: string;
   ownerId?: string;
 }
+
+const orderFindings = (findings: HallazgoViewModel[]) =>
+  [...findings].sort((left, right) => {
+    const leftIsClosed = left.status === "Cerrado";
+    const rightIsClosed = right.status === "Cerrado";
+
+    if (leftIsClosed !== rightIsClosed) {
+      return leftIsClosed ? 1 : -1;
+    }
+
+    return 0;
+  });
 
 export function useHallazgosViewModel() {
   const [hallazgos, setHallazgos] = useState<HallazgoViewModel[]>([]);
@@ -41,10 +53,10 @@ export function useHallazgosViewModel() {
           throw new Error("No se pudieron obtener los hallazgos del servidor.");
         }
         const data = await response.json();
-        setHallazgos(data);
+        setHallazgos(orderFindings(data));
       } else {
         // Fallback a mock_data.tsx
-        setHallazgos(INITIAL_FINDINGS as unknown as HallazgoViewModel[]);
+        setHallazgos(orderFindings(INITIAL_FINDINGS as unknown as HallazgoViewModel[]));
       }
     } catch (error: any) {
       toast.error(error.message || "Error al cargar los hallazgos.");
@@ -58,6 +70,15 @@ export function useHallazgosViewModel() {
   }, []);
 
   const handleDelete = async (id: string) => {
+    const finding = hallazgos.find((item) => item.id === id);
+
+    if (finding?.status === "En Revisión") {
+      toast.error(
+        "Este hallazgo ya fue enviado a revisión por la jefatura y no puede eliminarse.",
+      );
+      return;
+    }
+
     if (!window.confirm("¿Estás seguro de que deseas eliminar este hallazgo?")) return;
 
     setDeletingId(id);
@@ -121,7 +142,7 @@ export function useHallazgosViewModel() {
   };
 
   const handleFindingCreated = (finding: any) => {
-    setHallazgos((current) => [finding, ...current]);
+    setHallazgos((current) => orderFindings([finding, ...current]));
   };
 
   const hallazgosFiltrados = useMemo(() => {

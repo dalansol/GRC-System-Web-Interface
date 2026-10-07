@@ -141,6 +141,7 @@ export default function FormularioHallazgo({
       severity,
       failedControl: selectedControl.name,
       failedControlId: selectedControl.id,
+      controlId: selectedControl.id,
       residualRisk,
       status: "Abierto",
       auditId,

@@ -168,7 +168,7 @@ export default function VistaHallazgo() {
                         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                           {item.status === "Cerrado" ? (
                             <CheckCircle2 size={14} className="text-green-500" />
-                          ) : item.status === "En Proceso" ? (
+                          ) : item.status === "En Proceso" || item.status === "En Revisión" ? (
                             <Clock size={14} className="text-yellow-500" />
                           ) : (
                             <AlertCircle size={14} className="text-red-500" />
@@ -185,9 +185,18 @@ export default function VistaHallazgo() {
                             <Edit3 size={16} />
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleDelete(item.id)}
                             disabled={deletingId === item.id}
-                            className="rounded p-1 text-muted-foreground hover:bg-red-500/10 hover:text-red-600 disabled:opacity-50"
+                            title={
+                              item.status === "En Revisión"
+                                ? "Este hallazgo ya fue enviado a revisión y no puede eliminarse"
+                                : "Eliminar hallazgo"
+                            }
+                            className={`rounded p-1 disabled:opacity-50 ${item.status === "En Revisión"
+                                ? "cursor-not-allowed text-muted-foreground/40"
+                                : "text-muted-foreground hover:bg-red-500/10 hover:text-red-600"
+                              }`}
                           >
                             {deletingId === item.id ? (
                               <Loader2 size={16} className="animate-spin" />
@@ -282,6 +291,7 @@ export default function VistaHallazgo() {
               >
                 <option value="Abierto">Abierto</option>
                 <option value="En Proceso">En Proceso</option>
+                <option value="En Revisión">En Revisión</option>
                 <option value="Cerrado">Cerrado</option>
               </select>
             </div>
