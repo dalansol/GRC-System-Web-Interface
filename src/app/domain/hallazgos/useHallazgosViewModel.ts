@@ -72,9 +72,9 @@ export function useHallazgosViewModel() {
   const handleDelete = async (id: string) => {
     const finding = hallazgos.find((item) => item.id === id);
 
-    if (finding?.status === "En Revisión") {
+    if (finding?.status !== "Abierto") {
       toast.error(
-        "Este hallazgo ya fue enviado a revisión por la jefatura y no puede eliminarse.",
+        "Solo se pueden eliminar hallazgos en estado Abierto.",
       );
       return;
     }
