@@ -33,25 +33,33 @@ const MS_SOSTENER = 450;
 const MS_DESLIZAR = 600;
 const MS_PAUSA_FILA = 150;
 const MS_FUSION = 600;
-const MS_FUNDIDO = 200;
 // La fase nueva aparece en el centro, por encima de la fila, para no pisar los títulos de las ya colocadas.
-const ALTURA_ENTRADA = 72;
-const LADO_CUADRO = 40;
+const ALTURA_ENTRADA = 84;
+const TAMANO_ICONO = 26;
+const SOMBRA_CUADRO = "0 1px 2px rgba(15,27,45,0.35), 0 12px 28px -12px rgba(15,79,255,0.55)";
+const SIN_SOMBRA = "0 0 0 rgba(15,27,45,0), 0 0 0 rgba(15,79,255,0)";
 // Los cuadros llegan al logo uno tras otro, de izquierda a derecha, y cada chevrón se enciende al llegar el suyo.
 const RETRASO_CHEVRON = 0.08;
-// Recorte del cuadro con seis vértices, para poder deformarlo hasta la silueta de un chevrón ">".
-const RECORTE_CUADRO = "polygon(0% 0%, 100% 0%, 100% 50%, 100% 100%, 0% 100%, 0% 50%)";
-const RECORTE_CHEVRON = "polygon(0% 0%, 50% 0%, 100% 50%, 50% 100%, 0% 100%, 50% 50%)";
+// Recortes con el mismo número de vértices (64) para poder interpolar uno en otro, generados a partir del contorno
+// real del primer chevrón de src/imports/logo.svg (muestreo uniforme por longitud de arco, coordenadas relativas a su
+// caja, empezando arriba a la izquierda y en sentido horario). El del cuadro es la proyección de cada vértice al borde
+// más cercano de la caja, con las cuatro esquinas conservadas: cada punto viaja en línea recta desde el borde hasta su
+// sitio en la silueta, así el cuadro se "talla" en chevrón sin formas intermedias abultadas y termina exactamente con
+// la figura del logo, puntas redondeadas incluidas.
+const RECORTE_CUADRO =
+  "polygon(4.906% 0%, 10.629% 0%, 17.744% 0%, 25.442% 0%, 32.852% 0%, 39.131% 0%, 43.983% 0%, 48.688% 0%, 53.392% 0%, 58.096% 0%, 62.801% 0%, 67.505% 0%, 100% 0%, 100% 29.777%, 100% 33.058%, 100% 36.338%, 100% 39.618%, 100% 42.902%, 100% 46.598%, 100% 50.681%, 100% 54.686%, 100% 58.184%, 100% 61.464%, 100% 64.745%, 100% 68.025%, 100% 100%, 70.66% 100%, 65.955% 100%, 61.251% 100%, 56.547% 100%, 51.842% 100%, 47.138% 100%, 42.434% 100%, 37.234% 100%, 30.495% 100%, 22.893% 100%, 15.291% 100%, 0% 100%, 0% 94.235%, 0% 90.429%, 0% 86.325%, 0% 82.389%, 0% 78.984%, 0% 75.703%, 0% 72.423%, 0% 69.143%, 0% 65.862%, 0% 62.582%, 0% 59.301%, 0% 56.021%, 0% 52.741%, 0% 49.46%, 0% 46.18%, 0% 42.899%, 0% 39.619%, 0% 36.339%, 0% 33.058%, 0% 29.778%, 0% 26.497%, 0% 23.217%, 0% 19.937%, 0% 16.362%, 0% 12.319%, 0% 0%)";
+const RECORTE_CHEVRON =
+  "polygon(4.906% 4.652%, 10.629% 1.898%, 17.744% 0.313%, 25.442% 0.076%, 32.852% 1.215%, 39.131% 3.6%, 43.983% 6.814%, 48.688% 10.095%, 53.392% 13.375%, 58.096% 16.655%, 62.801% 19.936%, 67.505% 23.216%, 72.21% 26.497%, 76.914% 29.777%, 81.618% 33.058%, 86.323% 36.338%, 91.027% 39.618%, 95.723% 42.902%, 99.091% 46.598%, 99.964% 50.681%, 98.243% 54.686%, 94.182% 58.184%, 89.477% 61.464%, 84.773% 64.745%, 80.069% 68.025%, 75.364% 71.306%, 70.66% 74.586%, 65.955% 77.867%, 61.251% 81.147%, 56.547% 84.427%, 51.842% 87.708%, 47.138% 90.988%, 42.434% 94.269%, 37.234% 97.311%, 30.495% 99.309%, 22.893% 100%, 15.291% 99.309%, 8.552% 97.312%, 3.441% 94.235%, 0.536% 90.429%, 0.169% 86.325%, 2.381% 82.389%, 6.734% 78.984%, 11.439% 75.703%, 16.143% 72.423%, 20.848% 69.143%, 25.552% 65.862%, 30.257% 62.582%, 34.961% 59.301%, 39.666% 56.021%, 44.37% 52.741%, 47.523% 49.46%, 42.818% 46.18%, 38.114% 42.899%, 33.409% 39.619%, 28.705% 36.339%, 24% 33.058%, 19.296% 29.778%, 14.591% 26.497%, 9.887% 23.217%, 5.183% 19.937%, 1.377% 16.362%, 0.002% 12.319%, 1.225% 8.262%)";
 // Cada cuadro se convierte en un chevrón; como hay cuatro fases y tres chevrones, la última se funde con el tercero.
 const chevronDe = (fase: number) => Math.min(fase, CHEVRONES - 1);
 
-// Pasos: 2i la fase i aparece en el centro, 2i+1 se desliza a la fila; luego fusión y logo.
+// Pasos: 2i la fase i aparece en el centro, 2i+1 se desliza a la fila; luego la fusión. El encendido de cada chevrón
+// no va por temporizador: lo dispara la llegada real de su cuadro (onAnimationComplete), para que ambos cambien en el
+// mismo cuadro de animación. PASO_FIN es solo un cierre de seguridad: la fila se oculta y el logo queda completo.
 const PASO_FUSION = FASES.length * 2;
-const PASO_LOGO = PASO_FUSION + 1;
-const PASO_FIN = PASO_LOGO + 1; // ya terminaron los fundidos: la fila puede ocultarse del todo
+const PASO_FIN = PASO_FUSION + 1;
 const T_FUSION = (FASES.length - 1) * MS_POR_FASE + MS_SOSTENER + MS_DESLIZAR + MS_PAUSA_FILA;
-const T_LOGO = T_FUSION + MS_FUSION;
-const T_FIN = T_LOGO + MS_FUNDIDO + (FASES.length - 1) * RETRASO_CHEVRON * 1000 + 100;
+const T_FIN = T_FUSION + MS_FUSION + (CHEVRONES - 1) * RETRASO_CHEVRON * 1000 + 200;
 
 // Avanza el paso de la secuencia con temporizadores. Empieza en -1 (nada visible) hasta que el escenario
 // terminó de medir sus posiciones; con movimiento reducido arranca en el estado final.
@@ -67,7 +75,6 @@ function usePasoSecuencia(reducir: boolean, medido: boolean) {
       programar(i * MS_POR_FASE + MS_SOSTENER, () => setPaso(2 * i + 1));
     });
     programar(T_FUSION, () => setPaso(PASO_FUSION));
-    programar(T_LOGO, () => setPaso(PASO_LOGO));
     programar(T_FIN, () => setPaso(PASO_FIN));
     return () => ids.forEach((id) => window.clearTimeout(id));
   }, [reducir, medido]);
@@ -91,9 +98,11 @@ interface PropsEscenario {
   paso: number;
   reducir: boolean;
   onMedido: () => void;
+  // Se avisa cuando el último chevrón se encendió: la palabra "Expedite" puede viajar junto al logo.
+  onLogoCompleto: () => void;
 }
 
-function EscenarioCiclo({ paso, reducir, onMedido }: PropsEscenario) {
+function EscenarioCiclo({ paso, reducir, onMedido, onLogoCompleto }: PropsEscenario) {
   const refEscenario = useRef<HTMLDivElement>(null);
   const fases = useRef<(HTMLLIElement | null)[]>([]);
   const cuadros = useRef<(HTMLSpanElement | null)[]>([]);
@@ -102,10 +111,23 @@ function EscenarioCiclo({ paso, reducir, onMedido }: PropsEscenario) {
   const [alCentro, setAlCentro] = useState<number[] | null>(null);
   // Desplazamiento y escala de cada cuadro hasta ocupar exactamente su chevrón del logo.
   const [alChevron, setAlChevron] = useState<Destino[] | null>(null);
+  // Qué cuadros ya llegaron a su chevrón. Con movimiento reducido todos "llegaron" desde el principio.
+  const [llegados, setLlegados] = useState<boolean[]>(() => FASES.map(() => reducir));
 
   const fusion = paso >= PASO_FUSION;
-  const terminado = paso >= PASO_LOGO;
   const oculto = paso >= PASO_FIN;
+  const llego = (i: number) => llegados[i] || oculto;
+  // Un chevrón se enciende en cuanto llega el primer cuadro que se convierte en él.
+  const chevronEncendido = (c: number) => FASES.some((_, i) => chevronDe(i) === c && llego(i));
+  const terminado = FASES.every((_, i) => llego(i));
+
+  useEffect(() => {
+    if (terminado) onLogoCompleto();
+  }, [terminado, onLogoCompleto]);
+
+  const marcarLlegada = useCallback((i: number) => {
+    setLlegados((previos) => (previos[i] ? previos : previos.map((v, j) => v || j === i)));
+  }, []);
 
   // La fila se mide una vez, antes de pintar y aún sin desplazar: sus posiciones no dependen de la tipografía.
   useLayoutEffect(() => {
@@ -132,7 +154,8 @@ function EscenarioCiclo({ paso, reducir, onMedido }: PropsEscenario) {
         if (!cuadro || !chevron || chevron.width === 0) return SIN_MOVER;
         const origen = centroDe(cuadro);
         const meta = centroDe(chevron);
-        return { dx: meta.x - origen.x, dy: meta.y - origen.y, sx: chevron.width / LADO_CUADRO, sy: chevron.height / LADO_CUADRO };
+        // Escala a partir del tamaño medido del cuadro (no de una constante), así es exacta con cualquier zoom.
+        return { dx: meta.x - origen.x, dy: meta.y - origen.y, sx: chevron.width / cuadro.width, sy: chevron.height / cuadro.height };
       }),
     );
   }, [reducir, fusion, alChevron]);
@@ -145,14 +168,15 @@ function EscenarioCiclo({ paso, reducir, onMedido }: PropsEscenario) {
           const enFila = paso >= 2 * i + 1;
           const haciaCentro = alCentro?.[i] ?? 0;
           const { dx, dy, sx, sy } = alChevron?.[i] ?? SIN_MOVER;
-          const retraso = i * RETRASO_CHEVRON;
+          // Las dos últimas fases viajan juntas al tercer chevrón, así llegan y se relevan en el mismo instante.
+          const retraso = chevronDe(i) * RETRASO_CHEVRON;
           return (
             <motion.li
               key={nombre}
               ref={(el) => {
                 fases.current[i] = el;
               }}
-              className="flex min-w-0 flex-1 flex-col items-center gap-2.5"
+              className="flex min-w-0 flex-1 flex-col items-center gap-3"
               initial={false}
               animate={{
                 opacity: visible ? 1 : 0,
@@ -164,31 +188,43 @@ function EscenarioCiclo({ paso, reducir, onMedido }: PropsEscenario) {
                 transform: enFila ? { duration: MS_DESLIZAR / 1000, ease: MOVER } : visible ? { duration: 0.3, ease: SUAVE } : { duration: 0 },
               }}
             >
-              {/* En la fusión el cuadro vuela hasta su chevrón, se estira a su tamaño, se recorta en forma de ">" y se
-                  vuelve blanco; al llegar se apaga mientras el chevrón real se enciende en el mismo lugar. */}
+              {/* El cuadro es blanco desde el inicio, como el logo en el que termina: en la fusión vuela hasta su
+                  chevrón, se estira a su tamaño y se recorta con la silueta exacta del chevrón. Icono y sombra se
+                  apagan justo al despegar (mismo retraso que el vuelo). Al terminar el vuelo, onAnimationComplete marca
+                  la llegada: en ese mismo render el cuadro se oculta y el chevrón real aparece, sin fundido, porque
+                  ambos son blancos y tienen la misma forma y un fundido cruzado solo produciría un parpadeo. */}
               <motion.span
                 ref={(el) => {
                   cuadros.current[i] = el;
                 }}
-                className={`flex size-10 items-center justify-center rounded-lg ring-1 transition-colors duration-300 ${
-                  fusion ? "bg-white ring-white" : "bg-primary text-white ring-primary"
-                }`}
+                className={`flex size-14 items-center justify-center rounded-xl bg-white text-sidebar ${llego(i) ? "invisible" : ""}`}
                 initial={false}
                 animate={{
                   transform: fusion ? `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})` : "translate(0px, 0px) scale(1, 1)",
                   clipPath: fusion ? RECORTE_CHEVRON : RECORTE_CUADRO,
-                  opacity: terminado ? 0 : 1,
+                  boxShadow: fusion ? SIN_SOMBRA : SOMBRA_CUADRO,
                 }}
                 transition={{
                   transform: { duration: MS_FUSION / 1000, ease: MOVER, delay: fusion ? retraso : 0 },
                   clipPath: { duration: MS_FUSION / 1000, ease: MOVER, delay: fusion ? retraso : 0 },
-                  opacity: { duration: MS_FUNDIDO / 1000, ease: SUAVE, delay: terminado ? retraso : 0 },
+                  boxShadow: { duration: 0.2, ease: SUAVE, delay: fusion ? retraso : 0 },
+                }}
+                // Solo cuenta la llegada del vuelo real: en el primer render de la fusión el destino aún no está medido.
+                onAnimationComplete={() => {
+                  if (fusion && alChevron) marcarLlegada(i);
                 }}
               >
-                <Icono size={18} aria-hidden className={`transition-opacity duration-150 ${fusion ? "opacity-0" : "opacity-100"}`} />
+                <motion.span
+                  className="flex"
+                  initial={false}
+                  animate={{ opacity: fusion ? 0 : 1 }}
+                  transition={{ duration: 0.15, ease: SUAVE, delay: fusion ? retraso : 0 }}
+                >
+                  <Icono size={TAMANO_ICONO} strokeWidth={2} aria-hidden />
+                </motion.span>
               </motion.span>
               <span
-                className={`text-center text-sm leading-tight font-semibold text-white transition-opacity duration-300 ${fusion ? "opacity-0" : "opacity-100"}`}
+                className={`text-center text-base leading-tight font-semibold tracking-tight text-white transition-opacity duration-300 ${fusion ? "opacity-0" : "opacity-100"}`}
               >
                 {nombre}
               </span>
@@ -200,7 +236,7 @@ function EscenarioCiclo({ paso, reducir, onMedido }: PropsEscenario) {
         <LogoExpedite
           className="size-24 text-white"
           titulo={terminado ? "Logotipo de Expedite" : undefined}
-          chevrones={Array.from({ length: CHEVRONES }, (_, c) => ({ visible: terminado, retraso: c * RETRASO_CHEVRON }))}
+          chevrones={Array.from({ length: CHEVRONES }, (_, c) => ({ visible: chevronEncendido(c) }))}
           refChevron={(c, el) => {
             chevrones.current[c] = el;
           }}
@@ -229,7 +265,9 @@ function PanelMarca() {
   const [medido, setMedido] = useState(false);
   const marcarMedido = useCallback(() => setMedido(true), []);
   const paso = usePasoSecuencia(reducir, medido);
-  const terminado = paso >= PASO_LOGO;
+  // La palabra de la cabecera se retira en el mismo render en que aparece junto al logo (comparten layoutId).
+  const [terminado, setTerminado] = useState(reducir);
+  const marcarTerminado = useCallback(() => setTerminado(true), []);
   return (
     <aside className="relative hidden overflow-hidden bg-sidebar lg:flex lg:w-[45%] lg:flex-col lg:justify-between lg:p-12 xl:p-16">
       <div
@@ -256,7 +294,7 @@ function PanelMarca() {
         )}
       </div>
       <div className="relative py-12">
-        <EscenarioCiclo paso={paso} reducir={reducir} onMedido={marcarMedido} />
+        <EscenarioCiclo paso={paso} reducir={reducir} onMedido={marcarMedido} onLogoCompleto={marcarTerminado} />
       </div>
       <p className="relative text-sm text-sidebar-foreground/70">Dirección de Auditoría Interna</p>
     </aside>

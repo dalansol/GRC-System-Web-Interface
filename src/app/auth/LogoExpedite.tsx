@@ -1,10 +1,8 @@
-import { motion } from "motion/react";
-
 // Logo de Expedite como SVG en línea (mismo dibujo que src/imports/logo.svg) con cada chevrón por separado,
 // para que la secuencia del login pueda medirlos y encenderlos uno por uno. Usa currentColor.
+// Cada chevrón se enciende de golpe, sin fundido ni temporizador, en el render en que `visible` pasa a true: toma el
+// relevo del cuadro que llega con su misma silueta, y un fundido entre dos formas blancas idénticas solo parpadearía.
 // Archivo generado a partir de logo.svg; no editar los trazos a mano.
-
-const SUAVE = [0.23, 1, 0.32, 1] as const;
 
 export const CHEVRONES = 3;
 
@@ -22,7 +20,6 @@ const RECORTES = [
 
 interface Chevron {
   visible: boolean;
-  retraso?: number;
 }
 
 interface Props {
@@ -50,15 +47,9 @@ export function LogoExpedite({ className, titulo, chevrones, refChevron }: Props
       </defs>
       <g transform="translate(36 213)">
         {TRAZOS.map((d, i) => (
-          <motion.g
-            key={i}
-            clipPath={`url(#logo-expedite-recorte-${i})`}
-            initial={false}
-            animate={{ opacity: chevrones[i]?.visible ? 1 : 0 }}
-            transition={{ duration: 0.25, ease: SUAVE, delay: chevrones[i]?.retraso ?? 0 }}
-          >
+          <g key={i} clipPath={`url(#logo-expedite-recorte-${i})`} opacity={chevrones[i]?.visible ? 1 : 0}>
             <path ref={(el) => refChevron?.(i, el)} d={d} fill="currentColor" />
-          </motion.g>
+          </g>
         ))}
       </g>
     </svg>

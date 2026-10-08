@@ -135,8 +135,9 @@ Frontend (`.env`):
 Cuando existan los recursos en Azure:
 
 1. Ejecutar en la base de Azure SQL, en este orden, `backend/sql/001_schema.sql`,
-   `002_seed.sql` y `003_primer_administrador.sql` (este último hay que editarlo
-   antes con el nombre y correo del primer Administrador).
+   `002_seed.sql`, `003_primer_administrador.sql` (este último hay que editarlo
+   antes con el nombre y correo del primer Administrador) y `004_findings.sql`.
+   `005_seed_findings.sql` carga hallazgos de prueba y solo es para desarrollo.
 2. En `backend/.env`: `DATA_MODE=sql` con las variables `DB_*`, `AUTH_MODE=entra`
    con `ENTRA_TENANT_ID` y `ENTRA_CLIENT_ID`, y el dominio real en
    `DOMINIOS_PERMITIDOS`.
