@@ -86,11 +86,71 @@ describe("inicio de sesión", () => {
     montar(proveedor);
     const usuario = userEvent.setup();
 
-    await usuario.type(await screen.findByLabelText("Correo del usuario de prueba"), "s.ramirez@expedite.com");
+    await usuario.type(await screen.findByLabelText("Correo electrónico"), "s.ramirez@expedite.com");
     await usuario.click(screen.getByRole("button", { name: "Entrar" }));
 
     expect(proveedor.iniciarSesion).toHaveBeenCalledWith("s.ramirez@expedite.com");
     expect(await screen.findByText(/Dentro: Sofía Ramírez/)).toBeInTheDocument();
+  });
+
+  it("en modo de desarrollo el acceso de demostración llena el correo del rol elegido", async () => {
+    // Radix mide el popover con ResizeObserver, que jsdom no trae.
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    montar(proveedorFalso("dev", false));
+    const usuario = userEvent.setup();
+
+    await usuario.click(await screen.findByRole("button", { name: /Usar un rol de prueba/ }));
+    await usuario.click(await screen.findByRole("button", { name: /Auditor Senior/ }));
+
+    const campo = screen.getByLabelText("Correo electrónico");
+    expect(campo).toHaveValue("c.morales@expedite.com");
+    await waitFor(() => expect(campo).toHaveFocus());
+    vi.unstubAllGlobals();
+  });
+
+  it("mientras se inicia la sesión el botón queda deshabilitado", async () => {
+    const proveedor = proveedorFalso("entra", false);
+    let terminar = () => {};
+    proveedor.iniciarSesion.mockImplementation(() => new Promise<void>((resolver) => (terminar = resolver)));
+    montar(proveedor);
+    const usuario = userEvent.setup();
+
+    const boton = await screen.findByRole("button", { name: "Iniciar sesión con Microsoft" });
+    await usuario.click(boton);
+
+    expect(boton).toBeDisabled();
+    expect(boton).toHaveAttribute("aria-busy", "true");
+    await act(async () => terminar());
+    await waitFor(() => expect(boton).toBeEnabled());
+  });
+
+  it("el panel presenta las fases una por una y al final las convierte en el logo grande de Expedite", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      montar(proveedorFalso("entra", false));
+      await screen.findByRole("button", { name: "Iniciar sesión con Microsoft" });
+
+      const fila = screen.getByText("Planeación").closest("ol");
+      expect(fila).not.toHaveAttribute("aria-hidden");
+      expect(screen.queryByRole("img", { name: "Logotipo de Expedite" })).not.toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(6000);
+      });
+
+      expect(screen.getByRole("img", { name: "Logotipo de Expedite" })).toBeInTheDocument();
+      // La fila sigue montada para conservar la altura del panel, pero queda fuera del árbol accesible.
+      expect(fila).toHaveAttribute("aria-hidden", "true");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("si la cuenta no está registrada o está inactiva, explica el motivo y no deja entrar", async () => {
