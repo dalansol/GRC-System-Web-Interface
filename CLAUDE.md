@@ -49,7 +49,7 @@ src/
   imports/logo.svg         ← logo Expedite
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
 backend/
-  sql/                     ← scripts de Azure SQL (esquema, datos iniciales, primer administrador)
+  sql/                     ← scripts de Azure SQL (esquema, datos iniciales, primer administrador, hallazgos y sus datos de prueba)
   src/server.ts            ← único punto de arranque; abre la conexión a la base y monta las rutas
   src/app.ts               ← app Express; recibe repositorio, verificador de tokens y rutas
   src/db.ts                ← conexión compartida (la registra server.ts)
