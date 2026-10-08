@@ -187,13 +187,13 @@ export default function VistaHallazgo() {
                           <button
                             type="button"
                             onClick={() => handleDelete(item.id)}
-                            disabled={deletingId === item.id}
+                            disabled={deletingId === item.id || item.status !== "Abierto"}
                             title={
-                              item.status === "En Revisión"
-                                ? "Este hallazgo ya fue enviado a revisión y no puede eliminarse"
+                              item.status !== "Abierto"
+                                ? "Solo se pueden eliminar hallazgos en estado Abierto"
                                 : "Eliminar hallazgo"
                             }
-                            className={`rounded p-1 disabled:opacity-50 ${item.status === "En Revisión"
+                            className={`rounded p-1 disabled:opacity-50 ${item.status !== "Abierto"
                                 ? "cursor-not-allowed text-muted-foreground/40"
                                 : "text-muted-foreground hover:bg-red-500/10 hover:text-red-600"
                               }`}
