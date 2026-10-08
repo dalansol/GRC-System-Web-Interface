@@ -64,3 +64,24 @@ CREATE TABLE dbo.audit_plans (
     created_at      DATETIME2(0)      NOT NULL CONSTRAINT df_audit_plans_created_at DEFAULT SYSUTCDATETIME(),
     CONSTRAINT ck_audit_plans_dates CHECK (end_date > start_date)
 );
+
+-- Evidence (Archivos y adjuntos para controles y hallazgos)
+IF OBJECT_ID('dbo.evidence', 'U') IS NULL
+CREATE TABLE dbo.evidence (
+    id            NVARCHAR(50)   NOT NULL CONSTRAINT pk_evidence PRIMARY KEY,
+    entity_id     NVARCHAR(50)   NULL,
+    entity_type   NVARCHAR(20)   NOT NULL CONSTRAINT ck_evidence_entity_type CHECK (entity_type IN ('control', 'hallazgo')),
+    file_name     NVARCHAR(255)  NOT NULL,
+    mime_type     NVARCHAR(10)   NOT NULL CONSTRAINT ck_evidence_mime_type CHECK (mime_type IN ('pdf', 'xlsx')),
+    file_size     BIGINT         NOT NULL,
+    file_hash     NVARCHAR(128)  NOT NULL,
+    storage_path  NVARCHAR(500)  NOT NULL,
+    uploaded_by   NVARCHAR(100)  NULL,
+    created_at    DATETIME2(0)   NOT NULL CONSTRAINT df_evidence_created_at DEFAULT SYSUTCDATETIME(),
+    control_id    NVARCHAR(50)   NULL,
+    finding_id    NVARCHAR(50)   NULL,
+    audit_id      NVARCHAR(50)   NULL
+);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.evidence') AND name = 'IX_evidence_entity')
+CREATE NONCLUSTERED INDEX IX_evidence_entity ON dbo.evidence (entity_id, entity_type);

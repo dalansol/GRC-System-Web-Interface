@@ -66,3 +66,13 @@ JOIN dbo.permissions p ON p.name = v.permission_name
 WHERE NOT EXISTS (
     SELECT 1 FROM dbo.role_permissions rp WHERE rp.role_id = r.id AND rp.permission_id = p.id
 );
+
+-- Evidence tests (archivos adjuntos)
+INSERT INTO dbo.evidence
+    (id, entity_id, entity_type, file_name, mime_type, file_size, file_hash, storage_path, uploaded_by, created_at, control_id, finding_id, audit_id)
+SELECT v.*
+FROM (VALUES
+    (N'EVD-TEST-001', N'FND-TEST-001', N'hallazgo', N'evidencia_aprobacion.pdf', N'pdf', 1048576, N'hash1', N'uploads/evidencia_aprobacion.pdf', N'USR-001', CONVERT(DATETIME2(3), '2026-10-01T09:00:00'), NULL, N'FND-TEST-001', NULL),
+    (N'EVD-TEST-002', N'CTR-001', N'control', N'matriz_riesgos.xlsx', N'xlsx', 2048576, N'hash2', N'uploads/matriz_riesgos.xlsx', N'USR-002', CONVERT(DATETIME2(3), '2026-10-02T10:00:00'), N'CTR-001', NULL, NULL)
+) AS v (id, entity_id, entity_type, file_name, mime_type, file_size, file_hash, storage_path, uploaded_by, created_at, control_id, finding_id, audit_id)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.evidence e WHERE e.id = v.id);
