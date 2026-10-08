@@ -44,7 +44,7 @@ const INITIAL_FINDINGS: Finding[] = [
     id: "HAL-2025-001", folio: "HAL-2025-001",
     title: "Segregación de funciones insuficiente en cierre contable",
     severity: "Crítico", failedControl: "Segregación de Funciones — Cierre Contable", failedControlId: "CTR-002",
-    residualRisk: "Alto", status: "Asignado", auditId: "AUD-001", date: "2025-07-10",
+    residualRisk: "Alto", status: "En Proceso", auditId: "AUD-001", date: "2025-07-10",
     actionPlan: { description: "Revisar y reasignar roles en SAP para eliminar conflictos de acceso. Implementar aprobación dual en todas las conciliaciones.", responsible: "Carlos Morales — Finanzas Corporativas", dueDate: "2025-09-15", status: "Asignado" },
   },
   {
