@@ -1,12 +1,15 @@
 import cors from "cors";
 import express, { type ErrorRequestHandler, type Express, type Router } from "express";
+import type { ProveedorIA } from "./asistente/proveedor.js";
 import type { VerificadorToken } from "./auth/verificador.js";
 import { registrarEnConsola, type RegistrarEvento } from "./bitacora.js";
 import { ErrorApi } from "./errores.js";
 import { autenticar } from "./middleware/autenticar.js";
+import type { RepositorioEvidencias } from "./repos/evidencias.js";
 import type { RepositorioPlanes } from "./repos/planes.js";
 import type { RepositorioPlanesAccion } from "./repos/planesAccion.js";
 import type { RepositorioUsuarios } from "./repos/repositorio.js";
+import { rutasAsistente } from "./routes/asistente.js";
 import { rutasPlanes } from "./routes/planes.js";
 import { rutasPlanesAccion } from "./routes/planesAccion.js";
 import { rutasUsuarios } from "./routes/usuarios.js";
@@ -15,6 +18,9 @@ export interface DependenciasApp {
   repo: RepositorioUsuarios;
   repoPlanes: RepositorioPlanes;
   repoPlanesAccion: RepositorioPlanesAccion;
+  repoEvidencias: RepositorioEvidencias;
+  /** null si la IA está desactivada (IA_PROVEEDOR=ninguno). */
+  proveedorIA: ProveedorIA | null;
   verificador: VerificadorToken;
   dominiosPermitidos: readonly string[];
   corsOrigin: string | string[];
@@ -59,6 +65,7 @@ export function crearApp(deps: DependenciasApp): Express {
     }),
     rutasPlanes({ repo: deps.repoPlanes, usuarios: deps.repo, registrarEvento }),
     rutasPlanesAccion({ repo: deps.repoPlanesAccion, usuarios: deps.repo, registrarEvento }),
+    rutasAsistente({ proveedor: deps.proveedorIA, evidencias: deps.repoEvidencias, registrarEvento }),
     () => {
       throw new ErrorApi(404, "NO_ENCONTRADO", "La ruta no existe.");
     },

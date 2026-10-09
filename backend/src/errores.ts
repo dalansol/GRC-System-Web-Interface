@@ -9,6 +9,9 @@ export type CodigoError =
   | "NO_ENCONTRADO"
   | "CODIGO_DUPLICADO"
   | "PLAN_DUPLICADO"
+  | "SIN_TEXTO"
+  | "IA_NO_DISPONIBLE"
+  | "IA_TIEMPO_AGOTADO"
   | "ERROR_INTERNO";
 
 export class ErrorApi extends Error {

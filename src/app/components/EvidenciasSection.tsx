@@ -6,11 +6,15 @@ import {
   FileText,
   Hash,
   Loader2,
+  Sparkles,
   Trash2,
   UploadCloud,
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ROLES_ASISTENTE } from "../api/asistente";
+import { useSesion } from "../auth/SesionContext";
+import PanelAsistenteEvidencia from "./PanelAsistenteEvidencia";
 import { Card } from "./SharedComponents";
 import SpreadsheetEditor from "./SpreadsheetEditor.tsx";
 
@@ -79,6 +83,9 @@ export default function EvidenciasSection({
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [xlsxTarget, setXlsxTarget] = useState<EvidenceFile | null>(null);
+  const [iaTarget, setIaTarget] = useState<EvidenceFile | null>(null);
+  const { usuario } = useSesion();
+  const puedeUsarAsistente = !!usuario && ROLES_ASISTENTE.includes(usuario.rol);
   const [usingFallback, setUsingFallback] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -213,6 +220,13 @@ export default function EvidenciasSection({
           onHashUpdate={(hash, ver) => { handleHashUpdate(xlsxTarget.id, hash, ver); setXlsxTarget(null); }}
         />
       )}
+      {iaTarget && (
+        <PanelAsistenteEvidencia
+          key={iaTarget.id}
+          evidencia={{ id: String(iaTarget.id), nombre: iaTarget.name }}
+          onCerrar={() => setIaTarget(null)}
+        />
+      )}
       <Card className="p-5 mt-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -255,6 +269,15 @@ export default function EvidenciasSection({
                   <div className="text-[10px] text-muted-foreground">{f.uploadedBy}</div>
                   <div className="text-[10px] text-muted-foreground font-mono">{f.uploadDate}</div>
                 </div>
+                {puedeUsarAsistente && (
+                  <button
+                    onClick={() => setIaTarget(f)}
+                    aria-label={`Analizar ${f.name} con IA`}
+                    className="flex-shrink-0 flex items-center gap-1 text-[10px] px-2 py-1 bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/15 font-semibold transition-colors whitespace-nowrap"
+                  >
+                    <Sparkles size={10} /> Analizar con IA
+                  </button>
+                )}
                 {f.mimeType === "xlsx" && (
                   <button
                     onClick={() => setXlsxTarget(f)}

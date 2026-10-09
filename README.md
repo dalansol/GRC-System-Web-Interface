@@ -122,6 +122,10 @@ Backend (`backend/.env`):
 | `DB_SERVER`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Obligatorias con `DATA_MODE=sql`. Las usan usuarios y hallazgos. |
 | `DB_PORT` | Puerto de la base. Por omisión `1433`. |
 | `DB_TRUST_CERT` | `true` para un SQL Server local con certificado autofirmado; no arranca en producción. La conexión siempre va cifrada. |
+| `IA_PROVEEDOR` | Asistente de IA (SF-19): `gemini`, `azure` o `ninguno` (por omisión; la función queda desactivada y el resto de la plataforma funciona). Comprueba la conexión con `corepack pnpm ia:probar` y las reglas de contención con `corepack pnpm ia:evaluar`. |
+| `GEMINI_API_KEY`, `GEMINI_MODELO` | Obligatorias con `IA_PROVEEDOR=gemini` (clave de Google AI Studio y modelo, p. ej. `gemini-2.5-flash`). El plan gratuito solo es para documentos de prueba. |
+| `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION` | Obligatorias con `IA_PROVEEDOR=azure`. |
+| `IA_TIEMPO_ESPERA_MS` | Tiempo máximo de espera de la IA. Por omisión `30000`. |
 
 Frontend (`.env`):
 

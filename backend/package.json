@@ -8,7 +8,9 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ia:probar": "tsx src/scripts/probarIA.ts",
+    "ia:evaluar": "tsx src/scripts/evaluarIA.ts"
   },
   "keywords": [],
   "author": "",
@@ -17,10 +19,12 @@
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^18.0.5",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "jose": "^6.2.12",
     "mssql": "^12.7.2",
-    "multer": "^2.4.0"
+    "multer": "^2.4.0",
+    "unpdf": "^1.8.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

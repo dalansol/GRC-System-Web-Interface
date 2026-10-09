@@ -15,10 +15,24 @@ export type ConfigDatos =
       confiarCertificado: boolean;
     };
 
+// Asistente de IA (SF-19). Es opcional: sin proveedor la plataforma funciona y la función queda desactivada.
+export type ConfigIA =
+  | { proveedor: "ninguno"; tiempoEsperaMs: number }
+  | { proveedor: "gemini"; apiKey: string; modelo: string; tiempoEsperaMs: number }
+  | {
+      proveedor: "azure";
+      endpoint: string;
+      apiKey: string;
+      despliegue: string;
+      versionApi: string;
+      tiempoEsperaMs: number;
+    };
+
 export interface Config {
   puerto: number;
   auth: ConfigAuth;
   datos: ConfigDatos;
+  ia: ConfigIA;
   dominiosPermitidos: string[];
   corsOrigin: string[];
 }
@@ -30,14 +44,44 @@ function lista(valor: string | undefined): string[] {
     .filter(Boolean);
 }
 
-export function cargarConfig(env: Entorno): Config {
-  const produccion = env.NODE_ENV === "production";
-
-  const requerida = (nombre: string): string => {
+function variableRequerida(env: Entorno) {
+  return (nombre: string): string => {
     const valor = env[nombre]?.trim();
     if (!valor) throw new Error(`Falta la variable de entorno ${nombre}.`);
     return valor;
   };
+}
+
+// Se exporta aparte para que el script de prueba de conexión no exija el resto de la configuración.
+export function cargarConfigIA(env: Entorno): ConfigIA {
+  const requerida = variableRequerida(env);
+
+  const tiempoEsperaMs = Number(env.IA_TIEMPO_ESPERA_MS ?? 30000);
+  if (!Number.isInteger(tiempoEsperaMs) || tiempoEsperaMs < 1) {
+    throw new Error("IA_TIEMPO_ESPERA_MS debe ser un número entero de milisegundos mayor que cero.");
+  }
+
+  const proveedor = env.IA_PROVEEDOR?.trim() || "ninguno";
+  if (proveedor === "ninguno") return { proveedor, tiempoEsperaMs };
+  if (proveedor === "gemini") {
+    return { proveedor, apiKey: requerida("GEMINI_API_KEY"), modelo: requerida("GEMINI_MODELO"), tiempoEsperaMs };
+  }
+  if (proveedor === "azure") {
+    return {
+      proveedor,
+      endpoint: requerida("AZURE_OPENAI_ENDPOINT").replace(/\/+$/, ""),
+      apiKey: requerida("AZURE_OPENAI_API_KEY"),
+      despliegue: requerida("AZURE_OPENAI_DEPLOYMENT"),
+      versionApi: requerida("AZURE_OPENAI_API_VERSION"),
+      tiempoEsperaMs,
+    };
+  }
+  throw new Error("IA_PROVEEDOR debe ser 'gemini', 'azure' o 'ninguno'.");
+}
+
+export function cargarConfig(env: Entorno): Config {
+  const produccion = env.NODE_ENV === "production";
+  const requerida = variableRequerida(env);
 
   const numeroDePuerto = (nombre: string, porOmision: number): number => {
     const valor = Number(env[nombre] ?? porOmision);
@@ -94,6 +138,7 @@ export function cargarConfig(env: Entorno): Config {
     puerto,
     auth,
     datos,
+    ia: cargarConfigIA(env),
     dominiosPermitidos,
     // Vite usa el 5174 si el 5173 está ocupado.
     corsOrigin: corsOrigin.length > 0 ? corsOrigin : ["http://localhost:5173", "http://localhost:5174"],

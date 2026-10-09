@@ -1,9 +1,13 @@
 import "dotenv/config";
 import type { Router } from "express";
 import { crearApp } from "./app.js";
+import { crearProveedor } from "./asistente/proveedor.js";
 import { crearVerificadorDev, crearVerificadorEntra } from "./auth/verificador.js";
 import { cargarConfig } from "./config.js";
 import { registrarPool } from "./db.js";
+import type { RepositorioEvidencias } from "./repos/evidencias.js";
+import { RepositorioEvidenciasMemoria } from "./repos/evidenciasMemoria.js";
+import { RepositorioEvidenciasSql } from "./repos/evidenciasSql.js";
 import { RepositorioMemoria } from "./repos/memoria.js";
 import type { RepositorioPlanes } from "./repos/planes.js";
 import type { RepositorioPlanesAccion } from "./repos/planesAccion.js";
@@ -19,6 +23,7 @@ const config = cargarConfig(process.env);
 let repo: RepositorioUsuarios;
 let repoPlanes: RepositorioPlanes;
 let repoPlanesAccion: RepositorioPlanesAccion;
+let repoEvidencias: RepositorioEvidencias;
 const rutasSinSesion: Router[] = [];
 
 if (config.datos.modo === "sql") {
@@ -26,6 +31,7 @@ if (config.datos.modo === "sql") {
   repo = repoSql;
   repoPlanes = new RepositorioPlanesSql(repoSql.pool);
   repoPlanesAccion = new RepositorioPlanesAccionSql(repoSql.pool);
+  repoEvidencias = new RepositorioEvidenciasSql(repoSql.pool);
   // Las rutas de hallazgos y evidencias usan la misma conexión que las de usuarios.
   registrarPool(repoSql.pool);
   rutasSinSesion.push((await import("./routes/hallazgos.js")).default);
@@ -35,6 +41,7 @@ if (config.datos.modo === "sql") {
   repo = new RepositorioMemoria();
   repoPlanes = new RepositorioPlanesMemoria(repo);
   repoPlanesAccion = new RepositorioPlanesAccionMemoria(repo);
+  repoEvidencias = new RepositorioEvidenciasMemoria();
 }
 
 const verificador = config.auth.modo === "entra" ? crearVerificadorEntra(config.auth) : crearVerificadorDev();
@@ -43,6 +50,8 @@ const app = crearApp({
   repo,
   repoPlanes,
   repoPlanesAccion,
+  repoEvidencias,
+  proveedorIA: crearProveedor(config.ia),
   verificador,
   dominiosPermitidos: config.dominiosPermitidos,
   corsOrigin: config.corsOrigin,
@@ -51,6 +60,6 @@ const app = crearApp({
 
 app.listen(config.puerto, () => {
   console.log(
-    `API Expedite en http://localhost:${config.puerto}/api (autenticación: ${config.auth.modo}, datos: ${config.datos.modo})`,
+    `API Expedite en http://localhost:${config.puerto}/api (autenticación: ${config.auth.modo}, datos: ${config.datos.modo}, IA: ${config.ia.proveedor})`,
   );
 });

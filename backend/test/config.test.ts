@@ -78,3 +78,58 @@ describe("cargarConfig", () => {
     },
   );
 });
+
+describe("configuración del asistente de IA", () => {
+  const GEMINI = { ...DEV, IA_PROVEEDOR: "gemini", GEMINI_API_KEY: "clave", GEMINI_MODELO: "gemini-flash" };
+  const AZURE = {
+    ...DEV,
+    IA_PROVEEDOR: "azure",
+    AZURE_OPENAI_ENDPOINT: "https://expedite.openai.azure.com/",
+    AZURE_OPENAI_API_KEY: "clave",
+    AZURE_OPENAI_DEPLOYMENT: "expedite-chat",
+    AZURE_OPENAI_API_VERSION: "2024-10-21",
+  };
+
+  it("deja la IA desactivada si no se indica un proveedor", () => {
+    expect(cargarConfig(DEV).ia).toEqual({ proveedor: "ninguno", tiempoEsperaMs: 30000 });
+  });
+
+  it("carga Gemini", () => {
+    expect(cargarConfig(GEMINI).ia).toEqual({
+      proveedor: "gemini",
+      apiKey: "clave",
+      modelo: "gemini-flash",
+      tiempoEsperaMs: 30000,
+    });
+  });
+
+  it("carga Azure OpenAI sin la diagonal final del endpoint", () => {
+    expect(cargarConfig(AZURE).ia).toEqual({
+      proveedor: "azure",
+      endpoint: "https://expedite.openai.azure.com",
+      apiKey: "clave",
+      despliegue: "expedite-chat",
+      versionApi: "2024-10-21",
+      tiempoEsperaMs: 30000,
+    });
+  });
+
+  it("acepta otro tiempo de espera", () => {
+    expect(cargarConfig({ ...GEMINI, IA_TIEMPO_ESPERA_MS: "5000" }).ia.tiempoEsperaMs).toBe(5000);
+  });
+
+  it.each([
+    ["proveedor desconocido", { ...DEV, IA_PROVEEDOR: "watson" }, "IA_PROVEEDOR"],
+    ["Gemini sin clave", { ...GEMINI, GEMINI_API_KEY: "" }, "GEMINI_API_KEY"],
+    ["Gemini sin modelo", { ...GEMINI, GEMINI_MODELO: undefined }, "GEMINI_MODELO"],
+    ["Azure sin endpoint", { ...AZURE, AZURE_OPENAI_ENDPOINT: undefined }, "AZURE_OPENAI_ENDPOINT"],
+    ["Azure sin despliegue", { ...AZURE, AZURE_OPENAI_DEPLOYMENT: "" }, "AZURE_OPENAI_DEPLOYMENT"],
+    ["Azure sin versión", { ...AZURE, AZURE_OPENAI_API_VERSION: undefined }, "AZURE_OPENAI_API_VERSION"],
+    ["tiempo de espera inválido", { ...GEMINI, IA_TIEMPO_ESPERA_MS: "0" }, "IA_TIEMPO_ESPERA_MS"],
+  ] as [string, Record<string, string | undefined>, string][])(
+    "se niega a arrancar: %s",
+    (_caso, entorno, variable) => {
+      expect(() => cargarConfig(entorno)).toThrow(variable);
+    },
+  );
+});
