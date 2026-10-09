@@ -2,7 +2,7 @@
 // La bitácora inmutable aún no existe; por ahora los eventos salen como logs estructurados.
 
 export interface EventoBitacora {
-  accion: "usuario.alta" | "usuario.cambio_rol" | "plan.alta" | "plan.edicion";
+  accion: "usuario.alta" | "usuario.cambio_rol" | "plan.alta" | "plan.edicion" | "plan_accion.alta";
   actor: string;
   detalle: Record<string, unknown>;
 }

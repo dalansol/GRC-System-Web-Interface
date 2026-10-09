@@ -5,12 +5,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
 import { crearVerificadorEntra, type VerificadorToken } from "../src/auth/verificador.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
+import { RepositorioPlanesAccionMemoria } from "../src/repos/planesAccionMemoria.js";
 import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
 import { escuchar } from "./servidor.js";
 
 function repos() {
   const repo = new RepositorioMemoria();
-  return { repo, repoPlanes: new RepositorioPlanesMemoria(repo) };
+  return { repo, repoPlanes: new RepositorioPlanesMemoria(repo), repoPlanesAccion: new RepositorioPlanesAccionMemoria(repo) };
 }
 
 const TENANT = "11111111-1111-1111-1111-111111111111";

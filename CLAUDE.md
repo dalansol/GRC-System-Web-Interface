@@ -41,7 +41,7 @@ src/
   app/App.tsx              ← la mayoría de las vistas (en proceso de refactorización para reducir su tamaño)
   app/api/                 ← cliente HTTP y llamadas a la API
   app/auth/                ← sesión, inicio de sesión (MSAL / modo dev)
-  app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, VistaControles, EvidenciasSection, SpreadsheetEditor
+  app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, FormularioPlanAccion, VistaControles, EvidenciasSection, SpreadsheetEditor
   app/components/ui/       ← shadcn/ui (no editar salvo necesidad)
   app/components/figma/    ← ImageWithFallback
   app/domain/              ← lógica de estado/ViewModels (ej. useHallazgosViewModel)
@@ -49,11 +49,12 @@ src/
   imports/logo.svg         ← logo Expedite
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
 backend/
-  sql/                     ← scripts de Azure SQL (esquema, datos iniciales, primer administrador, hallazgos y sus datos de prueba)
+  sql/                     ← scripts de Azure SQL (esquema, datos iniciales, primer administrador, hallazgos y sus datos de prueba, auditorías, planes de acción)
   src/server.ts            ← único punto de arranque; abre la conexión a la base y monta las rutas
   src/app.ts               ← app Express; recibe repositorio, verificador de tokens y rutas
   src/db.ts                ← conexión compartida (la registra server.ts)
-  src/routes/              ← endpoints: usuarios.ts (con sesión); hallazgos.ts y evidencias.ts (aún sin sesión, solo con DATA_MODE=sql)
+  src/routes/              ← endpoints: usuarios.ts, planes.ts y planesAccion.ts (con sesión); hallazgos.ts y evidencias.ts (aún sin sesión, solo con DATA_MODE=sql)
+  src/domain/              ← tipos y validaciones (planes.ts, planesAccion.ts)
   src/middleware/          ← autenticar (token → usuario), autorizar (por rol) y upload (archivos de evidencia)
   src/repos/               ← repositorio SQL y en memoria
   test/                    ← pruebas (las de SQL requieren SQL_TEST_*)
@@ -159,11 +160,15 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 9. **Recursos de Azure** (base Azure SQL y registro de aplicación en Entra ID) aún sin crear; el backend ya está listo para conectarse por variables de entorno.
 10. **Sesión en las rutas de hallazgos:** `/api/hallazgos` todavía responde sin iniciar sesión y la vista de hallazgos no envía el token. Hay que pasarlas detrás de `autenticar` y usar `src/app/api/cliente.ts` en esa vista.
 
+11. **Rol "Auditado":** no existe como rol; hoy el responsable de un plan de acción es cualquier usuario activo. Falta definir si FEMSA quiere un rol propio con acceso restringido al portal.
+12. **Entidad "auditoría":** `audits` solo guarda id, nombre y fecha de cierre para los planes de acción; el resto del modelo (SF-05) está pendiente.
+
 ### Decisiones tomadas
 
 - Tablas `users`, `roles`, `permissions`, `role_permissions` siguiendo el modelo de datos de Miro (inglés, `snake_case`). `users.role` (texto) se sustituyó por `users.role_id`; **falta reflejarlo en el diagrama de Miro**.
 - Los permisos se leen de la base en cada petición (sin caché ni claims en el token) para que el cambio de rol sea inmediato (SF-17).
 - Un solo backend: arranca en `backend/src/server.ts`, puerto 3000, todo bajo `/api`, con una sola conexión a la base (variables `DB_*`).
+- **Planes de acción (historia #91, SF-10/SF-11):** tabla `action_plans` (un plan por hallazgo, responsable = usuario registrado, estado inicial `Asignado`) y tabla mínima `audits` (id, nombre, `end_date`) porque la fecha de cierre de la auditoría no existía en la base. Rutas `/api/planes-accion` (listar, `mios`, `responsables`, `hallazgos/:id`, POST) detrás de `autenticar`; crean Administrador, Jefe de Auditoría, Auditor Senior y Auditor. La validación "fecha de compromiso ≥ cierre de auditoría" vive en `backend/src/domain/planesAccion.ts` y se repite en el formulario. Al crear el plan el hallazgo pasa a `Asignado` y se registra `plan_accion.alta` en bitácora. El portal del auditado lee `/planes-accion/mios` del usuario en sesión.
 
 ## 8. Referencias
 
