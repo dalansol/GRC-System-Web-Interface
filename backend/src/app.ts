@@ -49,6 +49,8 @@ export function crearApp(deps: DependenciasApp): Express {
   const app = express();
   app.disable("x-powered-by");
   app.use(cors({ origin: deps.corsOrigin }));
+  // Las consultas del asistente llevan los datos de la vista; el resto de la API conserva 10 kB.
+  app.use("/api/asistente/consultas", express.json({ limit: "100kb" }));
   app.use(express.json({ limit: "10kb" }));
 
   for (const rutas of deps.rutasSinSesion ?? []) {

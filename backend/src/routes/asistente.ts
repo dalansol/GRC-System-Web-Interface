@@ -1,7 +1,7 @@
 import { Router, type Response } from "express";
 import { crearAsistente, type ResultadoAsistente } from "../asistente/asistente.js";
 import { extraerTexto } from "../asistente/extraerTexto.js";
-import { validarPregunta, type DocumentoParaIA } from "../asistente/instrucciones.js";
+import { validarConsultaVista, validarPregunta, type DocumentoParaIA } from "../asistente/instrucciones.js";
 import { ErrorIA, type ProveedorIA } from "../asistente/proveedor.js";
 import type { RegistrarEvento } from "../bitacora.js";
 import { ROL_ADMINISTRADOR } from "../domain/tipos.js";
@@ -46,12 +46,12 @@ export function rutasAsistente({ proveedor, evidencias, registrarEvento }: Depen
 
   async function consultar(
     res: Response,
-    accion: "asistente.resumen" | "asistente.pregunta",
-    evidenciaId: string,
+    accion: "asistente.resumen" | "asistente.pregunta" | "asistente.consulta",
+    detalle: Record<string, unknown>,
     llamar: () => Promise<ResultadoAsistente>,
   ): Promise<ResultadoAsistente> {
     const registrar = (resultado: string) =>
-      registrarEvento({ accion, actor: usuarioEnSesion(res).correo, detalle: { evidenciaId, resultado } });
+      registrarEvento({ accion, actor: usuarioEnSesion(res).correo, detalle: { ...detalle, resultado } });
     try {
       const resultado = await llamar();
       registrar(resultado.estado);
@@ -59,7 +59,7 @@ export function rutasAsistente({ proveedor, evidencias, registrarEvento }: Depen
     } catch (error) {
       if (!(error instanceof ErrorIA)) throw error;
       registrar(`error:${error.codigo}`);
-      console.error(`[asistente] ${accion} ${evidenciaId}: ${error.codigo} - ${error.detalle}`);
+      console.error(`[asistente] ${accion} ${JSON.stringify(detalle)}: ${error.codigo} - ${error.detalle}`);
       throw new ErrorApi(503, error.codigo, error.message);
     }
   }
@@ -68,7 +68,7 @@ export function rutasAsistente({ proveedor, evidencias, registrarEvento }: Depen
     if (!asistente) throw IA_DESACTIVADA;
     const evidenciaId = String(req.params.id);
     const doc = await documento(evidenciaId);
-    const resultado = await consultar(res, "asistente.resumen", evidenciaId, () => asistente.resumir(doc));
+    const resultado = await consultar(res, "asistente.resumen", { evidenciaId }, () => asistente.resumir(doc));
     res.json({ evidenciaId, tipo: "resumen", ...resultado, recortado: doc.recortado });
   });
 
@@ -78,10 +78,23 @@ export function rutasAsistente({ proveedor, evidencias, registrarEvento }: Depen
     if (!asistente) throw IA_DESACTIVADA;
     const evidenciaId = String(req.params.id);
     const doc = await documento(evidenciaId);
-    const resultado = await consultar(res, "asistente.pregunta", evidenciaId, () =>
+    const resultado = await consultar(res, "asistente.pregunta", { evidenciaId }, () =>
       asistente.preguntar(doc, validacion.pregunta),
     );
     res.json({ evidenciaId, tipo: "respuesta", ...resultado, recortado: doc.recortado });
+  });
+
+  // Asistente Copilot general: responde con los datos de la vista que envía el frontend.
+  // Son datos que el usuario ya ve; el cuerpo admite hasta 100 kB (ver app.ts).
+  rutas.post("/asistente/consultas", autorizar(...ROLES_ASISTENTE), async (req, res) => {
+    const consulta = validarConsultaVista(campos(req.body));
+    if ("error" in consulta) throw new ErrorApi(400, "DATOS_INVALIDOS", consulta.error);
+    if (!asistente) throw IA_DESACTIVADA;
+    const tipo = consulta.pregunta === undefined ? "resumen" : "pregunta";
+    const resultado = await consultar(res, "asistente.consulta", { vista: consulta.vista, tipo }, () =>
+      asistente.consultarVista(consulta),
+    );
+    res.json({ vista: consulta.vista, tipo: tipo === "resumen" ? "resumen" : "respuesta", ...resultado });
   });
 
   return rutas;

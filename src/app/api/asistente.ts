@@ -33,3 +33,18 @@ export function preguntarEvidencia(evidenciaId: string, pregunta: string): Promi
     cuerpo: { pregunta },
   });
 }
+
+export interface RespuestaVista {
+  vista: string;
+  tipo: "resumen" | "respuesta";
+  estado: EstadoRespuesta;
+  texto: string;
+}
+
+/** Asistente Copilot general: resume (sin pregunta) o responde con los datos de la vista actual. */
+export function consultarVista(vista: string, contexto: string, pregunta?: string): Promise<RespuestaVista> {
+  return pedir("/asistente/consultas", {
+    metodo: "POST",
+    cuerpo: pregunta === undefined ? { vista, contexto } : { vista, contexto, pregunta },
+  });
+}

@@ -22,10 +22,15 @@ import {
   X,
   Sparkles,
   Loader2,
-  Download
+  Download,
+  AlertTriangle,
+  Info
 } from "lucide-react";
 
 import {STATUS_CONFIG} from "../data/mock_data"
+import { consultarVista, type EstadoRespuesta } from "../api/asistente";
+import { ErrorApi } from "../api/cliente";
+import { contextoPorEtiqueta } from "../domain/contextoVista";
 
 export type {
   // Types
@@ -510,34 +515,29 @@ function ValidityBadge({ status }: { status: string }) {
 }
 
 // ─── AI Summary Card ──────────────────────────────────────────────────────────
-const AI_SUMMARIES: Record<string, string> = {
-  "GR-001": "Este riesgo de integridad financiera afecta al proceso de cierre contable mensual. Los controles vigentes (CTR-001, CTR-002) presentan una vulnerabilidad media en la segregación de funciones. Se recomienda reforzar la aprobación dual y auditar los roles SAP antes del próximo cierre trimestral.",
-  "GR-002": "El riesgo de acceso no autorizado a sistemas críticos es gestionado por CTR-003 con revisión trimestral de privilegios. La vulnerabilidad residual es baja, aunque se detectó una brecha activa en el periodo actual (HAL-2025-002). Acción prioritaria: depurar cuentas inactivas en un plazo de 30 días.",
-  "GR-003": "El incumplimiento normativo regulatorio presenta riesgo residual bajo tras la implementación de CTR-004. Sin embargo, el hallazgo HAL-2025-003 indica que el calendario normativo de Colombia no está actualizado. Recomendación: establecer alertas automáticas de vencimiento regulatorio.",
-  "SR-001": "Riesgo específico de alta criticidad en la filial México. Las conciliaciones bancarias del cierre mensual presentan deficiencias de segregación de funciones. El control CTR-001 mitiga parcialmente el riesgo, pero CTR-002 requiere revisión urgente según el hallazgo HAL-2025-001 emitido el 10 de julio.",
-  "SR-002": "Riesgo de tesorería con nivel inherente alto y residual medio. El control de autorización dual (CTR-002) está en estado 'Requiere Revisión'. Se identificaron 3 transacciones de alto valor en el Q2 sin aprobación dual documentada.",
-  "SR-003": "Acceso privilegiado no revisado en sistemas de producción — Brasil. Control CTR-003 activo pero con instancias no resueltas. Hallazgo HAL-2025-002 pendiente de resolución. Riesgo residual alto; se recomienda revisión inmediata de cuentas de ex-empleados.",
-  "SR-004": "Riesgo regulatorio en Colombia con residual bajo tras aplicación de CTR-004. Hallazgo menor HAL-2025-003 sobre actualización de calendario normativo. Estado: en proceso de remediación por el área de Legal & Cumplimiento.",
-  "AE-001": "Entidad auditora de máxima criticidad. Concentra 2 riesgos específicos (SR-001, SR-002) con niveles inherentes Crítico y Alto. Los controles CTR-001 y CTR-002 cubren los riesgos, pero CTR-002 requiere revisión. Prioridad de auditoría: ALTA. Próxima verificación programada para Q3 2025.",
-  "AE-002": "Entidad de ciberseguridad LATAM con riesgo residual alto en accesos privilegiados. Control CTR-003 activo pero con hallazgo abierto. Recomendación: acelerar el ciclo de revisión de accesos a mensual y automatizar la detección de cuentas inactivas.",
-  "AE-003": "Entidad de cumplimiento normativo con riesgo residual bajo. Control CTR-004 efectivo. Hallazgo menor en actualización de calendario. Estado general: satisfactorio con área de mejora en automatización de alertas regulatorias.",
-  "CTR-001": "Control preventivo de conciliación bancaria mensual con efectividad alta (vulnerabilidad Baja). Operado al 100% de muestra. Se han cargado 2 evidencias en el sistema. Sin hallazgos críticos asociados. El procedimiento cumple con los estándares SOX requeridos.",
-  "CTR-002": "Control detectivo de segregación de funciones con estatus 'Requiere Revisión'. Hallazgo crítico HAL-2025-001 asociado. Vulnerabilidad media. Acción requerida: validar la reasignación de roles SAP antes del 15 de septiembre según el plan de acción asignado.",
-  "CTR-003": "Control de revisión de accesos privilegiados con muestra del 100%. Vulnerabilidad baja, pero con hallazgo activo HAL-2025-002 sobre cuentas de ex-empleados. El control es efectivo pero la frecuencia trimestral puede no ser suficiente dado el riesgo actual. Considerar migrar a revisión mensual.",
-  "CTR-004": "Control preventivo de monitoreo de obligaciones regulatorias con baja vulnerabilidad. Hallazgo HAL-2025-003 en proceso de resolución. Control de bajo riesgo residual; el principal punto de mejora es la automatización del seguimiento de compromisos con organismos reguladores.",
-};
-
+// Resumen con IA del registro abierto (riesgo, entidad o control), con los mismos datos de la pantalla.
 function AISummaryCard({ entityId, entityType }: { entityId: string; entityType: string }) {
   const [loading, setLoading] = useState(false);
-  const [summary, setSummary] = useState<string | null>(null);
+  const [summary, setSummary] = useState<{ texto: string; estado: EstadoRespuesta } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [desactivado, setDesactivado] = useState(false);
+  const contexto = contextoPorEtiqueta(entityType, entityId);
 
-  const generate = () => {
+  const generate = async () => {
+    if (!contexto) return;
     setLoading(true);
     setSummary(null);
-    setTimeout(() => {
+    setError(null);
+    try {
+      const respuesta = await consultarVista(contexto.vista, contexto.contexto);
+      setSummary({ texto: respuesta.texto, estado: respuesta.estado });
+    } catch (e) {
+      setError(e instanceof ErrorApi ? e.message : "Ocurrió un error inesperado.");
+      // Si la IA no responde, la función se desactiva; el resto de la vista sigue funcionando.
+      if (e instanceof ErrorApi && (e.status === 503 || e.status === 0)) setDesactivado(true);
+    } finally {
       setLoading(false);
-      setSummary(AI_SUMMARIES[entityId] ?? `Análisis de ${entityType} ${entityId}: Este registro presenta un perfil de riesgo moderado con controles activos en revisión. Se recomienda verificar el estado de los hallazgos asociados y actualizar el calendario de auditoría según los cambios normativos recientes.`);
-    }, 1600);
+    }
   };
 
   return (
@@ -550,17 +550,25 @@ function AISummaryCard({ entityId, entityType }: { entityId: string; entityType:
           <div className="text-sm font-semibold text-foreground">Asistente IA — Resumen</div>
         </div>
         <button
-          onClick={generate}
-          disabled={loading}
+          onClick={() => void generate()}
+          disabled={loading || desactivado || !contexto}
           className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground text-xs font-semibold rounded-md hover:bg-primary/90 transition-colors disabled:opacity-60"
         >
           {loading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
           {loading ? "Generando…" : "Generar resumen"}
         </button>
       </div>
-      {!summary && !loading && (
+      {error && (
+        <div role="alert" className="mb-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+      {!summary && !loading && !error && (
         <p className="text-xs text-muted-foreground bg-secondary/40 rounded-md px-3 py-2.5">
-          Haz clic en "Generar resumen" para obtener un análisis IA de este registro, incluyendo estado de controles, hallazgos y recomendaciones.
+          {contexto
+            ? `Haz clic en "Generar resumen" para obtener un análisis con IA de este registro y los controles, riesgos y hallazgos relacionados.`
+            : "No hay datos de este registro para el asistente."}
         </p>
       )}
       {loading && (
@@ -571,9 +579,17 @@ function AISummaryCard({ entityId, entityType }: { entityId: string; entityType:
         </div>
       )}
       {summary && (
-        <div className="bg-primary/5 border border-primary/15 rounded-lg p-3.5 text-sm text-foreground leading-relaxed">
-          {summary}
+        <div
+          className={`rounded-lg p-3.5 text-sm leading-relaxed whitespace-pre-line ${
+            summary.estado === "respondida" ? "bg-primary/5 border border-primary/15 text-foreground" : "bg-secondary/40 border border-border text-muted-foreground"
+          }`}
+        >
+          {summary.estado !== "respondida" && <Info size={13} className="mr-1.5 inline-block align-[-2px]" />}
+          {summary.texto}
         </div>
+      )}
+      {summary && (
+        <p className="mt-2 text-[10px] text-muted-foreground">Generado por IA con los datos de este registro; verifícalo antes de usarlo.</p>
       )}
     </Card>
   );

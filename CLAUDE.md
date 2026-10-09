@@ -25,10 +25,10 @@
 
 ## 3. Stack técnico (estado actual del repo)
 
-- **Frontend** exportado desde Figma Make ("Expedite GRC"). Casi todos los datos siguen siendo mocks en memoria (`src/app/data/mock_data.tsx`); **usuarios y roles ya salen del backend**.
+- **Frontend** exportado desde Figma Make ("Expedite GRC"). Casi todos los datos siguen siendo mocks en memoria (`src/app/data/mock_data.tsx`); **usuarios, roles, planes de acción y el asistente de IA ya salen del backend**.
 - React 18 + TypeScript + **Vite 6**, Tailwind CSS v4 (`@tailwindcss/vite`), componentes **shadcn/ui** (Radix) en `src/app/components/ui/`, iconos `lucide-react`, gráficas `recharts`, toasts `sonner`, también MUI instalado.
-- **Backend** en `backend/`: Node + Express 5 + TypeScript (módulos ES), `mssql` para Azure SQL, `jose` para validar tokens de Entra ID. Usa **pnpm** (`corepack pnpm ...`); la raíz usa **npm**.
-- Comandos frontend: `npm i`, `npm run dev`, `npm run build`, `npm test` (Vitest + Testing Library). Comandos backend: `corepack pnpm dev`, `test`, `typecheck`, `build`. No hay linter ni revisión de tipos en el frontend.
+- **Backend** en `backend/`: Node + Express 5 + TypeScript (módulos ES), `mssql` para Azure SQL, `jose` para validar tokens de Entra ID, `unpdf` y `exceljs` para leer evidencias en el asistente de IA. Usa **pnpm** (`corepack pnpm ...`); la raíz usa **npm**.
+- Comandos frontend: `npm i`, `npm run dev`, `npm run build`, `npm test` (Vitest + Testing Library). Comandos backend: `corepack pnpm dev`, `test`, `typecheck`, `build`, `ia:probar` (conexión con la IA) e `ia:evaluar` (reglas de contención contra la IA real). No hay linter ni revisión de tipos en el frontend.
 - La app exige sesión: sin el backend corriendo muestra un error de conexión. Para desarrollo local hace falta un `.env` en la raíz y otro en `backend/` (variables en el README; modo `dev`, sin Azure). Nunca leer ni versionar los `.env`.
 - Diseño y pruebas de usuarios y roles: `docs/diseno/usuarios-roles.md`, `docs/pruebas/usuarios-roles.md`.
 - Alias `@` → `src/`. Plugin `figma:asset/…` → `src/assets/`. **No quitar** los plugins `react()` ni `tailwindcss()` de `vite.config.ts`.
@@ -41,10 +41,10 @@ src/
   app/App.tsx              ← la mayoría de las vistas (en proceso de refactorización para reducir su tamaño)
   app/api/                 ← cliente HTTP y llamadas a la API
   app/auth/                ← sesión, inicio de sesión (MSAL / modo dev)
-  app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, FormularioPlanAccion, VistaControles, EvidenciasSection, SpreadsheetEditor
+  app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, FormularioPlanAccion, VistaControles, EvidenciasSection, SpreadsheetEditor, PanelAsistenteEvidencia, CopilotPanel
   app/components/ui/       ← shadcn/ui (no editar salvo necesidad)
   app/components/figma/    ← ImageWithFallback
-  app/domain/              ← lógica de estado/ViewModels (ej. useHallazgosViewModel)
+  app/domain/              ← lógica de estado/ViewModels (ej. useHallazgosViewModel) y contextoVista (datos que recibe el asistente Copilot)
   app/data/mock_data.tsx   ← constantes y datos de prueba
   imports/logo.svg         ← logo Expedite
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
@@ -53,10 +53,12 @@ backend/
   src/server.ts            ← único punto de arranque; abre la conexión a la base y monta las rutas
   src/app.ts               ← app Express; recibe repositorio, verificador de tokens y rutas
   src/db.ts                ← conexión compartida (la registra server.ts)
-  src/routes/              ← endpoints: usuarios.ts, planes.ts y planesAccion.ts (con sesión); hallazgos.ts y evidencias.ts (aún sin sesión, solo con DATA_MODE=sql)
+  src/routes/              ← endpoints: usuarios.ts, planes.ts, planesAccion.ts y asistente.ts (con sesión); hallazgos.ts y evidencias.ts (aún sin sesión, solo con DATA_MODE=sql)
+  src/asistente/           ← gateway de IA: interfaz ProveedorIA, adaptadores Gemini y Azure OpenAI, extracción de texto, instrucciones y reglas de contención
+  src/scripts/             ← ia:probar e ia:evaluar
   src/domain/              ← tipos y validaciones (planes.ts, planesAccion.ts)
   src/middleware/          ← autenticar (token → usuario), autorizar (por rol) y upload (archivos de evidencia)
-  src/repos/               ← repositorio SQL y en memoria
+  src/repos/               ← repositorio SQL y en memoria (incluye evidencias para el asistente y documentos de ejemplo EV-001…EV-004)
   test/                    ← pruebas (las de SQL requieren SQL_TEST_*)
 ```
 
@@ -68,7 +70,7 @@ Nota: La aplicación está en proceso de refactorización hacia un enfoque MVVM 
 - **Mocks/constantes:** `STATUS_CONFIG`, `NAV_ITEMS`, `TASKS`, `GENERAL_RISKS`, `AUDIT_ENTITIES`, `SPECIFIC_RISKS`, `CONTROLS`, `PROCEDURE_TRACKING`, `ROLES`, `DEFAULT_PERMISSIONS`, `INITIAL_USERS`, `AUDIT_RECORDS`, `AUDIT_PLANS_DATA`, `INITIAL_FINDINGS`, `INITIAL_EVIDENCES`, `BITACORA_DATA`.
 - **Componentes base:** `StatusBadge`, `Breadcrumbs`, `PageHeader`, `Card`, `PrimaryBtn`, `GhostBtn`, `Sidebar`, `TopBar`, `PDFPreviewModal`, `exportToCSV`.
 - **Vistas:** `DashboardView`, `FilterView`, `EditorView`, `HierarchyView` (Catálogo), `SettingsView`, `BitacoraView`, `AuditPlansView`, `FindingsView`, `AuditadoPortalView` (usuarios y roles vive en `components/UsuariosRolesView.tsx`, solo para Administrador), vistas de detalle (`GeneralRiskDetailView`, `SpecificRiskDetailView`, `AuditEntityDetailView`, `ControlDetailView`).
-- **IA / extras:** `CopilotPanel`, `AISummaryCard`, `GuidedTour`, `SpreadsheetEditor` (editor tipo Excel con versiones y hash).
+- **IA / extras:** `GuidedTour`, `SpreadsheetEditor` (editor tipo Excel con versiones y hash). `CopilotPanel` ya vive en `components/CopilotPanel.tsx` y `AISummaryCard` en `SharedComponents.tsx`; ambos usan la IA real (sin respuestas fijas).
 
 ### Convenciones de código
 
@@ -162,6 +164,9 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 
 11. **Rol "Auditado":** no existe como rol; hoy el responsable de un plan de acción es cualquier usuario activo. Falta definir si FEMSA quiere un rol propio con acceso restringido al portal.
 12. **Entidad "auditoría":** `audits` solo guarda id, nombre y fecha de cierre para los planes de acción; el resto del modelo (SF-05) está pendiente.
+13. **Proveedor de IA definitivo:** la task #134 pedía Copilot vía Microsoft Graph, pero no hay licencias de Microsoft 365 Copilot (la cuenta del equipo es "Copilot Chat (Basic)") ni permisos en Azure (la suscripción "ITESM - LabVirtual" no da roles). En desarrollo se usa **Gemini** (plan gratuito, solo datos de prueba: Google puede usar lo que recibe). El destino depende de H-04 (Copilot API vs Premium) y de los lineamientos de ciberseguridad de FEMSA: Azure OpenAI o Copilot vía Graph (este último pide el archivo en SharePoint/OneDrive y token de usuario con OBO). Falta anotar el cambio en Azure DevOps.
+14. **Evidencias en modo memoria:** con `DATA_MODE=memoria` no existen las rutas `/api/evidencias`; `EvidenciasSection` entra en modo de respaldo y "Adjuntar archivo" solo agrega una fila en el navegador con id y hash falsos. El asistente no puede analizar esos archivos ("La evidencia no existe."); solo los de ejemplo EV-001…EV-004. Opciones: guardar las cargas en memoria en el backend (recomendada), desactivar el botón de IA en archivos locales o usar SQL.
+15. **Asistente Copilot general (UF-16):** responde con los datos que la vista le envía, que hoy son los mocks del frontend (Hallazgos lee mocks aunque la vista use el backend). Falta registrarlo como historia propia en Azure DevOps.
 
 ### Decisiones tomadas
 
@@ -169,6 +174,9 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 - Los permisos se leen de la base en cada petición (sin caché ni claims en el token) para que el cambio de rol sea inmediato (SF-17).
 - Un solo backend: arranca en `backend/src/server.ts`, puerto 3000, todo bajo `/api`, con una sola conexión a la base (variables `DB_*`).
 - **Planes de acción (historia #91, SF-10/SF-11):** tabla `action_plans` (un plan por hallazgo, responsable = usuario registrado, estado inicial `Asignado`) y tabla mínima `audits` (id, nombre, `end_date`) porque la fecha de cierre de la auditoría no existía en la base. Rutas `/api/planes-accion` (listar, `mios`, `responsables`, `hallazgos/:id`, POST) detrás de `autenticar`; crean Administrador, Jefe de Auditoría, Auditor Senior y Auditor. La validación "fecha de compromiso ≥ cierre de auditoría" vive en `backend/src/domain/planesAccion.ts` y se repite en el formulario. Al crear el plan el hallazgo pasa a `Asignado` y se registra `plan_accion.alta` en bitácora. El portal del auditado lee `/planes-accion/mios` del usuario en sesión.
+
+- **Asistente de IA (historia #105, tasks #134/#135, SF-19):** el backend es el único que habla con la IA (Copilot API Gateway del SRS); la clave vive en `backend/.env` y nunca llega al frontend. El proveedor queda detrás de la interfaz `ProveedorIA` y se elige con `IA_PROVEEDOR` (`gemini`, `azure` o `ninguno`; sin proveedor la plataforma funciona y la función queda desactivada). Llamadas sin reintentos y con tiempo de espera (`IA_TIEMPO_ESPERA_MS`); cualquier falla responde 503 y el frontend desactiva el panel con un aviso. Rutas `/api/asistente/estado`, `/asistente/evidencias/:id/resumen`, `/asistente/evidencias/:id/preguntas` y `/asistente/consultas` (datos de la vista; acepta hasta 100 kB), para Administrador, Jefe de Auditoría, Auditor Senior y Auditor. Bitácora: `asistente.resumen`, `asistente.pregunta` y `asistente.consulta`, sin guardar preguntas ni respuestas.
+- **Reglas de contención de la IA:** instrucciones del sistema en `backend/src/asistente/instrucciones.ts`; el documento o los datos de la vista van delimitados y se tratan como datos, no instrucciones; temperatura 0.2 y tope de longitud; cada pregunta es independiente (sin historial); pregunta de 5 a 500 caracteres. La IA responde un JSON con `estado` (`respondida`, `fuera_de_tema`, `sin_informacion`) y el backend sustituye los dos últimos por mensajes fijos. Cualquier cambio a las reglas debe pasar `corepack pnpm ia:evaluar` (22/22 al 2026-10-09).
 
 ## 8. Referencias
 
