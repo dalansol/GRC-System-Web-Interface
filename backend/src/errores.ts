@@ -8,6 +8,7 @@ export type CodigoError =
   | "ULTIMO_ADMINISTRADOR"
   | "NO_ENCONTRADO"
   | "CODIGO_DUPLICADO"
+  | "PLAN_DUPLICADO"
   | "ERROR_INTERNO";
 
 export class ErrorApi extends Error {

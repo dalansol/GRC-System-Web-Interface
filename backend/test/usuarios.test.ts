@@ -6,12 +6,13 @@ import { crearApp } from "../src/app.js";
 import { crearVerificadorDev } from "../src/auth/verificador.js";
 import type { EventoBitacora } from "../src/bitacora.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
+import { RepositorioPlanesAccionMemoria } from "../src/repos/planesAccionMemoria.js";
 import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
 import { escuchar } from "./servidor.js";
 
 function repos() {
   const repo = new RepositorioMemoria();
-  return { repo, repoPlanes: new RepositorioPlanesMemoria(repo) };
+  return { repo, repoPlanes: new RepositorioPlanesMemoria(repo), repoPlanesAccion: new RepositorioPlanesAccionMemoria(repo) };
 }
 
 const ADMIN = "s.ramirez@expedite.com";
