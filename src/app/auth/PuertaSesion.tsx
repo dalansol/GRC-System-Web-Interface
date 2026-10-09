@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { ArrowRight, FlaskConical, Mail, ShieldAlert } from "lucide-react";
+import { ArrowRight, Mail, ShieldAlert } from "lucide-react";
 import { AccesoDemo } from "./AccesoDemo";
 import { useSesion } from "./SesionContext";
 import { BOTON_PRIMARIO, BotonMicrosoft, PantallaAcceso, Spinner } from "./componentesLogin";
@@ -62,11 +62,7 @@ export function PuertaSesion({ children }: { children: React.ReactNode }) {
   } else if (modo === "dev") {
     contenido = (
       <>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200/70">
-          <FlaskConical size={13} aria-hidden />
-          Desarrollo sin Entra ID
-        </span>
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">Inicia sesión</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Inicia sesión</h1>
         <p className="mt-2 text-sm text-muted-foreground">Accede con el correo de un usuario registrado.</p>
         <form
           className="mt-8 space-y-4"

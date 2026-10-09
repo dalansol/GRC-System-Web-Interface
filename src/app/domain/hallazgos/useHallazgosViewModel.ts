@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { INITIAL_FINDINGS } from "../../data/mock_data";
+import { listarPlanesAccion, type PlanAccion } from "../../api/planesAccion";
 
 const metaEnv = (import.meta as any).env;
 const API_BASE_URL = metaEnv?.VITE_API_URL || "http://localhost:3000/api";
@@ -44,6 +45,26 @@ export function useHallazgosViewModel() {
   const [sevFilter, setSevFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  // Planes de acción por id de hallazgo (SF-10). Siempre vienen del backend, que es quien valida la fecha de compromiso.
+  const [planesPorHallazgo, setPlanesPorHallazgo] = useState<Record<string, PlanAccion>>({});
+  const [hallazgoParaPlan, setHallazgoParaPlan] = useState<HallazgoViewModel | null>(null);
+
+  const fetchPlanesAccion = async () => {
+    try {
+      const planes = await listarPlanesAccion();
+      setPlanesPorHallazgo(Object.fromEntries(planes.map((plan) => [plan.hallazgo.id, plan])));
+    } catch (error: any) {
+      toast.error(error.message || "Error al cargar los planes de acción.");
+    }
+  };
+
+  const handlePlanCreado = (plan: PlanAccion) => {
+    setPlanesPorHallazgo((prev) => ({ ...prev, [plan.hallazgo.id]: plan }));
+    // Al asignar un plan el hallazgo pasa a "Asignado" (el backend hace lo mismo en la base).
+    setHallazgos((prev) => prev.map((item) => (item.id === plan.hallazgo.id ? { ...item, status: "Asignado" } : item)));
+    setHallazgoParaPlan(null);
+  };
+
   const fetchHallazgos = async () => {
     setLoading(true);
     try {
@@ -67,6 +88,7 @@ export function useHallazgosViewModel() {
 
   useEffect(() => {
     fetchHallazgos();
+    fetchPlanesAccion();
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -173,6 +195,10 @@ export function useHallazgosViewModel() {
     statusFilter,
     USE_REAL_BACKEND,
     nextFolio,
+    planesPorHallazgo,
+    hallazgoParaPlan,
+    setHallazgoParaPlan,
+    handlePlanCreado,
     setEditingHallazgo,
     setShowCreateForm,
     setExpandedFinding,

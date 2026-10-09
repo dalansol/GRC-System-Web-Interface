@@ -9,7 +9,9 @@ import {
   Loader2,
   Plus,
   ChevronRight,
-  Filter
+  Filter,
+  ClipboardList,
+  CalendarClock
 } from "lucide-react";
 import { toast } from "sonner";
 import { CONTROLS } from "../data/mock_data";
@@ -19,6 +21,7 @@ import FormularioHallazgo, {
   FindingControlOption,
 } from "./FormularioHallazgo";
 import EvidenciasSection from "./EvidenciasSection";
+import FormularioPlanAccion from "./FormularioPlanAccion";
 import { useHallazgosViewModel, HallazgoViewModel } from "../domain/hallazgos/useHallazgosViewModel";
 
 export type Hallazgo = HallazgoViewModel;
@@ -36,6 +39,10 @@ export default function VistaHallazgo() {
     statusFilter,
     USE_REAL_BACKEND,
     nextFolio,
+    planesPorHallazgo,
+    hallazgoParaPlan,
+    setHallazgoParaPlan,
+    handlePlanCreado,
     setEditingHallazgo,
     setShowCreateForm,
     setExpandedFinding,
@@ -104,7 +111,7 @@ export default function VistaHallazgo() {
         ))}
         <div className="w-px h-4 bg-border mx-1" />
         <span className="text-xs text-muted-foreground font-medium">Estado:</span>
-        {["all", "Abierto", "En Proceso", "Cerrado"].map(f => (
+        {["all", "Abierto", "En Proceso", "Asignado", "En Revisión", "Cerrado"].map(f => (
           <button key={f} onClick={() => setStatusFilter(f)}
             className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${statusFilter === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>
             {f === "all" ? "Todos" : f}
@@ -211,6 +218,54 @@ export default function VistaHallazgo() {
                       <tr>
                         <td colSpan={5} className="px-4 pb-4 bg-secondary/20 border-b border-border">
                           <div className="pt-3 space-y-3" onClick={(e) => e.stopPropagation()}>
+                            {/* Plan de acción (SF-10) */}
+                            {(() => {
+                              const plan = planesPorHallazgo[item.id];
+                              const hoy = new Date().toISOString().slice(0, 10);
+                              if (plan) {
+                                return (
+                                  <div className="rounded-lg border border-border bg-card p-4" data-testid={`plan-${item.id}`}>
+                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                        <ClipboardList size={14} /> Plan de acción
+                                      </div>
+                                      <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${plan.estado === "Completado" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
+                                        {plan.estado}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm text-foreground leading-relaxed">{plan.descripcion}</p>
+                                    <div className="mt-3 grid grid-cols-2 gap-4 border-t border-border pt-3">
+                                      <div>
+                                        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Responsable auditado</div>
+                                        <div className="text-sm font-medium text-foreground">{plan.responsable.nombre}</div>
+                                      </div>
+                                      <div>
+                                        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Fecha límite</div>
+                                        <div className={`text-sm font-semibold font-mono ${plan.estado !== "Completado" && plan.fechaCompromiso < hoy ? "text-red-600" : "text-foreground"}`}>
+                                          {plan.fechaCompromiso}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              if (item.status === "Cerrado") return null;
+                              return (
+                                <div className="flex items-center justify-between rounded-lg border border-dashed border-border bg-card px-4 py-3">
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <CalendarClock size={14} /> Este hallazgo aún no tiene un plan de acción correctivo.
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setHallazgoParaPlan(item)}
+                                    className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90"
+                                  >
+                                    <Plus size={14} />
+                                    Crear plan de acción
+                                  </button>
+                                </div>
+                              );
+                            })()}
                             <EvidenciasSection 
                               entityId={item.id} 
                               entityType="hallazgo" 
@@ -316,6 +371,14 @@ export default function VistaHallazgo() {
             </div>
           </form>
         </div>
+      )}
+      {hallazgoParaPlan && (
+        <FormularioPlanAccion
+          hallazgoId={hallazgoParaPlan.id}
+          hallazgoTitulo={hallazgoParaPlan.title}
+          onCreado={handlePlanCreado}
+          onCerrar={() => setHallazgoParaPlan(null)}
+        />
       )}
       {showCreateForm && (
         <FormularioHallazgo

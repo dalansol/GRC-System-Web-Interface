@@ -83,7 +83,10 @@ En modo de desarrollo se entra escribiendo el correo de un usuario de prueba:
 En este modo los datos de usuarios viven en memoria: se reinician cada vez que se
 apaga el backend. La vista de hallazgos usa sus datos de prueba mientras
 `VITE_USE_REAL_BACKEND` sea `false`; sus rutas en el backend solo existen con
-`DATA_MODE=sql`, porque necesitan la base de datos.
+`DATA_MODE=sql`, porque necesitan la base de datos. Los planes de acción de los
+hallazgos (`/api/planes-accion`) sí funcionan en memoria: usan los hallazgos y
+auditorías de prueba, y el portal del auditado muestra los planes asignados al
+usuario con sesión (por ejemplo `c.morales@expedite.com` ya tiene uno).
 
 ### Problemas comunes
 
@@ -136,7 +139,9 @@ Cuando existan los recursos en Azure:
 
 1. Ejecutar en la base de Azure SQL, en este orden, `backend/sql/001_schema.sql`,
    `002_seed.sql`, `003_primer_administrador.sql` (este último hay que editarlo
-   antes con el nombre y correo del primer Administrador) y `004_findings.sql`.
+   antes con el nombre y correo del primer Administrador), `004_findings.sql`,
+   `006_auditorias.sql` (auditorías con su fecha de cierre, usada por los planes
+   de acción) y `007_action_plans.sql` (planes de acción de los hallazgos).
    `005_seed_findings.sql` carga hallazgos de prueba y solo es para desarrollo.
 2. En `backend/.env`: `DATA_MODE=sql` con las variables `DB_*`, `AUTH_MODE=entra`
    con `ENTRA_TENANT_ID` y `ENTRA_CLIENT_ID`, y el dominio real en

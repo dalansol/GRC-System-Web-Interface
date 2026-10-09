@@ -58,3 +58,31 @@ export const PLANES_DEMO = [
     alcance: "Cadena de suministro, logística y distribución en toda la región",
   },
 ] as const;
+
+// Auditorías de prueba (las mismas que AUDIT_RECORDS en mock_data.tsx). La fecha de cierre
+// es la que se compara con la fecha de compromiso de los planes de acción.
+export const AUDITORIAS_DEMO = [
+  { id: "AUD-001", nombre: "Auditoría SOX — Cuentas por Pagar", fechaCierre: "2025-08-31" },
+  { id: "AUD-002", nombre: "Auditoría Operacional — Cadena de Suministro", fechaCierre: "2025-05-30" },
+  { id: "AUD-003", nombre: "Auditoría de Cumplimiento — GDPR", fechaCierre: "2025-11-30" },
+  { id: "AUD-004", nombre: "Auditoría Interna — Recursos Humanos", fechaCierre: "2025-06-30" },
+] as const;
+
+// Hallazgos de prueba para el modo en memoria (los mismos que INITIAL_FINDINGS en mock_data.tsx).
+export const HALLAZGOS_DEMO = [
+  { id: "HAL-2025-001", folio: "HAL-2025-001", titulo: "Segregación de funciones insuficiente en cierre contable", severidad: "Crítico", auditoriaId: "AUD-001", controlId: "CTR-002" },
+  { id: "HAL-2025-002", folio: "HAL-2025-002", titulo: "Cuentas privilegiadas de ex-empleados activas en producción", severidad: "Alto", auditoriaId: "AUD-001", controlId: "CTR-003" },
+  { id: "HAL-2025-003", folio: "HAL-2025-003", titulo: "Calendario normativo desactualizado — SFC Colombia", severidad: "Medio", auditoriaId: "AUD-003", controlId: "CTR-004" },
+  { id: "HAL-2025-004", folio: "HAL-2025-004", titulo: "Firewall con configuración obsoleta — Oficina Colombia", severidad: "Alto", auditoriaId: "AUD-002", controlId: "CTR-003" },
+  { id: "HAL-2024-018", folio: "HAL-2024-018", titulo: "Proceso de nómina sin doble aprobación — Operaciones", severidad: "Bajo", auditoriaId: "AUD-004", controlId: "CTR-001" },
+] as const;
+
+// Plan de acción de prueba (el mismo que trae HAL-2025-001 en mock_data.tsx).
+export const PLANES_ACCION_DEMO = [
+  {
+    hallazgoId: "HAL-2025-001",
+    descripcion: "Revisar y reasignar roles en SAP para eliminar conflictos de acceso. Implementar aprobación dual en todas las conciliaciones.",
+    responsable: "c.morales@expedite.com",
+    fechaCompromiso: "2025-09-15",
+  },
+] as const;

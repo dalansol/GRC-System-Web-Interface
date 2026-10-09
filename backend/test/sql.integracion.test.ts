@@ -13,6 +13,7 @@ import { crearApp } from "../src/app.js";
 import { crearVerificadorDev } from "../src/auth/verificador.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
 import { ErrorCodigoDuplicado } from "../src/repos/planes.js";
+import { RepositorioPlanesAccionMemoria } from "../src/repos/planesAccionMemoria.js";
 import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
 import { RepositorioPlanesSql } from "../src/repos/planesSql.js";
 import { ErrorCorreoDuplicado } from "../src/repos/repositorio.js";
@@ -207,6 +208,7 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
         crearApp({
           repo,
           repoPlanes: new RepositorioPlanesMemoria(repo),
+          repoPlanesAccion: new RepositorioPlanesAccionMemoria(repo),
           verificador: crearVerificadorDev(),
           dominiosPermitidos: ["expedite.com"],
           corsOrigin: "http://localhost:5173",

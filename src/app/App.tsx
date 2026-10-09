@@ -137,6 +137,7 @@ import EvidenciasSection from "./components/EvidenciasSection";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
 import UsuariosRolesView from "./components/UsuariosRolesView";
 import { useSesion } from "./auth/SesionContext";
+import { listarMisPlanesAccion, type PlanAccion } from "./api/planesAccion";
 
 const NAV_ITEMS: NavItem[] = [
   {
@@ -4473,69 +4474,97 @@ const FIND_STATUS_CFG: Record<Finding["status"], string> = {
 
 // ─── View: PORTAL DEL AUDITADO ───────────────────────────────────────────────
 function AuditadoPortalView() {
-  const assignedPlans = INITIAL_FINDINGS.filter(f => f.actionPlan);
+  // Planes de acción asignados al usuario en sesión (SF-10, SF-11; historia #91). Vienen del backend.
+  const { usuario } = useSesion();
+  const [planes, setPlanes] = useState<PlanAccion[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  useEffect(() => {
+    let vigente = true;
+    setCargando(true);
+    listarMisPlanesAccion()
+      .then((datos) => { if (vigente) { setPlanes(datos); setError(null); } })
+      .catch((e: unknown) => { if (vigente) setError(e instanceof Error ? e.message : "No se pudieron cargar tus planes de acción."); })
+      .finally(() => { if (vigente) setCargando(false); });
+    return () => { vigente = false; };
+  }, [usuario?.id]);
+
   return (
     <div className="flex-1 overflow-auto p-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <Breadcrumbs items={["Inicio", "Auditoría", "Portal del Auditado"]} />
       <PageHeader
         title="Portal del Auditado"
-        subtitle="Vista de solo lectura — Planes de acción asignados a tu área"
+        subtitle={`Vista de solo lectura — Planes de acción asignados a ${usuario?.nombre ?? "tu área"}`}
       />
       <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
         <Eye size={14} className="flex-shrink-0" />
         <span>Esta vista es de <strong>solo lectura</strong>. Para actualizar el estado de un plan, contacta al equipo de auditoría.</span>
       </div>
-      {assignedPlans.length === 0 ? (
+      {cargando ? (
+        <Card className="p-12 text-center text-sm text-muted-foreground">Cargando tus planes de acción...</Card>
+      ) : error ? (
+        <Card className="p-12 text-center">
+          <div className="text-sm font-semibold text-red-600">{error}</div>
+        </Card>
+      ) : planes.length === 0 ? (
         <Card className="p-12 text-center">
           <UserCheck size={32} className="mx-auto text-muted-foreground/30 mb-3" />
           <div className="text-sm font-semibold text-muted-foreground">Sin planes de acción asignados</div>
-          <div className="text-xs text-muted-foreground/60 mt-1">Los planes de acción asignados a tu área aparecerán aquí.</div>
+          <div className="text-xs text-muted-foreground/60 mt-1">Los planes de acción asignados a ti aparecerán aquí.</div>
         </Card>
       ) : (
         <div className="space-y-4">
-          {assignedPlans.map(f => (
-            <Card key={f.id} className="p-5">
-              <div className="flex items-start justify-between gap-4 mb-3">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-mono text-xs font-bold text-primary bg-primary/8 px-2 py-0.5 rounded-md">{f.folio}</span>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${SEV_COLOR[f.severity]}`}>{f.severity}</span>
-                  </div>
-                  <div className="text-base font-bold text-foreground leading-tight">{f.title}</div>
-                </div>
-                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${f.actionPlan?.status === "Completado" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
-                  {f.actionPlan?.status ?? "Asignado"}
-                </span>
-              </div>
-              <div className="bg-secondary/40 rounded-lg p-4 space-y-3">
-                <div>
-                  <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Plan de remediación</div>
-                  <p className="text-sm text-foreground leading-relaxed">{f.actionPlan?.description}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border">
+          {planes.map(plan => {
+            const vencido = plan.estado !== "Completado" && plan.fechaCompromiso < hoy;
+            const severidad = plan.hallazgo.severidad as Finding["severity"] | null;
+            return (
+              <Card key={plan.id} className="p-5">
+                <div className="flex items-start justify-between gap-4 mb-3">
                   <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Responsable</div>
-                    <div className="text-sm font-medium text-foreground">{f.actionPlan?.responsible}</div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-mono text-xs font-bold text-primary bg-primary/8 px-2 py-0.5 rounded-md">{plan.hallazgo.folio ?? plan.hallazgo.id}</span>
+                      {severidad && SEV_COLOR[severidad] && (
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${SEV_COLOR[severidad]}`}>{severidad}</span>
+                      )}
+                    </div>
+                    <div className="text-base font-bold text-foreground leading-tight">{plan.hallazgo.titulo}</div>
                   </div>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${plan.estado === "Completado" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
+                    {plan.estado}
+                  </span>
+                </div>
+                <div className="bg-secondary/40 rounded-lg p-4 space-y-3">
                   <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Fecha de compromiso</div>
-                    <div className={`text-sm font-semibold font-mono ${f.actionPlan?.dueDate && f.actionPlan.dueDate < new Date().toISOString().slice(0, 10) ? "text-red-600" : "text-foreground"}`}>
-                      {f.actionPlan?.dueDate}
+                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Plan de remediación</div>
+                    <p className="text-sm text-foreground leading-relaxed">{plan.descripcion}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border">
+                    <div>
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Responsable</div>
+                      <div className="text-sm font-medium text-foreground">{plan.responsable.nombre}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">Fecha límite</div>
+                      <div className={`text-sm font-semibold font-mono ${vencido ? "text-red-600" : "text-foreground"}`}>
+                        {plan.fechaCompromiso}{vencido && <span className="ml-2 text-xs font-sans font-semibold">Vencido</span>}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div className="mt-4 pt-4 border-t border-border">
-                <EvidenciasSection 
-                  entityId={f.id} 
-                  entityType="hallazgo" 
-                  findingId={f.id}
-                  auditId={f.auditId}
-                  controlId={f.failedControlId}
-                />
-              </div>
-            </Card>
-          ))}
+                <div className="mt-4 pt-4 border-t border-border">
+                  <EvidenciasSection
+                    entityId={plan.hallazgo.id}
+                    entityType="hallazgo"
+                    findingId={plan.hallazgo.id}
+                    auditId={plan.hallazgo.auditoriaId ?? undefined}
+                    controlId={plan.hallazgo.controlId ?? undefined}
+                  />
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
