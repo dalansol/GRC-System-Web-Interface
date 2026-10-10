@@ -53,3 +53,19 @@ export const obtenerHallazgoParaPlan = (hallazgoId: string) =>
 
 export const crearPlanAccion = (datos: NuevoPlanAccion) =>
   pedir<PlanAccion>("/planes-accion", { metodo: "POST", cuerpo: datos });
+
+export const ESTADOS_PLAN_ACCION: EstadoPlanAccion[] = ["Asignado", "En Progreso", "Completado"];
+
+/** Campos que el equipo de auditoría puede modificar. El responsable auditado no edita su plan. */
+export interface CambiosPlanAccion {
+  descripcion?: string;
+  responsableId?: number;
+  fechaCompromiso?: string;
+  estado?: EstadoPlanAccion;
+}
+
+// Roles que crean y editan planes de acción (los mismos que valida el backend).
+export const ROLES_EDICION_PLAN_ACCION = ["Administrador", "Jefe de Auditoría", "Auditor Senior", "Auditor"];
+
+export const actualizarPlanAccion = (id: number, cambios: CambiosPlanAccion) =>
+  pedir<PlanAccion>(`/planes-accion/${id}`, { metodo: "PATCH", cuerpo: cambios });

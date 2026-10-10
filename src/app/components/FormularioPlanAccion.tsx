@@ -3,32 +3,40 @@ import { AlertCircle, CalendarClock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorApi } from "../api/cliente";
 import {
+  actualizarPlanAccion,
   crearPlanAccion,
+  ESTADOS_PLAN_ACCION,
   listarResponsables,
   MENSAJE_FECHA_ANTERIOR_AL_CIERRE,
   obtenerHallazgoParaPlan,
+  type EstadoPlanAccion,
   type HallazgoResumen,
   type PlanAccion,
   type Responsable,
 } from "../api/planesAccion";
 
-// Formulario "Crear plan de acción" de un hallazgo (SF-10; historia #91).
+// Formulario para crear o editar el plan de acción de un hallazgo (SF-10; historia #91).
 // Valida en el cliente la fecha de compromiso contra el cierre de la auditoría; el backend repite la validación.
+// Con `plan` entra en modo edición (solo equipo de auditoría): permite además cambiar el estado.
 
 interface Props {
   hallazgoId: string;
   hallazgoTitulo: string;
-  onCreado: (plan: PlanAccion) => void;
+  /** Plan existente a editar. Sin él, el formulario crea uno nuevo. */
+  plan?: PlanAccion;
+  onGuardado: (plan: PlanAccion) => void;
   onCerrar: () => void;
 }
 
-export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, onCreado, onCerrar }: Props) {
+export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, plan, onGuardado, onCerrar }: Props) {
+  const edicion = Boolean(plan);
   const [hallazgo, setHallazgo] = useState<HallazgoResumen | null>(null);
   const [responsables, setResponsables] = useState<Responsable[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [descripcion, setDescripcion] = useState("");
-  const [responsableId, setResponsableId] = useState("");
-  const [fechaCompromiso, setFechaCompromiso] = useState("");
+  const [descripcion, setDescripcion] = useState(plan?.descripcion ?? "");
+  const [responsableId, setResponsableId] = useState(plan ? String(plan.responsable.id) : "");
+  const [fechaCompromiso, setFechaCompromiso] = useState(plan?.fechaCompromiso ?? "");
+  const [estado, setEstado] = useState<EstadoPlanAccion>(plan?.estado ?? "Asignado");
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -52,7 +60,9 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, onCre
   }, [hallazgoId]);
 
   const fechaCierre = hallazgo?.fechaCierreAuditoria ?? null;
-  const fechaAnteriorAlCierre = Boolean(fechaCierre && fechaCompromiso && fechaCompromiso < fechaCierre);
+  // En edición solo se valida si la fecha cambió, igual que en el backend.
+  const fechaCambiada = !plan || fechaCompromiso !== plan.fechaCompromiso;
+  const fechaAnteriorAlCierre = Boolean(fechaCambiada && fechaCierre && fechaCompromiso && fechaCompromiso < fechaCierre);
 
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,14 +74,16 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, onCre
 
     setGuardando(true);
     try {
-      const plan = await crearPlanAccion({
-        hallazgoId,
-        descripcion: descripcion.trim(),
-        responsableId: Number(responsableId),
-        fechaCompromiso,
-      });
-      toast.success(`Plan de acción asignado. Fecha límite: ${plan.fechaCompromiso}.`);
-      onCreado(plan);
+      const datos = { descripcion: descripcion.trim(), responsableId: Number(responsableId), fechaCompromiso };
+      if (plan) {
+        const actualizado = await actualizarPlanAccion(plan.id, { ...datos, estado });
+        toast.success(`Plan de acción actualizado. Estado: ${actualizado.estado}. Fecha límite: ${actualizado.fechaCompromiso}.`);
+        onGuardado(actualizado);
+      } else {
+        const creado = await crearPlanAccion({ hallazgoId, ...datos });
+        toast.success(`Plan de acción asignado. Fecha límite: ${creado.fechaCompromiso}.`);
+        onGuardado(creado);
+      }
     } catch (err) {
       setError(err instanceof ErrorApi ? err.message : "No se pudo guardar el plan de acción.");
     } finally {
@@ -83,11 +95,11 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, onCre
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <form
         onSubmit={enviar}
-        aria-label="Crear plan de acción"
+        aria-label={edicion ? "Editar plan de acción" : "Crear plan de acción"}
         className="w-full max-w-lg space-y-4 rounded-xl border border-border bg-card p-6 shadow-2xl"
       >
         <div>
-          <h3 className="text-lg font-bold text-foreground">Crear plan de acción</h3>
+          <h3 className="text-lg font-bold text-foreground">{edicion ? "Editar plan de acción" : "Crear plan de acción"}</h3>
           <p className="text-xs text-muted-foreground">
             Hallazgo <span className="font-mono font-semibold text-primary">{hallazgo?.folio ?? hallazgoId}</span> — {hallazgoTitulo}
           </p>
@@ -140,6 +152,10 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, onCre
                   className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
                 >
                   <option value="">Selecciona un responsable</option>
+                  {/* Si el responsable actual ya no está activo, se conserva como opción para no perderlo al editar otros campos. */}
+                  {plan && !responsables.some((r) => r.id === plan.responsable.id) && (
+                    <option value={plan.responsable.id}>{plan.responsable.nombre}</option>
+                  )}
                   {responsables.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.nombre}
@@ -155,7 +171,7 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, onCre
                   id="plan-fecha"
                   type="date"
                   value={fechaCompromiso}
-                  min={fechaCierre ?? undefined}
+                  min={fechaCambiada ? fechaCierre ?? undefined : undefined}
                   onChange={(e) => setFechaCompromiso(e.target.value)}
                   required
                   aria-invalid={fechaAnteriorAlCierre}
@@ -163,6 +179,26 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, onCre
                 />
               </div>
             </div>
+
+            {edicion && (
+              <div>
+                <label htmlFor="plan-estado" className="mb-1 block text-xs font-semibold text-muted-foreground">
+                  Estado
+                </label>
+                <select
+                  id="plan-estado"
+                  value={estado}
+                  onChange={(e) => setEstado(e.target.value as EstadoPlanAccion)}
+                  className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+                >
+                  {ESTADOS_PLAN_ACCION.map((e) => (
+                    <option key={e} value={e}>
+                      {e}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {(error || fechaAnteriorAlCierre) && (
               <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -188,7 +224,7 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, onCre
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
           >
             {guardando && <Loader2 size={14} className="animate-spin" />}
-            Guardar plan
+            {edicion ? "Guardar cambios" : "Guardar plan"}
           </button>
         </div>
       </form>

@@ -67,6 +67,32 @@ export function validarFechaCompromiso(fechaCompromiso: string, fechaCierreAudit
   return null;
 }
 
+/** Campos que el equipo de auditoría puede modificar de un plan existente. El auditado no edita nada. */
+export const CAMPOS_EDITABLES_PLAN_ACCION = ["descripcion", "responsableId", "fechaCompromiso", "estado"] as const;
+export type CampoEditablePlanAccion = (typeof CAMPOS_EDITABLES_PLAN_ACCION)[number];
+
+export interface DatosEdicionPlanAccion {
+  descripcion: string;
+  responsableId: number;
+  fechaCompromiso: string;
+  estado: EstadoPlanAccion;
+}
+
+/** Valida el plan completo ya combinado con los cambios. Devuelve el primer error o null. */
+export function validarEdicionPlanAccion(d: Record<string, unknown>): string | null {
+  const error = validarPlanAccion(d);
+  if (error) return error;
+  if (!ESTADOS_PLAN_ACCION.includes(d.estado as EstadoPlanAccion)) {
+    return `El estado no es válido. Valores permitidos: ${ESTADOS_PLAN_ACCION.join(", ")}.`;
+  }
+  return null;
+}
+
+export function normalizarEdicionPlanAccion(d: Record<string, unknown>): DatosEdicionPlanAccion {
+  const { descripcion, responsableId, fechaCompromiso } = normalizarPlanAccion(d);
+  return { descripcion, responsableId, fechaCompromiso, estado: d.estado as EstadoPlanAccion };
+}
+
 /** Limpia los datos ya validados. */
 export function normalizarPlanAccion(d: Record<string, unknown>): DatosPlanAccion {
   return {
