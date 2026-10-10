@@ -42,6 +42,7 @@ beforeEach(async () => {
 const como = (correo: string) => ({
   get: (ruta: string) => request(app).get(ruta).set("X-Dev-Usuario", correo),
   post: (ruta: string) => request(app).post(ruta).set("X-Dev-Usuario", correo),
+  patch: (ruta: string) => request(app).patch(ruta).set("X-Dev-Usuario", correo),
 });
 
 const idDe = async (correo: string) => (await usuarios.buscarPorCorreo(correo))!.id;
@@ -178,5 +179,109 @@ describe("portal del auditado (criterio 3)", () => {
 
   it("un usuario sin planes asignados recibe una lista vacía", async () => {
     expect((await como(SOLO_LECTURA).get("/api/planes-accion/mios")).body).toEqual([]);
+  });
+});
+
+describe("edición de planes de acción por el equipo de auditoría", () => {
+  // Plan de prueba: HAL-2025-001, auditoría con cierre 2025-08-31, fecha de compromiso 2025-09-15.
+  const planSembrado = async () => (await como(AUDITORA).get("/api/planes-accion")).body[0];
+
+  it("una Auditora cambia descripción, responsable, fecha y estado, y queda en la bitácora con valores anterior y nuevo", async () => {
+    const plan = await planSembrado();
+    const laura = await idDe(AUDITADO);
+
+    const res = await como(AUDITORA)
+      .patch(`/api/planes-accion/${plan.id}`)
+      .send({ descripcion: "Nueva acción correctiva.", responsableId: laura, fechaCompromiso: "2025-10-01", estado: "En Progreso" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: plan.id,
+      descripcion: "Nueva acción correctiva.",
+      responsable: { id: laura, nombre: "Laura Fernández" },
+      fechaCompromiso: "2025-10-01",
+      estado: "En Progreso",
+      hallazgo: expect.objectContaining({ id: "HAL-2025-001" }),
+    });
+    expect(eventos).toEqual([
+      expect.objectContaining({
+        accion: "plan_accion.edicion",
+        actor: AUDITORA,
+        detalle: expect.objectContaining({
+          planAccionId: plan.id,
+          cambios: {
+            descripcion: { anterior: plan.descripcion, nuevo: "Nueva acción correctiva." },
+            responsableId: { anterior: plan.responsable.id, nuevo: laura },
+            fechaCompromiso: { anterior: "2025-09-15", nuevo: "2025-10-01" },
+            estado: { anterior: "Asignado", nuevo: "En Progreso" },
+          },
+        }),
+      }),
+    ]);
+    expect((await como(AUDITORA).get("/api/planes-accion")).body[0].estado).toBe("En Progreso");
+  });
+
+  it("permite cambiar un solo campo sin tocar los demás", async () => {
+    const plan = await planSembrado();
+    const res = await como(JEFA).patch(`/api/planes-accion/${plan.id}`).send({ estado: "Completado" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ estado: "Completado", descripcion: plan.descripcion, fechaCompromiso: plan.fechaCompromiso });
+    expect(eventos[0]!.detalle.cambios).toEqual({ estado: { anterior: "Asignado", nuevo: "Completado" } });
+  });
+
+  it("el responsable auditado no puede editar su plan aunque su rol sea Auditor", async () => {
+    await como(AUDITORA).post("/api/planes-accion").send(await planNuevo());
+    const [propio] = (await como(AUDITADO).get("/api/planes-accion/mios")).body;
+
+    const res = await como(AUDITADO).patch(`/api/planes-accion/${propio.id}`).send({ estado: "Completado" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.codigo).toBe("RESPONSABLE_NO_EDITA");
+    expect(eventos.filter((e) => e.accion === "plan_accion.edicion")).toEqual([]);
+  });
+
+  it("un usuario de Solo Lectura no puede editar", async () => {
+    const plan = await planSembrado();
+    expect((await como(SOLO_LECTURA).patch(`/api/planes-accion/${plan.id}`).send({ estado: "Completado" })).status).toBe(403);
+  });
+
+  it("rechaza una fecha anterior al cierre de la auditoría con el mismo mensaje del alta", async () => {
+    const plan = await planSembrado();
+    const res = await como(AUDITORA).patch(`/api/planes-accion/${plan.id}`).send({ fechaCompromiso: "2025-08-30" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toEqual({ codigo: "DATOS_INVALIDOS", mensaje: MENSAJE_FECHA_ANTERIOR_AL_CIERRE });
+    expect(eventos).toEqual([]);
+  });
+
+  it.each([
+    ["un estado inexistente", { estado: "Cancelado" }],
+    ["una descripción vacía", { descripcion: "  " }],
+    ["una fecha con formato inválido", { fechaCompromiso: "01/10/2025" }],
+    ["ningún campo editable", { hallazgoId: "HAL-2025-003" }],
+  ])("rechaza %s", async (_caso, cambios) => {
+    const plan = await planSembrado();
+    const res = await como(AUDITORA).patch(`/api/planes-accion/${plan.id}`).send(cambios);
+    expect(res.status).toBe(400);
+    expect(res.body.error.codigo).toBe("DATOS_INVALIDOS");
+  });
+
+  it("rechaza un responsable inactivo", async () => {
+    const plan = await planSembrado();
+    const res = await como(AUDITORA).patch(`/api/planes-accion/${plan.id}`).send({ responsableId: await idDe(INACTIVO) });
+    expect(res.status).toBe(400);
+  });
+
+  it("no registra evento si los valores no cambian", async () => {
+    const plan = await planSembrado();
+    const res = await como(AUDITORA).patch(`/api/planes-accion/${plan.id}`).send({ estado: "Asignado" });
+    expect(res.status).toBe(200);
+    expect(eventos).toEqual([]);
+  });
+
+  it("responde 404 si el plan no existe", async () => {
+    expect((await como(AUDITORA).patch("/api/planes-accion/9999").send({ estado: "Completado" })).status).toBe(404);
+    expect((await como(AUDITORA).patch("/api/planes-accion/abc").send({ estado: "Completado" })).status).toBe(404);
   });
 });

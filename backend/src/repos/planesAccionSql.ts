@@ -1,5 +1,5 @@
 import sql from "mssql";
-import type { DatosPlanAccion, EstadoPlanAccion, HallazgoResumen, PlanAccion } from "../domain/planesAccion.js";
+import type { DatosEdicionPlanAccion, DatosPlanAccion, EstadoPlanAccion, HallazgoResumen, PlanAccion } from "../domain/planesAccion.js";
 import { ErrorPlanDuplicado, type RepositorioPlanesAccion } from "./planesAccion.js";
 
 interface FilaHallazgo {
@@ -125,7 +125,28 @@ export class RepositorioPlanesAccionSql implements RepositorioPlanesAccion {
       if (ERRORES_DUPLICADO.includes((error as { number?: number }).number ?? 0)) throw new ErrorPlanDuplicado(datos.hallazgoId);
       throw error;
     }
+    return (await this.buscarPorId(id))!;
+  }
+
+  async buscarPorId(id: number) {
     const resultado = await this.pool.request().input("id", sql.Int, id).query<FilaPlan>(`${SELECT_PLAN} WHERE p.id = @id`);
-    return aPlan(resultado.recordset[0]!);
+    const fila = resultado.recordset[0];
+    return fila ? aPlan(fila) : null;
+  }
+
+  async actualizar(id: number, datos: DatosEdicionPlanAccion) {
+    const resultado = await this.pool
+      .request()
+      .input("id", sql.Int, id)
+      .input("descripcion", sql.NVarChar(2000), datos.descripcion)
+      .input("responsableId", sql.Int, datos.responsableId)
+      .input("fecha", sql.Date, new Date(`${datos.fechaCompromiso}T00:00:00Z`))
+      .input("estado", sql.NVarChar(20), datos.estado)
+      .query(`
+        UPDATE action_plans
+        SET description = @descripcion, responsible_id = @responsableId, due_date = @fecha, status = @estado
+        WHERE id = @id;`);
+    if (resultado.rowsAffected[0] === 0) return null;
+    return this.buscarPorId(id);
   }
 }

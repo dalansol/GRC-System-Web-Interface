@@ -11,7 +11,8 @@ import {
   ChevronRight,
   Filter,
   ClipboardList,
-  CalendarClock
+  CalendarClock,
+  Pencil
 } from "lucide-react";
 import { toast } from "sonner";
 import { CONTROLS } from "../data/mock_data";
@@ -22,6 +23,8 @@ import FormularioHallazgo, {
 } from "./FormularioHallazgo";
 import EvidenciasSection from "./EvidenciasSection";
 import FormularioPlanAccion from "./FormularioPlanAccion";
+import { ROLES_EDICION_PLAN_ACCION } from "../api/planesAccion";
+import { useSesion } from "../auth/SesionContext";
 import { useHallazgosViewModel, HallazgoViewModel } from "../domain/hallazgos/useHallazgosViewModel";
 
 export type Hallazgo = HallazgoViewModel;
@@ -43,6 +46,7 @@ export default function VistaHallazgo() {
     hallazgoParaPlan,
     setHallazgoParaPlan,
     handlePlanCreado,
+    handlePlanActualizado,
     setEditingHallazgo,
     setShowCreateForm,
     setExpandedFinding,
@@ -53,6 +57,11 @@ export default function VistaHallazgo() {
     handleUpdate,
     handleFindingCreated,
   } = useHallazgosViewModel();
+
+  // Solo el equipo de auditoría edita planes, y nunca el propio responsable auditado (el backend repite la regla).
+  const { usuario } = useSesion();
+  const puedeEditarPlan = (plan: { responsable: { id: number } }) =>
+    Boolean(usuario && ROLES_EDICION_PLAN_ACCION.includes(usuario.rol) && plan.responsable.id !== usuario.id);
 
   const findingControls: FindingControlOption[] = CONTROLS.map((control) => ({
     id: control.id,
@@ -229,9 +238,21 @@ export default function VistaHallazgo() {
                                       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                         <ClipboardList size={14} /> Plan de acción
                                       </div>
-                                      <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${plan.estado === "Completado" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
-                                        {plan.estado}
-                                      </span>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${plan.estado === "Completado" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
+                                          {plan.estado}
+                                        </span>
+                                        {puedeEditarPlan(plan) && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setHallazgoParaPlan(item)}
+                                            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-secondary"
+                                          >
+                                            <Pencil size={12} />
+                                            Editar
+                                          </button>
+                                        )}
+                                      </div>
                                     </div>
                                     <p className="text-sm text-foreground leading-relaxed">{plan.descripcion}</p>
                                     <div className="mt-3 grid grid-cols-2 gap-4 border-t border-border pt-3">
@@ -376,7 +397,8 @@ export default function VistaHallazgo() {
         <FormularioPlanAccion
           hallazgoId={hallazgoParaPlan.id}
           hallazgoTitulo={hallazgoParaPlan.title}
-          onCreado={handlePlanCreado}
+          plan={planesPorHallazgo[hallazgoParaPlan.id]}
+          onGuardado={planesPorHallazgo[hallazgoParaPlan.id] ? handlePlanActualizado : handlePlanCreado}
           onCerrar={() => setHallazgoParaPlan(null)}
         />
       )}
