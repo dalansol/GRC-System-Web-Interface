@@ -65,6 +65,12 @@ export function useHallazgosViewModel() {
     setHallazgoParaPlan(null);
   };
 
+  // La edición solo cambia el plan; el estado del hallazgo no se toca.
+  const handlePlanActualizado = (plan: PlanAccion) => {
+    setPlanesPorHallazgo((prev) => ({ ...prev, [plan.hallazgo.id]: plan }));
+    setHallazgoParaPlan(null);
+  };
+
   const fetchHallazgos = async () => {
     setLoading(true);
     try {
@@ -199,6 +205,7 @@ export function useHallazgosViewModel() {
     hallazgoParaPlan,
     setHallazgoParaPlan,
     handlePlanCreado,
+    handlePlanActualizado,
     setEditingHallazgo,
     setShowCreateForm,
     setExpandedFinding,

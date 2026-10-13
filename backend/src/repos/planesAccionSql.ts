@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { DatosPlanAccion, EstadoPlanAccion, HallazgoResumen, PlanAccion } from "../domain/planesAccion.js";
+import type { DatosEdicionPlanAccion, DatosPlanAccion, EstadoPlanAccion, HallazgoResumen, PlanAccion } from "../domain/planesAccion.js";
 import { ErrorPlanDuplicado, type RepositorioPlanesAccion } from "./planesAccion.js";
 
 interface FilaHallazgo {
@@ -115,7 +115,23 @@ export class RepositorioPlanesAccionSql implements RepositorioPlanesAccion {
     } finally {
       cliente.release();
     }
+    return (await this.buscarPorId(id))!;
+  }
+
+  async buscarPorId(id: number) {
     const resultado = await this.pool.query<FilaPlan>(`${SELECT_PLAN} WHERE p.id = $1`, [id]);
-    return aPlan(resultado.rows[0]!);
+    const fila = resultado.rows[0];
+    return fila ? aPlan(fila) : null;
+  }
+
+  async actualizar(id: number, datos: DatosEdicionPlanAccion) {
+    const resultado = await this.pool.query(
+      `
+      UPDATE action_plans
+      SET description = $1, responsible_id = $2, due_date = $3, status = $4
+      WHERE id = $5`,
+      [datos.descripcion, datos.responsableId, datos.fechaCompromiso, datos.estado, id],
+    );
+    return resultado.rowCount === 1 ? this.buscarPorId(id) : null;
   }
 }

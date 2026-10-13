@@ -13,7 +13,9 @@ import { crearApp } from "../src/app.js";
 import { crearVerificadorDev } from "../src/auth/verificador.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
 import { ErrorCodigoDuplicado } from "../src/repos/planes.js";
+import { ErrorPlanDuplicado } from "../src/repos/planesAccion.js";
 import { RepositorioPlanesAccionMemoria } from "../src/repos/planesAccionMemoria.js";
+import { RepositorioPlanesAccionSql } from "../src/repos/planesAccionSql.js";
 import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
 import { RepositorioPlanesSql } from "../src/repos/planesSql.js";
 import { ErrorCorreoDuplicado } from "../src/repos/repositorio.js";
@@ -49,9 +51,12 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
 
     // Los scripts se ejecutan dos veces cada uno: deben poder repetirse.
     await pool.query(`
-      DROP TABLE IF EXISTS conflict_declarations, audit_controls, controls, processes, business_units, fiscal_periods,
+      DROP TABLE IF EXISTS action_plans, findings, conflict_declarations, audit_controls, controls, processes, business_units, fiscal_periods,
                            audits, audit_plans, users, role_permissions, permissions, roles CASCADE`);
-    const scripts = ["001_schema.sql", "002_seed.sql", "006_auditorias.sql", "008_estructura_y_controles.sql"];
+    const scripts = [
+      "001_schema.sql", "002_seed.sql", "004_findings.sql", "006_auditorias.sql", "007_action_plans.sql",
+      "008_estructura_y_controles.sql",
+    ];
     for (const nombre of [...scripts, ...scripts]) {
       await pool.query(await script(nombre));
     }
@@ -62,7 +67,7 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
 
   beforeEach(async () => {
     await pool.query(`
-      DELETE FROM audit_controls; DELETE FROM controls; DELETE FROM processes; DELETE FROM business_units;
+      DELETE FROM action_plans; DELETE FROM findings; DELETE FROM audit_controls; DELETE FROM controls; DELETE FROM processes; DELETE FROM business_units;
       DELETE FROM fiscal_periods; DELETE FROM audit_plans; DELETE FROM users;`);
     await repo.crearUsuario({ nombre: "Sofía Ramírez", correo: "s.ramirez@expedite.com", rolId: rolId["Administrador"]! });
     await repo.crearUsuario({ nombre: "Ana Rodríguez", correo: "a.rodriguez@expedite.com", rolId: rolId["Auditor"]! });
@@ -261,5 +266,38 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
 
     expect(await planes.actualizar(creado.id, { ...datos, estado: "Aprobado" })).toMatchObject({ estado: "Aprobado" });
     expect(await planes.listar()).toHaveLength(1);
+  });
+
+  it("guarda, edita y consulta planes de acción", async () => {
+    const planesAccion = new RepositorioPlanesAccionSql(pool);
+    const admin = (await repo.buscarPorCorreo("s.ramirez@expedite.com"))!;
+    const ana = (await repo.buscarPorCorreo("a.rodriguez@expedite.com"))!;
+    await pool.query(
+      `INSERT INTO findings (id, folio, title, severity, status, "auditId") VALUES ('HAL-P-1', 'HAL-P-1', 'Hallazgo de prueba', 'Alto', 'Abierto', 'AUD-001')`,
+    );
+    const datos = { hallazgoId: "HAL-P-1", descripcion: "Corregir accesos", responsableId: ana.id, fechaCompromiso: "2026-11-30" };
+
+    const creado = await planesAccion.crear(datos, admin.id);
+    expect(creado).toMatchObject({
+      hallazgo: { id: "HAL-P-1", fechaCierreAuditoria: "2025-08-31" },
+      responsable: { id: ana.id, nombre: "Ana Rodríguez" },
+      fechaCompromiso: "2026-11-30",
+      estado: "Asignado",
+    });
+    expect((await pool.query("SELECT status FROM findings WHERE id = 'HAL-P-1'")).rows[0].status).toBe("Asignado");
+    await expect(planesAccion.crear(datos, admin.id)).rejects.toBeInstanceOf(ErrorPlanDuplicado);
+
+    const editado = await planesAccion.actualizar(creado.id, {
+      descripcion: "Corregir accesos y revisar roles", responsableId: admin.id, fechaCompromiso: "2026-12-15", estado: "En Progreso",
+    });
+    expect(editado).toMatchObject({
+      descripcion: "Corregir accesos y revisar roles",
+      responsable: { id: admin.id, nombre: "Sofía Ramírez" },
+      fechaCompromiso: "2026-12-15",
+      estado: "En Progreso",
+    });
+    expect(await planesAccion.buscarPorId(creado.id)).toEqual(editado);
+    expect(await planesAccion.actualizar(999_999, { ...datos, estado: "Completado" })).toBeNull();
+    expect(await planesAccion.listarPorResponsable(admin.id)).toHaveLength(1);
   });
 });

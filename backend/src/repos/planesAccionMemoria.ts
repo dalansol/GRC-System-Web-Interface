@@ -1,4 +1,4 @@
-import type { DatosPlanAccion, HallazgoResumen, PlanAccion } from "../domain/planesAccion.js";
+import type { DatosEdicionPlanAccion, DatosPlanAccion, HallazgoResumen, PlanAccion } from "../domain/planesAccion.js";
 import { ErrorPlanDuplicado, type RepositorioPlanesAccion } from "./planesAccion.js";
 import type { RepositorioUsuarios } from "./repositorio.js";
 import { AUDITORIAS_DEMO, HALLAZGOS_DEMO, PLANES_ACCION_DEMO } from "./semilla.js";
@@ -66,6 +66,20 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
     if (this.filas.some((f) => f.hallazgoId === datos.hallazgoId)) throw new ErrorPlanDuplicado(datos.hallazgoId);
     const fila: Fila = { ...datos, id: this.siguienteId++, estado: "Asignado", creadoEn: new Date().toISOString() };
     this.filas.push(fila);
+    return this.aPlan(fila);
+  }
+
+  async buscarPorId(id: number) {
+    await this.listo;
+    const fila = this.filas.find((f) => f.id === id);
+    return fila ? this.aPlan(fila) : null;
+  }
+
+  async actualizar(id: number, datos: DatosEdicionPlanAccion) {
+    await this.listo;
+    const fila = this.filas.find((f) => f.id === id);
+    if (!fila) return null;
+    Object.assign(fila, datos);
     return this.aPlan(fila);
   }
 }
