@@ -9,7 +9,7 @@ const PRODUCCION = {
   DOMINIOS_PERMITIDOS: "femsa.com",
   ENTRA_TENANT_ID: "tenant",
   ENTRA_CLIENT_ID: "cliente",
-  DB_SERVER: "servidor.database.windows.net",
+  DB_SERVER: "servidor.pooler.supabase.com",
   DB_NAME: "expedite",
   DB_USER: "usuario",
   DB_PASSWORD: "secreto",
@@ -27,30 +27,37 @@ describe("cargarConfig", () => {
     });
   });
 
-  it("carga la configuración de producción con Entra ID y Azure SQL", () => {
+  it("carga la configuración de producción con Entra ID y PostgreSQL", () => {
     expect(cargarConfig(PRODUCCION)).toMatchObject({
       auth: { modo: "entra", tenantId: "tenant", clientId: "cliente" },
       datos: {
         modo: "sql",
-        servidor: "servidor.database.windows.net",
+        servidor: "servidor.pooler.supabase.com",
         baseDatos: "expedite",
-        puerto: 1433,
+        puerto: 5432,
         confiarCertificado: false,
       },
       corsOrigin: ["https://expedite.example"],
     });
   });
 
-  it("usa Entra ID y Azure SQL si no se indica el modo", () => {
+  it("usa Entra ID y PostgreSQL si no se indica el modo", () => {
     const { AUTH_MODE, DATA_MODE, ...resto } = PRODUCCION;
 
     expect(cargarConfig(resto)).toMatchObject({ auth: { modo: "entra" }, datos: { modo: "sql" } });
   });
 
-  it("acepta un SQL Server local con otro puerto y certificado autofirmado", () => {
-    const config = cargarConfig({ ...PRODUCCION, NODE_ENV: undefined, DB_PORT: "14333", DB_TRUST_CERT: "true" });
+  it("acepta un PostgreSQL local con otro puerto y certificado autofirmado", () => {
+    const config = cargarConfig({ ...PRODUCCION, NODE_ENV: undefined, DB_PORT: "54333", DB_TRUST_CERT: "true" });
 
-    expect(config.datos).toMatchObject({ puerto: 14333, confiarCertificado: true });
+    expect(config.datos).toMatchObject({ puerto: 54333, confiarCertificado: true });
+  });
+
+  it("toma el certificado de la autoridad del servidor si se indica", () => {
+    expect(cargarConfig(PRODUCCION).datos).not.toHaveProperty("certificadoCa");
+    expect(cargarConfig({ ...PRODUCCION, DB_CA_CERT: " certs/supabase-ca.crt " }).datos).toMatchObject({
+      certificadoCa: "certs/supabase-ca.crt",
+    });
   });
 
   it("separa y normaliza varios dominios", () => {

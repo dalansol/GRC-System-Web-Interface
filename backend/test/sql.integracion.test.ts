@@ -1,12 +1,12 @@
-// Pruebas contra un SQL Server o Azure SQL real. Se omiten si no hay conexión configurada.
+// Pruebas contra un PostgreSQL real. Se omiten si no hay conexión configurada.
 //
-//   SQL_TEST_SERVER=localhost SQL_TEST_PORT=1433 SQL_TEST_DATABASE=expedite_test \
-//   SQL_TEST_USER=sa SQL_TEST_PASSWORD=... pnpm test
+//   SQL_TEST_SERVER=localhost SQL_TEST_PORT=5432 SQL_TEST_DATABASE=expedite_test \
+//   SQL_TEST_USER=postgres SQL_TEST_PASSWORD=... SQL_TEST_TRUST_CERT=true pnpm test
 //
-// Usa una base exclusiva para pruebas: el contenido de la tabla users se borra.
+// Usa una base exclusiva para pruebas, nunca la compartida: las tablas se borran.
 
 import { readFile } from "node:fs/promises";
-import sql from "mssql";
+import pg from "pg";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { crearApp } from "../src/app.js";
@@ -23,7 +23,7 @@ import { escuchar } from "./servidor.js";
 const env = process.env;
 const conexion = {
   servidor: env.SQL_TEST_SERVER ?? "",
-  puerto: Number(env.SQL_TEST_PORT ?? 1433),
+  puerto: Number(env.SQL_TEST_PORT ?? 5432),
   baseDatos: env.SQL_TEST_DATABASE ?? "",
   usuario: env.SQL_TEST_USER ?? "",
   contrasena: env.SQL_TEST_PASSWORD ?? "",
@@ -32,38 +32,28 @@ const conexion = {
 
 const script = (nombre: string) => readFile(new URL(`../sql/${nombre}`, import.meta.url), "utf8");
 
-describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
-  let pool: sql.ConnectionPool;
+describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
+  let pool: pg.Pool;
   let repo: RepositorioSql;
   let rolId: Record<string, number>;
 
   beforeAll(async () => {
-    pool = await new sql.ConnectionPool({
-      server: conexion.servidor,
+    pool = new pg.Pool({
+      host: conexion.servidor,
       port: conexion.puerto,
       database: conexion.baseDatos,
       user: conexion.usuario,
       password: conexion.contrasena,
-      options: { encrypt: true, trustServerCertificate: conexion.confiarCertificado },
-    }).connect();
+      ssl: { rejectUnauthorized: !conexion.confiarCertificado },
+    });
 
-    // Los scripts se ejecutan como lo hace sqlcmd, que trae QUOTED_IDENTIFIER desactivado,
-    // y dos veces cada uno: deben poder repetirse.
-    const comoSqlcmd = await new sql.ConnectionPool({
-      server: conexion.servidor,
-      port: conexion.puerto,
-      database: conexion.baseDatos,
-      user: conexion.usuario,
-      password: conexion.contrasena,
-      options: { encrypt: true, trustServerCertificate: conexion.confiarCertificado, enableQuotedIdentifier: false },
-    }).connect();
-    try {
-      await comoSqlcmd.request().batch("DROP TABLE IF EXISTS dbo.audit_plans, dbo.users, dbo.role_permissions, dbo.permissions, dbo.roles");
-      for (const nombre of ["001_schema.sql", "002_seed.sql", "001_schema.sql", "002_seed.sql"]) {
-        await comoSqlcmd.request().batch(await script(nombre));
-      }
-    } finally {
-      await comoSqlcmd.close();
+    // Los scripts se ejecutan dos veces cada uno: deben poder repetirse.
+    await pool.query(`
+      DROP TABLE IF EXISTS conflict_declarations, audit_controls, controls, processes, business_units, fiscal_periods,
+                           audits, audit_plans, users, role_permissions, permissions, roles CASCADE`);
+    const scripts = ["001_schema.sql", "002_seed.sql", "006_auditorias.sql", "008_estructura_y_controles.sql"];
+    for (const nombre of [...scripts, ...scripts]) {
+      await pool.query(await script(nombre));
     }
 
     repo = await RepositorioSql.conectar(conexion);
@@ -71,42 +61,46 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
   });
 
   beforeEach(async () => {
-    await pool.request().batch("DELETE FROM dbo.audit_plans; DELETE FROM dbo.users;");
+    await pool.query(`
+      DELETE FROM audit_controls; DELETE FROM controls; DELETE FROM processes; DELETE FROM business_units;
+      DELETE FROM fiscal_periods; DELETE FROM audit_plans; DELETE FROM users;`);
     await repo.crearUsuario({ nombre: "Sofía Ramírez", correo: "s.ramirez@expedite.com", rolId: rolId["Administrador"]! });
     await repo.crearUsuario({ nombre: "Ana Rodríguez", correo: "a.rodriguez@expedite.com", rolId: rolId["Auditor"]! });
   });
 
   afterAll(async () => {
     await repo?.cerrar();
-    await pool?.close();
+    await pool?.end();
   });
 
   it("los scripts repetidos no duplican roles ni permisos", async () => {
-    const { recordset } = await pool.request().query(`
-      SELECT (SELECT COUNT(*) FROM dbo.roles) AS roles,
-             (SELECT COUNT(*) FROM dbo.permissions) AS permisos,
-             (SELECT COUNT(*) FROM dbo.role_permissions) AS asignaciones`);
+    const { rows } = await pool.query(`
+      SELECT (SELECT COUNT(*)::int FROM roles) AS roles,
+             (SELECT COUNT(*)::int FROM permissions) AS permisos,
+             (SELECT COUNT(*)::int FROM role_permissions) AS asignaciones`);
 
-    expect(recordset[0]).toEqual({ roles: 6, permisos: 8, asignaciones: 24 });
+    expect(rows[0]).toEqual({ roles: 6, permisos: 8, asignaciones: 24 });
   });
 
   it("crea los índices de la tabla users", async () => {
-    const { recordset } = await pool.request().query<{ name: string; is_unique: boolean; has_filter: boolean }>(`
-      SELECT name, is_unique, has_filter FROM sys.indexes
-      WHERE object_id = OBJECT_ID('dbo.users') AND name IN ('uq_users_entra_oid', 'ix_users_role_id')
-      ORDER BY name`);
+    const { rows } = await pool.query<{ name: string; is_unique: boolean; has_filter: boolean }>(`
+      SELECT c.relname AS name, i.indisunique AS is_unique, i.indpred IS NOT NULL AS has_filter
+      FROM pg_index i
+      JOIN pg_class c ON c.oid = i.indexrelid
+      WHERE i.indrelid = 'users'::regclass AND c.relname IN ('uq_users_entra_oid', 'ix_users_role_id')
+      ORDER BY c.relname`);
 
-    expect(recordset).toEqual([
+    expect(rows).toEqual([
       { name: "ix_users_role_id", is_unique: false, has_filter: false },
       { name: "uq_users_entra_oid", is_unique: true, has_filter: true },
     ]);
   });
 
   it("dos usuarios no pueden compartir la misma identidad de Entra", async () => {
-    await pool.request().batch("UPDATE dbo.users SET entra_oid = 'oid-1' WHERE email = 's.ramirez@expedite.com'");
+    await pool.query("UPDATE users SET entra_oid = 'oid-1' WHERE email = 's.ramirez@expedite.com'");
 
     await expect(
-      pool.request().batch("UPDATE dbo.users SET entra_oid = 'oid-1' WHERE email = 'a.rodriguez@expedite.com'"),
+      pool.query("UPDATE users SET entra_oid = 'oid-1' WHERE email = 'a.rodriguez@expedite.com'"),
     ).rejects.toThrow(/uq_users_entra_oid/);
   });
 
@@ -151,7 +145,7 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
   });
 
   it("no cuenta a los administradores inactivos", async () => {
-    await pool.request().batch("UPDATE dbo.users SET status = 'inactive' WHERE email = 's.ramirez@expedite.com'");
+    await pool.query("UPDATE users SET status = 'inactive' WHERE email = 's.ramirez@expedite.com'");
 
     expect(await repo.contarActivosConRol(rolId["Administrador"]!)).toBe(0);
   });
@@ -175,7 +169,7 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
 
   it("la base rechaza un estado de cuenta desconocido y un rol inexistente", async () => {
     await expect(
-      pool.request().batch("UPDATE dbo.users SET status = 'borrado' WHERE email = 'a.rodriguez@expedite.com'"),
+      pool.query("UPDATE users SET status = 'borrado' WHERE email = 'a.rodriguez@expedite.com'"),
     ).rejects.toThrow(/ck_users_status/);
     await expect(repo.crearUsuario({ nombre: "X", correo: "x@expedite.com", rolId: 999_999 })).rejects.toThrow(
       /fk_users_role/,
@@ -183,15 +177,15 @@ describe.skipIf(!conexion.servidor)("repositorio sobre SQL Server", () => {
   });
 
   it("el script del primer administrador exige editar los datos", async () => {
-    await expect(pool.request().batch(await script("003_primer_administrador.sql"))).rejects.toThrow(/Cambia @nombre/);
+    await expect(pool.query(await script("003_primer_administrador.sql"))).rejects.toThrow(/Cambia nombre/);
   });
 
   it("el script del primer administrador crea al usuario una sola vez", async () => {
     const editado = (await script("003_primer_administrador.sql"))
       .replace("CAMBIAR: nombre completo", "Primera Admin")
       .replace("cambiar@dominio-corporativo.com", "Primera.Admin@expedite.com");
-    await pool.request().batch(editado);
-    await pool.request().batch(editado);
+    await pool.query(editado);
+    await pool.query(editado);
 
     expect(await repo.buscarPorCorreo("primera.admin@expedite.com")).toMatchObject({
       nombre: "Primera Admin",
