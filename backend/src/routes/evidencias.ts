@@ -91,7 +91,7 @@ router.post(
 
       // Build a unique filename to avoid collisions
       const ext = path.extname(file.originalname).toLowerCase();
-      const id = `EV-${Date.now()}`;
+      const id = `EV-${crypto.randomUUID()}`;
       const storedName = `${id}${ext}`;
       const storagePath = path.join(UPLOADS_DIR, storedName);
 

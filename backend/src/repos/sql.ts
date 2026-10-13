@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import pg from "pg";
+import { normalizarCorreo } from "../domain/dominio.js";
 import type { EstadoUsuario, Rol, Usuario } from "../domain/tipos.js";
 import { ErrorCorreoDuplicado, type NuevoUsuario, type RepositorioUsuarios } from "./repositorio.js";
 
@@ -92,8 +93,11 @@ export class RepositorioSql implements RepositorioUsuarios {
     return this.unUsuario("u.id = $1", id);
   }
 
-  buscarPorCorreo(correo: string) {
-    return this.unUsuario("u.email = $1", correo);
+  async buscarPorCorreo(correo: string) {
+    const usuario = await this.unUsuario("u.email = $1", correo);
+    // La intercalación de la columna también iguala variantes de ancho (ａ = a). Para
+    // identificar a alguien el correo debe ser el mismo, salvo por las mayúsculas.
+    return usuario && normalizarCorreo(usuario.correo) === normalizarCorreo(correo) ? usuario : null;
   }
 
   buscarPorOid(oid: string) {

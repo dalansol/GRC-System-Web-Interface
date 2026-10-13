@@ -129,6 +129,12 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
     ).rejects.toBeInstanceOf(ErrorCorreoDuplicado);
   });
 
+  it("busca por correo sin distinguir mayúsculas, pero no acepta caracteres parecidos", async () => {
+    expect((await repo.buscarPorCorreo("A.Rodriguez@Expedite.com"))?.nombre).toBe("Ana Rodríguez");
+    // "ａ" de ancho completo: la base la iguala con "a"; no debe identificar a Ana.
+    expect(await repo.buscarPorCorreo("ａ.rodriguez@expedite.com")).toBeNull();
+  });
+
   it("guarda el texto tal cual, sin interpretarlo como SQL", async () => {
     const nombre = "Robert'); DROP TABLE users;-- Ñandú 审计";
     const creado = await repo.crearUsuario({ nombre, correo: "r.tables@expedite.com", rolId: rolId["Auditor"]! });
