@@ -22,6 +22,7 @@ const SCRIPTS = [
   "008_estructura_y_controles.sql",
   "009_seed_controles.sql",
   "010_catalogos_riesgos_y_ejecucion.sql",
+  "011_seed_demo.sql",
 ];
 
 // Las tablas del modelo entidad-relación de docs/diseno/base-de-datos.md.
