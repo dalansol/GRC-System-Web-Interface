@@ -11,7 +11,7 @@
  *   SF-18 — Trazabilidad (botón "Ver Detalles" abre ControlDetailView vía navigate)
  */
 
-import React, { useState, Fragment } from "react";
+import React, { useMemo, useState, Fragment } from "react";
 import {
   Search,
   XCircle,
@@ -24,12 +24,13 @@ import {
   ShieldCheck
 } from "lucide-react";
 
-import { CONTROLS, INITIAL_FINDINGS } from "../data/mock_data";
+import { CONTROLS, INITIAL_FINDINGS, INITIAL_USERS, PLAN_CONTROL_ASSIGNMENTS } from "../data/mock_data";
 import type { Navigate } from "./SharedComponents";
 import { exportToCSV, ValidityBadge } from "./SharedComponents";
 import { useControlesViewModel } from "../domain/controles/useControlesViewModel";
 import type { ControlViewModel } from "../domain/controles/useControlesViewModel";
 import EvidenciasSection from "./EvidenciasSection";
+import { useSesion } from "../auth/SesionContext";
 
 // ─── Sub-componentes de presentación ─────────────────────────────────────────
 
@@ -70,6 +71,28 @@ interface Props {
 }
 
 export default function VistaControles({ navigate }: Props) {
+  const { usuario } = useSesion();
+  const controlesVisibles = useMemo(() => {
+    if (usuario?.rol !== "Auditor Senior" && usuario?.rol !== "Auditor") {
+      return CONTROLS;
+    }
+
+    const usuarioMock = INITIAL_USERS.find(
+      (user) => user.email.toLowerCase() === usuario.correo.toLowerCase(),
+    );
+    const usuarioId = usuarioMock?.id;
+
+    if (!usuarioId) return [];
+
+    const controlesAsignados = new Set(
+      PLAN_CONTROL_ASSIGNMENTS
+        .filter((assignment) => assignment.responsibleId === usuarioId)
+        .map((assignment) => assignment.controlId),
+    );
+
+    return CONTROLS.filter((control) => controlesAsignados.has(control.id));
+  }, [usuario]);
+
   const {
     controlesFiltrados,
     filtros,
@@ -77,7 +100,7 @@ export default function VistaControles({ navigate }: Props) {
     kpis,
     limpiarFiltros,
     filtrosActivos,
-  } = useControlesViewModel(CONTROLS, INITIAL_FINDINGS);
+  } = useControlesViewModel(controlesVisibles, INITIAL_FINDINGS);
 
   const [expandedControl, setExpandedControl] = useState<string | null>(null);
 
@@ -299,4 +322,3 @@ export default function VistaControles({ navigate }: Props) {
     </div>
   );
 }
-

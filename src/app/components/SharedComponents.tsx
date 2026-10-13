@@ -74,6 +74,7 @@ type View = NavView; // alias kept for existing components
 interface UserRecord {
   id: string; name: string; email: string;
   role: string; status: "active" | "inactive"; lastLogin: string;
+  manager?: string;
 }
 
 
@@ -590,4 +591,3 @@ function exportToCSV(filename: string, headers: string[], rows: string[][]) {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
-
