@@ -22,7 +22,7 @@ flowchart TD
         API3["<b>Microsoft Graph API</b>"]
     end
 
-    SQL["<b>Azure SQL Database</b><br/>(SQL)"]
+    SQL["<b>Supabase</b><br/>(PostgreSQL)"]
     BLOB["<b>Azure Blob Storage</b><br/>(Almacenamiento de archivos)"]
     COP["<b>Copilot Premium</b><br/>Resumenes IA"]
 

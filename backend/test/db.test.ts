@@ -1,4 +1,4 @@
-import type sql from "mssql";
+import type pg from "pg";
 import { describe, expect, it } from "vitest";
 import { poolPromise, registrarPool } from "../src/db.js";
 
@@ -11,7 +11,7 @@ describe("conexión compartida", () => {
     await Promise.resolve();
     expect(entregada).toBeNull();
 
-    const pool = { connected: true } as unknown as sql.ConnectionPool;
+    const pool = { connected: true } as unknown as pg.Pool;
     registrarPool(pool);
 
     expect(await poolPromise).toBe(pool);

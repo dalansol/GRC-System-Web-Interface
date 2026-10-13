@@ -11,8 +11,10 @@ export type ConfigDatos =
       usuario: string;
       contrasena: string;
       puerto: number;
-      /** Solo para un SQL Server local con certificado autofirmado. */
+      /** Solo para un PostgreSQL local con certificado autofirmado. */
       confiarCertificado: boolean;
+      /** Archivo con el certificado de la autoridad que firma el del servidor (Supabase usa la suya). */
+      certificadoCa?: string;
     };
 
 export interface Config {
@@ -70,14 +72,16 @@ export function cargarConfig(env: Entorno): Config {
     if (confiarCertificado && produccion) {
       throw new Error("DB_TRUST_CERT=true no está permitido en producción.");
     }
+    const certificadoCa = env.DB_CA_CERT?.trim();
     datos = {
       modo: "sql",
       servidor: requerida("DB_SERVER"),
       baseDatos: requerida("DB_NAME"),
       usuario: requerida("DB_USER"),
       contrasena: requerida("DB_PASSWORD"),
-      puerto: numeroDePuerto("DB_PORT", 1433),
+      puerto: numeroDePuerto("DB_PORT", 5432),
       confiarCertificado,
+      ...(certificadoCa ? { certificadoCa } : {}),
     };
   } else {
     throw new Error("DATA_MODE debe ser 'sql' o 'memoria'.");

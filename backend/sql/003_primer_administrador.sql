@@ -2,18 +2,18 @@
 -- Cambia el nombre y el correo antes de ejecutar. El correo debe ser el de su
 -- cuenta de Microsoft Entra ID.
 
--- Los índices filtrados exigen estas opciones; sqlcmd no las activa por omisión.
-SET ANSI_NULLS ON;
-SET QUOTED_IDENTIFIER ON;
+DO $$
+DECLARE
+    nombre VARCHAR(150) := 'CAMBIAR: nombre completo';
+    correo VARCHAR(254) := 'cambiar@dominio-corporativo.com';
+BEGIN
+    IF correo LIKE 'cambiar@%' THEN
+        RAISE EXCEPTION 'Cambia nombre y correo antes de ejecutar este script.';
+    END IF;
 
-DECLARE @nombre NVARCHAR(150) = N'CAMBIAR: nombre completo';
-DECLARE @correo NVARCHAR(254) = N'cambiar@dominio-corporativo.com';
-
-IF @correo LIKE N'cambiar@%'
-    THROW 50000, 'Cambia @nombre y @correo antes de ejecutar este script.', 1;
-
-IF NOT EXISTS (SELECT 1 FROM dbo.users WHERE email = LOWER(@correo))
-    INSERT INTO dbo.users (name, email, role_id)
-    SELECT @nombre, LOWER(@correo), r.id
-    FROM dbo.roles r
-    WHERE r.name = N'Administrador';
+    INSERT INTO users (name, email, role_id)
+    SELECT nombre, LOWER(correo), r.id
+    FROM roles r
+    WHERE r.name = 'Administrador'
+    ON CONFLICT (email) DO NOTHING;
+END $$;

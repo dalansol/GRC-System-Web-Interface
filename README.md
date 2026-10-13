@@ -118,10 +118,11 @@ Backend (`backend/.env`):
 | `DOMINIOS_PERMITIDOS` | Dominios de correo corporativo aceptados al dar de alta usuarios, separados por coma. Obligatoria. |
 | `AUTH_MODE` | `entra` (Microsoft Entra ID, por omisión) o `dev` (solo local; no arranca en producción). |
 | `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` | Obligatorias con `AUTH_MODE=entra`. |
-| `DATA_MODE` | `sql` (Azure SQL, por omisión) o `memoria` (solo local; no arranca en producción). |
+| `DATA_MODE` | `sql` (PostgreSQL en Supabase, por omisión) o `memoria` (solo local; no arranca en producción). |
 | `DB_SERVER`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Obligatorias con `DATA_MODE=sql`. Las usan usuarios y hallazgos. |
-| `DB_PORT` | Puerto de la base. Por omisión `1433`. |
-| `DB_TRUST_CERT` | `true` para un SQL Server local con certificado autofirmado; no arranca en producción. La conexión siempre va cifrada. |
+| `DB_PORT` | Puerto de la base. Por omisión `5432`. |
+| `DB_CA_CERT` | Archivo con el certificado de la autoridad que firma el del servidor; con Supabase, el que se descarga del proyecto. |
+| `DB_TRUST_CERT` | `true` para un PostgreSQL local con certificado autofirmado; no arranca en producción. La conexión siempre va cifrada. |
 
 Frontend (`.env`):
 
@@ -133,20 +134,22 @@ Frontend (`.env`):
 | `VITE_ENTRA_TENANT_ID`, `VITE_ENTRA_CLIENT_ID` | Obligatorias con `VITE_AUTH_MODE=entra`. |
 | `VITE_ENTRA_API_SCOPE` | Opcional. Por omisión `api://<VITE_ENTRA_CLIENT_ID>/access_as_user`. |
 
-## Conectar Azure SQL y Microsoft Entra ID
+## Conectar Supabase y Microsoft Entra ID
 
-Cuando existan los recursos en Azure:
+Base de datos (detalle en `docs/diseno/base-de-datos.md`):
 
-1. Ejecutar en la base de Azure SQL, en este orden, `backend/sql/001_schema.sql`,
-   `002_seed.sql`, `003_primer_administrador.sql` (este último hay que editarlo
-   antes con el nombre y correo del primer Administrador), `004_findings.sql`,
-   `006_auditorias.sql` (auditorías con su fecha de cierre, usada por los planes
-   de acción) y `007_action_plans.sql` (planes de acción de los hallazgos).
-   `005_seed_findings.sql` carga hallazgos de prueba y solo es para desarrollo.
-2. En `backend/.env`: `DATA_MODE=sql` con las variables `DB_*`, `AUTH_MODE=entra`
-   con `ENTRA_TENANT_ID` y `ENTRA_CLIENT_ID`, y el dominio real en
-   `DOMINIOS_PERMITIDOS`.
-3. En el `.env` de la raíz: `VITE_AUTH_MODE=entra`, `VITE_ENTRA_TENANT_ID` y
+1. En `backend/.env`: `DATA_MODE=sql` con las variables `DB_*` de la base compartida
+   (plantilla en `backend/.env.example`).
+2. Aplicar el esquema desde `backend/`: `corepack pnpm db:migrar`. Corre, en orden, los
+   scripts de `backend/sql/` que le falten a la base. Con `--datos-prueba` agrega
+   hallazgos y controles de prueba (solo desarrollo), y con `--admin-nombre` y
+   `--admin-correo` da de alta al primer Administrador.
+
+Inicio de sesión, cuando exista el registro de aplicación en Entra ID:
+
+1. En `backend/.env`: `AUTH_MODE=entra` con `ENTRA_TENANT_ID` y `ENTRA_CLIENT_ID`, y el
+   dominio real en `DOMINIOS_PERMITIDOS`.
+2. En el `.env` de la raíz: `VITE_AUTH_MODE=entra`, `VITE_ENTRA_TENANT_ID` y
    `VITE_ENTRA_CLIENT_ID`.
 
 El registro de aplicación en Entra ID debe exponer el permiso `access_as_user` y
@@ -154,6 +157,7 @@ tener la URL del frontend como URI de redirección de tipo aplicación de págin
 
 ## Documentación
 
+- `docs/diseno/base-de-datos.md`: modelo entidad-relación, conexión a la base compartida y migraciones.
 - `docs/diseno/usuarios-roles.md`: diseño de la gestión de usuarios y roles.
 - `docs/pruebas/usuarios-roles.md`: casos de prueba, resultados y defectos.
 - `Visión y Alcance Sistema Auditoría.md`: requerimientos originales.

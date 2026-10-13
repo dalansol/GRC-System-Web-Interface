@@ -1,25 +1,20 @@
 -- Auditorías (SF-05). Solo los datos que necesitan los planes de acción: la fecha
 -- de cierre es la que se compara con la fecha de compromiso (historia #91).
--- Azure SQL / SQL Server. Se puede ejecutar más de una vez sin efecto.
+-- PostgreSQL (Supabase). Se puede ejecutar más de una vez sin efecto.
 
-SET ANSI_NULLS ON;
-SET QUOTED_IDENTIFIER ON;
-
-IF OBJECT_ID('dbo.audits', 'U') IS NULL
-CREATE TABLE dbo.audits (
-    id         NVARCHAR(100) NOT NULL CONSTRAINT pk_audits PRIMARY KEY,
-    name       NVARCHAR(255) NOT NULL,
-    end_date   DATE          NOT NULL,
-    created_at DATETIME2(0)  NOT NULL CONSTRAINT df_audits_created_at DEFAULT SYSUTCDATETIME()
+CREATE TABLE IF NOT EXISTS audits (
+    id         VARCHAR(100)   NOT NULL CONSTRAINT pk_audits PRIMARY KEY,
+    name       VARCHAR(255)   NOT NULL,
+    end_date   DATE           NOT NULL,
+    created_at TIMESTAMPTZ(0) NOT NULL DEFAULT now()
 );
+ALTER TABLE audits ENABLE ROW LEVEL SECURITY;
 
 -- Auditorías de prueba (las mismas que AUDIT_RECORDS en mock_data.tsx y que usan los hallazgos de 005_seed_findings.sql).
-INSERT INTO dbo.audits (id, name, end_date)
-SELECT v.*
-FROM (VALUES
-    (N'AUD-001', N'Auditoría SOX — Cuentas por Pagar', CONVERT(DATE, '2025-08-31')),
-    (N'AUD-002', N'Auditoría Operacional — Cadena de Suministro', CONVERT(DATE, '2025-05-30')),
-    (N'AUD-003', N'Auditoría de Cumplimiento — GDPR', CONVERT(DATE, '2025-11-30')),
-    (N'AUD-004', N'Auditoría Interna — Recursos Humanos', CONVERT(DATE, '2025-06-30'))
-) AS v (id, name, end_date)
-WHERE NOT EXISTS (SELECT 1 FROM dbo.audits a WHERE a.id = v.id);
+INSERT INTO audits (id, name, end_date)
+VALUES
+    ('AUD-001', 'Auditoría SOX — Cuentas por Pagar', '2025-08-31'),
+    ('AUD-002', 'Auditoría Operacional — Cadena de Suministro', '2025-05-30'),
+    ('AUD-003', 'Auditoría de Cumplimiento — GDPR', '2025-11-30'),
+    ('AUD-004', 'Auditoría Interna — Recursos Humanos', '2025-06-30')
+ON CONFLICT (id) DO NOTHING;

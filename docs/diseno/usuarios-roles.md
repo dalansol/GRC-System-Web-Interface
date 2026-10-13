@@ -8,7 +8,7 @@ Módulo: Usuarios y accesos
 
 Que un Administrador pueda ver a todos los usuarios, cambiarles el rol y dar de alta
 usuarios nuevos del dominio corporativo, con la sesión iniciada mediante Microsoft
-Entra ID y los datos guardados en Azure SQL.
+Entra ID y los datos guardados en PostgreSQL (Supabase).
 
 ## Criterios de aceptación
 
@@ -55,7 +55,7 @@ domain/tipos.ts            Usuario, Rol
 domain/dominio.ts          validación de dominio de correo
 repos/repositorio.ts       interfaz RepositorioUsuarios
 repos/memoria.ts           implementación en memoria (pruebas y desarrollo)
-repos/sql.ts               implementación sobre Azure SQL (mssql)
+repos/sql.ts               implementación sobre PostgreSQL (pg)
 auth/verificador.ts        interfaz VerificadorToken + implementación Entra y dev
 middleware/autenticar.ts   valida el token y carga al usuario
 middleware/autorizar.ts    exige uno de los roles indicados
@@ -112,7 +112,7 @@ cuenta como dominio autorizado.
 
 `PORT`, `AUTH_MODE`, `DATA_MODE` (`sql` / `memoria`), `DOMINIOS_PERMITIDOS`,
 `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `DB_SERVER`, `DB_NAME`, `DB_USER`,
-`DB_PASSWORD`, `DB_PORT`, `DB_TRUST_CERT`, `CORS_ORIGIN`.
+`DB_PASSWORD`, `DB_PORT`, `DB_CA_CERT`, `DB_TRUST_CERT`, `CORS_ORIGIN`.
 
 ## Frontend
 

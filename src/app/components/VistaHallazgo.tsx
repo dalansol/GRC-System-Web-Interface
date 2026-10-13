@@ -82,7 +82,7 @@ export default function VistaHallazgo() {
             Modo actual:{" "}
             <span className="font-semibold text-primary">
               {USE_REAL_BACKEND
-                ? "API Backend (SQL Server)"
+                ? "API Backend (PostgreSQL)"
                 : "Mock Data Local"}
             </span>
           </p>

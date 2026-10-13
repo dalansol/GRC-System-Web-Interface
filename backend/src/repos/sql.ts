@@ -1,4 +1,6 @@
-import sql from "mssql";
+import { readFileSync } from "node:fs";
+import pg from "pg";
+import { normalizarCorreo } from "../domain/dominio.js";
 import type { EstadoUsuario, Rol, Usuario } from "../domain/tipos.js";
 import { ErrorCorreoDuplicado, type NuevoUsuario, type RepositorioUsuarios } from "./repositorio.js";
 
@@ -7,8 +9,10 @@ export interface ConexionSql {
   baseDatos: string;
   usuario: string;
   contrasena: string;
-  /** Solo para SQL Server local con certificado autofirmado. */
+  /** Solo para un PostgreSQL local con certificado autofirmado. */
   confiarCertificado?: boolean;
+  /** Archivo con el certificado de la autoridad que firma el del servidor. */
+  certificadoCa?: string;
   puerto?: number;
 }
 
@@ -26,8 +30,8 @@ const SELECT_USUARIO = `
   FROM users u
   JOIN roles r ON r.id = u.role_id`;
 
-// Números de error de SQL Server para violación de restricción o índice único.
-const ERRORES_DUPLICADO = [2601, 2627];
+// Código de PostgreSQL para violación de restricción o índice único.
+const ERROR_DUPLICADO = "23505";
 
 function aUsuario(fila: FilaUsuario): Usuario {
   return {
@@ -40,88 +44,85 @@ function aUsuario(fila: FilaUsuario): Usuario {
   };
 }
 
-// Repositorio sobre Azure SQL. Todas las consultas usan parámetros.
+// Repositorio sobre PostgreSQL (Supabase). Todas las consultas usan parámetros.
 export class RepositorioSql implements RepositorioUsuarios {
-  private constructor(readonly pool: sql.ConnectionPool) {}
+  private constructor(readonly pool: pg.Pool) {}
 
   static async conectar(conexion: ConexionSql): Promise<RepositorioSql> {
-    // DB_SERVER puede traer una instancia con nombre (HOST\SQLEXPRESS); ahí no se usa el puerto.
-    const [servidor = conexion.servidor, instancia] = conexion.servidor.split("\\", 2);
-    const pool = await new sql.ConnectionPool({
-      server: servidor,
-      ...(instancia ? {} : { port: conexion.puerto }),
+    const pool = new pg.Pool({
+      host: conexion.servidor,
+      port: conexion.puerto,
       database: conexion.baseDatos,
       user: conexion.usuario,
       password: conexion.contrasena,
-      options: {
-        encrypt: true,
-        trustServerCertificate: conexion.confiarCertificado ?? false,
-        ...(instancia ? { instanceName: instancia } : {}),
+      ssl: {
+        rejectUnauthorized: !(conexion.confiarCertificado ?? false),
+        ...(conexion.certificadoCa ? { ca: readFileSync(conexion.certificadoCa, "utf8") } : {}),
       },
-    }).connect();
+    });
+    // Una conexión en reposo que el servidor cierra no debe tumbar el proceso; el pool abre otra.
+    pool.on("error", (error) => {
+      console.error("Se perdió una conexión en reposo a la base de datos:", error.message);
+    });
+    // El pool conecta hasta la primera consulta; esta hace que unos datos de conexión malos fallen al arrancar.
+    try {
+      await pool.query("SELECT 1");
+    } catch (error) {
+      await pool.end();
+      throw error;
+    }
     return new RepositorioSql(pool);
   }
 
   async cerrar(): Promise<void> {
-    await this.pool.close();
+    await this.pool.end();
   }
 
-  private async unUsuario(condicion: string, parametro: { tipo: sql.ISqlType | (() => sql.ISqlType); valor: unknown }) {
-    const resultado = await this.pool
-      .request()
-      .input("valor", parametro.tipo, parametro.valor)
-      .query<FilaUsuario>(`${SELECT_USUARIO} WHERE ${condicion}`);
-    const fila = resultado.recordset[0];
+  private async unUsuario(condicion: string, valor: unknown) {
+    const resultado = await this.pool.query<FilaUsuario>(`${SELECT_USUARIO} WHERE ${condicion}`, [valor]);
+    const fila = resultado.rows[0];
     return fila ? aUsuario(fila) : null;
   }
 
   async listarUsuarios() {
-    const resultado = await this.pool.request().query<FilaUsuario>(`${SELECT_USUARIO} ORDER BY u.name`);
-    return resultado.recordset.map(aUsuario);
+    const resultado = await this.pool.query<FilaUsuario>(`${SELECT_USUARIO} ORDER BY u.name`);
+    return resultado.rows.map(aUsuario);
   }
 
   buscarPorId(id: number) {
-    return this.unUsuario("u.id = @valor", { tipo: sql.Int, valor: id });
+    return this.unUsuario("u.id = $1", id);
   }
 
-  buscarPorCorreo(correo: string) {
-    return this.unUsuario("u.email = @valor", { tipo: sql.NVarChar(254), valor: correo });
+  async buscarPorCorreo(correo: string) {
+    const usuario = await this.unUsuario("u.email = $1", correo);
+    // La intercalación de la columna también iguala variantes de ancho (ａ = a). Para
+    // identificar a alguien el correo debe ser el mismo, salvo por las mayúsculas.
+    return usuario && normalizarCorreo(usuario.correo) === normalizarCorreo(correo) ? usuario : null;
   }
 
   buscarPorOid(oid: string) {
-    return this.unUsuario("u.entra_oid = @valor", { tipo: sql.NVarChar(64), valor: oid });
+    return this.unUsuario("u.entra_oid = $1", oid);
   }
 
   async vincularOid(id: number, oid: string) {
-    const resultado = await this.pool
-      .request()
-      .input("id", sql.Int, id)
-      .input("oid", sql.NVarChar(64), oid)
-      .query("UPDATE users SET entra_oid = @oid WHERE id = @id AND entra_oid IS NULL");
-    return (resultado.rowsAffected[0] ?? 0) === 1;
+    const resultado = await this.pool.query("UPDATE users SET entra_oid = $2 WHERE id = $1 AND entra_oid IS NULL", [id, oid]);
+    return resultado.rowCount === 1;
   }
 
   async registrarAcceso(id: number) {
-    await this.pool
-      .request()
-      .input("id", sql.Int, id)
-      .query("UPDATE users SET last_login = SYSUTCDATETIME() WHERE id = @id");
+    await this.pool.query("UPDATE users SET last_login = now() WHERE id = $1", [id]);
   }
 
   async crearUsuario(datos: NuevoUsuario) {
     try {
-      const resultado = await this.pool
-        .request()
-        .input("nombre", sql.NVarChar(150), datos.nombre)
-        .input("correo", sql.NVarChar(254), datos.correo)
-        .input("rolId", sql.Int, datos.rolId)
-        .query<{ id: number }>(
-          "INSERT INTO users (name, email, role_id) OUTPUT INSERTED.id VALUES (@nombre, @correo, @rolId)",
-        );
-      const usuario = await this.buscarPorId(resultado.recordset[0]!.id);
+      const resultado = await this.pool.query<{ id: number }>(
+        "INSERT INTO users (name, email, role_id) VALUES ($1, $2, $3) RETURNING id",
+        [datos.nombre, datos.correo, datos.rolId],
+      );
+      const usuario = await this.buscarPorId(resultado.rows[0]!.id);
       return usuario!;
     } catch (error) {
-      if (ERRORES_DUPLICADO.includes((error as { number?: number }).number ?? 0)) {
+      if ((error as { code?: string }).code === ERROR_DUPLICADO) {
         throw new ErrorCorreoDuplicado(datos.correo);
       }
       throw error;
@@ -129,37 +130,32 @@ export class RepositorioSql implements RepositorioUsuarios {
   }
 
   async cambiarRol(id: number, rolId: number) {
-    await this.pool
-      .request()
-      .input("id", sql.Int, id)
-      .input("rolId", sql.Int, rolId)
-      .query("UPDATE users SET role_id = @rolId WHERE id = @id");
+    await this.pool.query("UPDATE users SET role_id = $2 WHERE id = $1", [id, rolId]);
     return this.buscarPorId(id);
   }
 
   async contarActivosConRol(rolId: number) {
-    const resultado = await this.pool
-      .request()
-      .input("rolId", sql.Int, rolId)
-      .query<{ total: number }>(
-        "SELECT COUNT(*) AS total FROM users WHERE role_id = @rolId AND status = 'active'",
-      );
-    return resultado.recordset[0]?.total ?? 0;
+    const resultado = await this.pool.query<{ total: number }>(
+      "SELECT COUNT(*)::int AS total FROM users WHERE role_id = $1 AND status = 'active'",
+      [rolId],
+    );
+    return resultado.rows[0]?.total ?? 0;
   }
 
   private async roles(filtro: string, nombre?: string): Promise<Rol[]> {
-    const peticion = this.pool.request();
-    if (nombre !== undefined) peticion.input("nombre", sql.NVarChar(100), nombre);
-    const resultado = await peticion.query<{ id: number; name: string; permission: string | null }>(`
+    const resultado = await this.pool.query<{ id: number; name: string; permission: string | null }>(
+      `
       SELECT r.id, r.name, p.name AS permission
       FROM roles r
       LEFT JOIN role_permissions rp ON rp.role_id = r.id
       LEFT JOIN permissions p ON p.id = rp.permission_id
       ${filtro}
-      ORDER BY r.id, p.id`);
+      ORDER BY r.id, p.id`,
+      nombre === undefined ? [] : [nombre],
+    );
 
     const roles = new Map<number, Rol>();
-    for (const fila of resultado.recordset) {
+    for (const fila of resultado.rows) {
       const rol = roles.get(fila.id) ?? { id: fila.id, nombre: fila.name, permisos: [] };
       if (fila.permission) rol.permisos.push(fila.permission);
       roles.set(fila.id, rol);
@@ -172,7 +168,7 @@ export class RepositorioSql implements RepositorioUsuarios {
   }
 
   async buscarRolPorNombre(nombre: string) {
-    const [rol] = await this.roles("WHERE r.name = @nombre", nombre);
+    const [rol] = await this.roles("WHERE r.name = $1", nombre);
     return rol ?? null;
   }
 }

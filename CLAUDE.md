@@ -27,9 +27,9 @@
 
 - **Frontend** exportado desde Figma Make ("Expedite GRC"). Casi todos los datos siguen siendo mocks en memoria (`src/app/data/mock_data.tsx`); **usuarios y roles ya salen del backend**.
 - React 18 + TypeScript + **Vite 6**, Tailwind CSS v4 (`@tailwindcss/vite`), componentes **shadcn/ui** (Radix) en `src/app/components/ui/`, iconos `lucide-react`, gráficas `recharts`, toasts `sonner`, también MUI instalado.
-- **Backend** en `backend/`: Node + Express 5 + TypeScript (módulos ES), `mssql` para Azure SQL, `jose` para validar tokens de Entra ID. Usa **pnpm** (`corepack pnpm ...`); la raíz usa **npm**.
+- **Backend** en `backend/`: Node + Express 5 + TypeScript (módulos ES), `pg` para PostgreSQL en Supabase, `jose` para validar tokens de Entra ID. Usa **pnpm** (`corepack pnpm ...`); la raíz usa **npm**.
 - Comandos frontend: `npm i`, `npm run dev`, `npm run build`, `npm test` (Vitest + Testing Library). Comandos backend: `corepack pnpm dev`, `test`, `typecheck`, `build`. No hay linter ni revisión de tipos en el frontend.
-- La app exige sesión: sin el backend corriendo muestra un error de conexión. Para desarrollo local hace falta un `.env` en la raíz y otro en `backend/` (variables en el README; modo `dev`, sin Azure). Nunca leer ni versionar los `.env`.
+- La app exige sesión: sin el backend corriendo muestra un error de conexión. Para desarrollo local hace falta un `.env` en la raíz y otro en `backend/` (variables en el README; modo `dev`, sin Entra ID). Nunca leer ni versionar los `.env`.
 - Diseño y pruebas de usuarios y roles: `docs/diseno/usuarios-roles.md`, `docs/pruebas/usuarios-roles.md`.
 - Alias `@` → `src/`. Plugin `figma:asset/…` → `src/assets/`. **No quitar** los plugins `react()` ni `tailwindcss()` de `vite.config.ts`.
 
@@ -49,7 +49,7 @@ src/
   imports/logo.svg         ← logo Expedite
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
 backend/
-  sql/                     ← scripts de Azure SQL (esquema, datos iniciales, primer administrador, hallazgos y sus datos de prueba, auditorías, planes de acción)
+  sql/                     ← scripts de PostgreSQL (esquema, datos iniciales, primer administrador, hallazgos y sus datos de prueba, auditorías, planes de acción, estructura y controles, catálogos, riesgos y ejecución)
   src/server.ts            ← único punto de arranque; abre la conexión a la base y monta las rutas
   src/app.ts               ← app Express; recibe repositorio, verificador de tokens y rutas
   src/db.ts                ← conexión compartida (la registra server.ts)
@@ -157,7 +157,7 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 7. **Modelos del Sistema** sin texto explicativo.
 
 8. **Dominio corporativo real** para el alta de usuarios: hoy `DOMINIOS_PERMITIDOS=expedite.com` como valor de desarrollo.
-9. **Recursos de Azure** (base Azure SQL y registro de aplicación en Entra ID) aún sin crear; el backend ya está listo para conectarse por variables de entorno.
+9. **Registro de aplicación en Entra ID** aún sin crear; el backend ya está listo para conectarse por variables de entorno.
 10. **Sesión en las rutas de hallazgos:** `/api/hallazgos` todavía responde sin iniciar sesión y la vista de hallazgos no envía el token. Hay que pasarlas detrás de `autenticar` y usar `src/app/api/cliente.ts` en esa vista.
 
 11. **Rol "Auditado":** no existe como rol; hoy el responsable de un plan de acción es cualquier usuario activo. Falta definir si FEMSA quiere un rol propio con acceso restringido al portal.
@@ -165,6 +165,7 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 
 ### Decisiones tomadas
 
+- **Base de datos en Supabase (PostgreSQL), no en Azure SQL** (2026-10-09). El backend se conecta con `pg` directo a Postgres por el *Session pooler*; no se usan la API ni el cliente de Supabase. Todas las tablas llevan seguridad por filas activada y sin políticas para que esa API no las exponga. El esquema se aplica con `corepack pnpm db:migrar` (detalle en `docs/diseno/base-de-datos.md`).
 - Tablas `users`, `roles`, `permissions`, `role_permissions` siguiendo el modelo de datos de Miro (inglés, `snake_case`). `users.role` (texto) se sustituyó por `users.role_id`; **falta reflejarlo en el diagrama de Miro**.
 - Los permisos se leen de la base en cada petición (sin caché ni claims en el token) para que el cambio de rol sea inmediato (SF-17).
 - Un solo backend: arranca en `backend/src/server.ts`, puerto 3000, todo bajo `/api`, con una sola conexión a la base (variables `DB_*`).
