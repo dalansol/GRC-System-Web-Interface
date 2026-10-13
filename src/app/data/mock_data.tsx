@@ -21,6 +21,7 @@ export {
   CONTROLS,
   INITIAL_USERS,
   AUDIT_PLANS_DATA,
+  PLAN_CONTROL_ASSIGNMENTS,
   STATUS_CONFIG,
   AUDIT_ENTITIES,
   TASKS,
@@ -485,13 +486,38 @@ const DEFAULT_PERMISSIONS: Record<string, Record<string, boolean>> = {
   "Solo Lectura": { "Ver Dashboard": true, "Editar Registros": false, "Gestionar Usuarios": false, "Aprobar Riesgos": false, "Exportar Datos": false, "Ver Auditorías": true, "Crear Auditorías": false, "Eliminar Registros": false },
 };
 
-const INITIAL_USERS: UserRecord[] = [
+const JEFE_DE_AUDITORIA_USERS: UserRecord[] = [
   { id: "USR-001", name: "María García", email: "m.garcia@expedite.com", role: "Jefe de Auditoría", status: "active", lastLogin: "2025-07-21" },
-  { id: "USR-002", name: "Carlos Morales", email: "c.morales@expedite.com", role: "Auditor Senior", status: "active", lastLogin: "2025-07-20" },
-  { id: "USR-003", name: "Ana Rodríguez", email: "a.rodriguez@expedite.com", role: "Auditor", status: "active", lastLogin: "2025-07-19" },
+];
+
+const AUDITORES_SENIOR_USERS: UserRecord[] = [
+  { id: "USR-002", name: "Carlos Morales", email: "c.morales@expedite.com", role: "Auditor Senior", status: "active", lastLogin: "2025-07-20", manager: "USR-001" },
+  { id: "USR-007", name: "Sofía Ramírez", email: "s.ramirez@expedite.com", role: "Auditor Senior", status: "active", lastLogin: "2025-07-17", manager: "USR-001" },
+  { id: "USR-008", name: "Jorge Navarro", email: "j.navarro@expedite.com", role: "Auditor Senior", status: "active", lastLogin: "2025-07-16", manager: "USR-001" },
+];
+
+const AUDITORES_USERS: UserRecord[] = [
+  { id: "USR-003", name: "Ana Rodríguez", email: "a.rodriguez@expedite.com", role: "Auditor", status: "active", lastLogin: "2025-07-19", manager: "USR-001" },
+  { id: "USR-005", name: "Laura Fernández", email: "l.fernandez@expedite.com", role: "Auditor", status: "active", lastLogin: "2025-07-21", manager: "USR-001" },
+  { id: "USR-009", name: "Ricardo Mendoza", email: "r.mendoza@expedite.com", role: "Auditor", status: "active", lastLogin: "2025-07-15", manager: "USR-001" },
+  { id: "USR-010", name: "Valeria Castillo", email: "v.castillo@expedite.com", role: "Auditor", status: "active", lastLogin: "2025-07-14", manager: "USR-001" },
+  { id: "USR-011", name: "Andrés Fuentes", email: "a.fuentes@expedite.com", role: "Auditor", status: "active", lastLogin: "2025-07-13", manager: "USR-001" },
+];
+
+const CONSULTORES_USERS: UserRecord[] = [
   { id: "USR-004", name: "Pedro Sánchez", email: "p.sanchez@expedite.com", role: "Consultor", status: "inactive", lastLogin: "2025-06-30" },
-  { id: "USR-005", name: "Laura Fernández", email: "l.fernandez@expedite.com", role: "Auditor", status: "active", lastLogin: "2025-07-21" },
+];
+
+const SOLO_LECTURA_USERS: UserRecord[] = [
   { id: "USR-006", name: "Diego Torres", email: "d.torres@expedite.com", role: "Solo Lectura", status: "active", lastLogin: "2025-07-18" },
+];
+
+const INITIAL_USERS: UserRecord[] = [
+  ...JEFE_DE_AUDITORIA_USERS,
+  ...AUDITORES_SENIOR_USERS,
+  ...AUDITORES_USERS,
+  ...CONSULTORES_USERS,
+  ...SOLO_LECTURA_USERS,
 ];
 
 // ─── Audit Records Data ──────────────────────────────────────────────────────
@@ -549,6 +575,13 @@ const AUDIT_PLANS_DATA: AuditPlan[] = [
   { id: "AP-002", code: "PAI-2025-002", type: "Anual", name: "Plan Auditoría TI & Ciberseguridad", period: "Q2–Q3 2025", startDate: "2025-04-01", endDate: "2025-09-30", status: "En Ejecución", estimatedHours: 240, responsible: "C. Morales", scope: "Accesos privilegiados, seguridad perimetral, revisión de vulnerabilidades" },
   { id: "AP-003", code: "PAI-2025-003", type: "Trimestral", name: "Plan Auditoría Cumplimiento Regulatorio", period: "Q3–Q4 2025", startDate: "2025-07-01", endDate: "2025-12-31", status: "Borrador", estimatedHours: 180, responsible: "A. Rodríguez", scope: "Obligaciones regulatorias GDPR, SUNAT, Superintendencia Financiera Colombia" },
   { id: "AP-004", code: "PAI-2024-012", type: "Trimestral", name: "Plan Auditoría Operacional LATAM", period: "Q4 2024", startDate: "2024-10-01", endDate: "2024-12-31", status: "Cerrado", estimatedHours: 290, responsible: "M. García", scope: "Cadena de suministro, logística y distribución en toda la región" },
+];
+
+const PLAN_CONTROL_ASSIGNMENTS = [
+  { planCode: "PAI-2025-001", controlId: "CTR-001", responsibleId: "USR-003" },
+  { planCode: "PAI-2025-002", controlId: "CTR-003", responsibleId: "USR-002" },
+  { planCode: "PAI-2025-003", controlId: "CTR-004", responsibleId: "USR-005" },
+  { planCode: "PAI-2024-012", controlId: "CTR-002", responsibleId: "USR-007" },
 ];
 
 

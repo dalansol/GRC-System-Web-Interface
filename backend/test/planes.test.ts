@@ -11,6 +11,7 @@ import { escuchar } from "./servidor.js";
 
 const ADMIN = "s.ramirez@expedite.com";
 const JEFA = "m.garcia@expedite.com";
+const AUDITOR_SENIOR = "c.morales@expedite.com";
 const AUDITORA = "a.rodriguez@expedite.com";
 const INACTIVO = "p.sanchez@expedite.com";
 
@@ -70,6 +71,25 @@ describe("consulta de planes", () => {
     expect(res.body).toContainEqual(
       expect.objectContaining({ codigo: "PAI-2025-002", responsable: { id: expect.any(Number), nombre: "Carlos Morales" } }),
     );
+  });
+
+  it("un Auditor Senior solo ve los planes que tiene asignados", async () => {
+    const res = await como(AUDITOR_SENIOR).get("/api/planes");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toMatchObject({
+      codigo: "PAI-2025-002",
+      responsable: { nombre: "Carlos Morales" },
+    });
+  });
+
+  it("un Auditor Senior no puede consultar por id un plan ajeno", async () => {
+    const planes = (await como(AUDITORA).get("/api/planes")).body;
+    const planAjeno = planes.find((plan: { responsable: { nombre: string } }) => plan.responsable.nombre === "María García");
+
+    expect(planAjeno).toBeDefined();
+    expect((await como(AUDITOR_SENIOR).get(`/api/planes/${planAjeno.id}`)).status).toBe(404);
   });
 
   it("consulta un plan por id y responde 404 si no existe", async () => {

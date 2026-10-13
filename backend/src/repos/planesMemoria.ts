@@ -30,9 +30,12 @@ export class RepositorioPlanesMemoria implements RepositorioPlanes {
     return { ...fila, responsable: { id: responsableId, nombre: usuario?.nombre ?? "" } };
   }
 
-  async listar() {
+  async listar(responsableId?: number) {
     await this.listo;
-    return Promise.all(this.filas.map((f) => this.aPlan(f)));
+    const filas = responsableId === undefined
+      ? this.filas
+      : this.filas.filter((f) => f.responsableId === responsableId);
+    return Promise.all(filas.map((f) => this.aPlan(f)));
   }
 
   async buscarPorId(id: number) {

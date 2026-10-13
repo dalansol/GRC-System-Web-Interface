@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import type { RegistrarEvento } from "../bitacora.js";
 import { normalizarPlan, validarPlan, type PlanAuditoria } from "../domain/planes.js";
 import { ROL_ADMINISTRADOR } from "../domain/tipos.js";
@@ -10,6 +10,7 @@ import type { RepositorioUsuarios } from "../repos/repositorio.js";
 
 // Roles que crean y editan planes. Todos los usuarios con sesión los consultan.
 const ROLES_EDICION = [ROL_ADMINISTRADOR, "Jefe de Auditoría"];
+const ROL_AUDITOR_SENIOR = "Auditor Senior";
 
 interface Dependencias {
   repo: RepositorioPlanes;
@@ -51,13 +52,20 @@ export function rutasPlanes({ repo, usuarios, registrarEvento }: Dependencias): 
     }
   }
 
+  function responsableVisible(id: number, res: Response) {
+    const usuario = usuarioEnSesion(res);
+    return usuario.rol !== ROL_AUDITOR_SENIOR || id === usuario.id;
+  }
+
   rutas.get("/planes", async (_req, res) => {
-    res.json(await repo.listar());
+    const usuario = usuarioEnSesion(res);
+    res.json(await repo.listar(usuario.rol === ROL_AUDITOR_SENIOR ? usuario.id : undefined));
   });
 
   rutas.get("/planes/:id", async (req, res) => {
     const plan = await repo.buscarPorId(idDePlan(req.params.id));
     if (!plan) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de auditoría no existe.");
+    if (!responsableVisible(plan.responsable.id, res)) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de auditoría no existe.");
     res.json(plan);
   });
 
