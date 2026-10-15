@@ -1,19 +1,14 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { BookOpen, ChevronDown, Download, FileText, Plus, Save, Loader2, RefreshCw } from "lucide-react";
+import { ChevronDown, Plus, Loader2, RefreshCw } from "lucide-react";
 
-import {
-  Breadcrumbs,
-  Card,
-  PageHeader,
-  PDFPreviewModal,
-  PrimaryBtn,
-  exportToCSV,
-} from "./SharedComponents";
+import { Breadcrumbs, Card, PageHeader, PrimaryBtn } from "./SharedComponents";
 import type { AuditPlan } from "./SharedComponents";
 import { useAuditPlansViewModel } from "../domain/planes-auditoria/useAuditPlansViewModel";
 import { CONTROLS, INITIAL_USERS, PLAN_CONTROL_ASSIGNMENTS } from "../data/mock_data";
 import { useSesion } from "../auth/SesionContext";
+import FormularioPlanAudito from "./FormularioPlanAudito";
+import type { DatosFormularioPlanAudito } from "./FormularioPlanAudito";
 
 const PLAN_STATUS_CFG: Record<AuditPlan["status"], { label: string; cls: string }> = {
   "Borrador": { label: "Borrador", cls: "bg-slate-50 text-slate-600 border border-slate-200" },
@@ -22,14 +17,15 @@ const PLAN_STATUS_CFG: Record<AuditPlan["status"], { label: string; cls: string 
   "Cerrado": { label: "Cerrado", cls: "bg-blue-50 text-blue-700 border border-blue-200" },
 };
 
-export default function AuditPlansView({ canCreate }: { canCreate: boolean }) {
-  // Consume the custom hook
+export default function VistaPlanesAudito({ canCreate }: { canCreate: boolean }) {
   const { plans, loading, isCreating, USE_REAL_BACKEND, fetchPlans, createPlan } = useAuditPlansViewModel();
   const { usuario } = useSesion();
   const esAuditorSenior = usuario?.rol === "Auditor Senior";
 
   const [showForm, setShowForm] = useState(false);
-  const [planPdfTarget, setPlanPdfTarget] = useState<AuditPlan | null>(null);
+  const [expandedPlanCode, setExpandedPlanCode] = useState<string | null>(null);
+  const [controlAssignments, setControlAssignments] = useState(PLAN_CONTROL_ASSIGNMENTS);
+
   const empleadosAsignados = useMemo(() => {
     const jefe = INITIAL_USERS.find((user) => user.name === usuario?.nombre && user.role === "Jefe de Auditoría");
     const managerId = jefe?.id ?? "USR-001";
@@ -38,52 +34,15 @@ export default function AuditPlansView({ canCreate }: { canCreate: boolean }) {
       .filter((user) => user.manager === managerId && user.status === "active")
       .sort((left, right) => left.name.localeCompare(right.name, "es"));
   }, [usuario?.nombre]);
+  
   const responsableInicial = empleadosAsignados[0]?.name ?? "";
-  const [form, setForm] = useState({ code: "", name: "", type: "", period: "", startDate: "", endDate: "", estimatedHours: "", responsible: responsableInicial, scope: "" });
-  const [formErr, setFormErr] = useState<Record<string, string>>({});
-  const [expandedPlanCode, setExpandedPlanCode] = useState<string | null>(null);
-  const [controlAssignments, setControlAssignments] = useState(PLAN_CONTROL_ASSIGNMENTS);
 
-  useEffect(() => {
-    setForm((previous) => previous.responsible
-      ? previous
-      : { ...previous, responsible: responsableInicial });
-  }, [responsableInicial]);
-
-  const validate = () => {
-    const errs: Record<string, string> = {};
-    if (!form.code.trim()) errs.code = "Requerido";
-    if (!form.name.trim()) errs.name = "Requerido";
-    if (form.type !== "Anual" && form.type !== "Trimestral") errs.type = "Selecciona anual o trimestral";
-    if (!form.startDate) errs.startDate = "Requerido";
-    if (!form.endDate) errs.endDate = "Requerido";
-    if (form.startDate && form.endDate && form.endDate <= form.startDate) errs.endDate = "Debe ser posterior a la fecha de inicio";
-    const h = Number(form.estimatedHours);
-    if (!form.estimatedHours || h <= 0 || !Number.isFinite(h)) errs.estimatedHours = "Debe ser mayor a 0";
-    return errs;
-  };
-
-  const handleSubmit = async () => {
-    const errs = validate();
-    if (Object.keys(errs).length) { setFormErr(errs); return; }
-
-    const success = await createPlan({
-      code: form.code,
-      name: form.name,
-      type: form.type as AuditPlan["type"],
-      period: form.period,
-      startDate: form.startDate,
-      endDate: form.endDate,
-      estimatedHours: Number(form.estimatedHours),
-      responsible: form.responsible,
-      scope: form.scope,
-    });
-
+  const handleCreatePlan = async (formData: DatosFormularioPlanAudito) => {
+    const success = await createPlan(formData);
     if (success) {
       setShowForm(false);
-      setForm({ code: "", name: "", type: "", period: "", startDate: "", endDate: "", estimatedHours: "", responsible: responsableInicial, scope: "" });
-      setFormErr({});
     }
+    return success;
   };
 
   const asignarResponsableControl = (planCode: string, controlId: string, responsibleId: string) => {
@@ -94,18 +53,6 @@ export default function AuditPlansView({ canCreate }: { canCreate: boolean }) {
     ));
     toast.success("Responsable del control actualizado.");
   };
-
-  const inp = (label: string, key: keyof typeof form, type = "text", placeholder = "") => (
-    <div>
-      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">{label}</label>
-      <input
-        type={type} value={form[key]} placeholder={placeholder}
-        onChange={e => { setForm(f => ({ ...f, [key]: e.target.value })); setFormErr(f => ({ ...f, [key]: "" })); }}
-        className={`w-full text-sm px-3 py-2 rounded-md border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${formErr[key] ? "border-red-400" : "border-border"}`}
-      />
-      {formErr[key] && <div className="text-xs text-red-600 mt-0.5">{formErr[key]}</div>}
-    </div>
-  );
 
   return (
     <div className="flex-1 overflow-auto p-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -120,7 +67,7 @@ export default function AuditPlansView({ canCreate }: { canCreate: boolean }) {
           <p className="text-xs text-muted-foreground text-right mr-4">
             Modo actual:<br />
             <span className="font-semibold text-primary">
-              {USE_REAL_BACKEND ? "API Backend (SQL Server)" : "Mock Data Local"}
+              {USE_REAL_BACKEND ? "Mock Data Servidor" : "Mock Data Local"}
             </span>
           </p>
           <button
@@ -132,75 +79,27 @@ export default function AuditPlansView({ canCreate }: { canCreate: boolean }) {
             Recargar
           </button>
           {canCreate && (
-            <PrimaryBtn icon={<Plus size={14} />} onClick={() => setShowForm(s => !s)}>
-              {showForm ? "Cancelar" : "Nuevo plan"}
+            <PrimaryBtn icon={<Plus size={14} />} onClick={() => setShowForm(true)}>
+              Nuevo plan
             </PrimaryBtn>
           )}
         </div>
       </div>
 
       {showForm && (
-        <Card className="p-5 mb-6 border-primary/30 bg-primary/[0.02]">
-          <div className="flex items-center gap-2 mb-4">
-            <BookOpen size={15} className="text-primary" />
-            <div className="text-sm font-semibold text-foreground">Nuevo Plan de Auditoría</div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            {inp("Código del plan", "code", "text", "PAI-2025-004")}
-            {inp("Nombre del plan", "name", "text", "Plan de Auditoría…")}
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Tipo de plan</label>
-              <select
-                value={form.type}
-                onChange={e => { setForm(f => ({ ...f, type: e.target.value })); setFormErr(f => ({ ...f, type: "" })); }}
-                className={`w-full text-sm px-3 py-2 rounded-md border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${formErr.type ? "border-red-400" : "border-border"}`}
-              >
-                <option value="">— Seleccionar —</option>
-                <option value="Anual">Anual</option>
-                <option value="Trimestral">Trimestral</option>
-              </select>
-              {formErr.type && <div className="text-xs text-red-600 mt-0.5">{formErr.type}</div>}
-            </div>
-            {inp("Periodo", "period", "text", "Q3–Q4 2025")}
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Responsable</label>
-              <select
-                value={form.responsible}
-                onChange={e => setForm(f => ({ ...f, responsible: e.target.value }))}
-                className="w-full text-sm px-3 py-2 rounded-md border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="">— Seleccionar responsable —</option>
-                {empleadosAsignados.map((empleado) => (
-                  <option key={empleado.id} value={empleado.name}>{empleado.name}</option>
-                ))}
-              </select>
-            </div>
-            {inp("Fecha de inicio", "startDate", "date")}
-            {inp("Fecha de fin", "endDate", "date")}
-            {inp("Horas estimadas", "estimatedHours", "number", "120")}
-          </div>
-          <div className="mb-4">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Alcance</label>
-            <textarea
-              value={form.scope} rows={2} placeholder="Descripción del alcance del plan…"
-              onChange={e => setForm(f => ({ ...f, scope: e.target.value }))}
-              className="w-full text-sm px-3 py-2 rounded-md border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-            />
-          </div>
-          <PrimaryBtn
-            icon={isCreating ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
-            onClick={() => { handleSubmit(); }}
-          >
-            {isCreating ? "Guardando..." : "Guardar plan"}
-          </PrimaryBtn>
-        </Card>
+        <FormularioPlanAudito
+          isCreating={isCreating}
+          empleadosAsignados={empleadosAsignados}
+          responsableInicial={responsableInicial}
+          onSubmit={handleCreatePlan}
+          onCancel={() => setShowForm(false)}
+        />
       )}
 
       {/* Table Section */}
       <Card>
-        {/* Header Actions Omitted for brevity (same as before) */}
-
         <div className="overflow-x-auto">
+          {/* Table content remains exactly the same */}
           {loading ? (
             <div className="flex items-center justify-center p-12 text-muted-foreground">
               <Loader2 className="mr-2 animate-spin" size={20} />
@@ -238,6 +137,7 @@ export default function AuditPlansView({ canCreate }: { canCreate: boolean }) {
                         responsible: INITIAL_USERS.find((user) => user.id === assignment.responsibleId),
                       }))
                       .filter((assignment) => assignment.control);
+                      
                     return (
                       <Fragment key={plan.id}>
                         <tr className="border-b border-border hover:bg-muted/20">

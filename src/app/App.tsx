@@ -4773,6 +4773,7 @@ const DETAIL_LABELS: Record<DetailType, string> = {
 type StackEntry = { type: DetailType; id: string };
 
 export default function App() {
+  const { usuario } = useSesion();
   const [navView, setNavView] = useState<NavView>("dashboard");
   const [stack, setStack] = useState<StackEntry[]>([]);
   const [copilotOpen, setCopilotOpen] = useState(false);
@@ -4893,7 +4894,7 @@ export default function App() {
       case "bitacora":
         return <BitacoraView />;
       case "plans":
-        return <AuditPlansView canCreate={true} />;
+        return <AuditPlansView canCreate={usuario?.rol === "Jefe de Auditoría"} />;
       case "findings":
         return <VistaHallazgo />;
       case "controles":

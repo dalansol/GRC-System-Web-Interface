@@ -5,8 +5,7 @@ import { pedir } from "../../api/cliente";
 import { useSesion } from "../../auth/SesionContext";
 
 const metaEnv = (import.meta as any).env;
-const API_BASE_URL = metaEnv?.VITE_API_URL || "http://localhost:3000/api";
-const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND === "true";
+const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND !== "false";
 
 export interface AuditPlanViewModel {
   id: string;
@@ -165,14 +164,7 @@ export function useAuditPlansViewModel() {
     setDeletingId(id);
     try {
       if (USE_REAL_BACKEND) {
-        const response = await fetch(`${API_BASE_URL}/audit-plans/${id}`, {
-          method: "DELETE",
-        });
-
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Error al eliminar el plan.");
-        }
+        await pedir(`/planes/${encodeURIComponent(id)}`, { metodo: "DELETE" });
       }
 
       setPlans((prev) => prev.filter((item) => item.id !== id));
@@ -191,20 +183,23 @@ export function useAuditPlansViewModel() {
     setIsUpdating(true);
     try {
       if (USE_REAL_BACKEND) {
-        const response = await fetch(`${API_BASE_URL}/audit-plans/${editingPlan.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(editingPlan),
+        const updatedData = await pedir<PlanApi>(`/planes/${encodeURIComponent(editingPlan.id)}`, {
+          metodo: "PATCH",
+          cuerpo: {
+            codigo: editingPlan.code,
+            nombre: editingPlan.name,
+            tipo: editingPlan.type,
+            periodo: editingPlan.period || null,
+            fechaInicio: editingPlan.startDate,
+            fechaFin: editingPlan.endDate,
+            horasEstimadas: editingPlan.estimatedHours,
+            responsableId: Number(usuario?.id),
+            alcance: editingPlan.scope || null,
+            estado: editingPlan.status,
+          },
         });
-
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Error al actualizar el plan.");
-        }
-
-        const updatedData = await response.json();
         setPlans((prev) =>
-          prev.map((item) => (item.id === updatedData.id ? updatedData : item))
+          prev.map((item) => (item.id === String(updatedData.id) ? convertirPlan(updatedData) : item))
         );
       } else {
         // Fallback local
@@ -229,13 +224,13 @@ export function useAuditPlansViewModel() {
     );
   }, [plans, typeFilter, statusFilter]);
 
-  // Generates the next sequential Code (e.g. "PAI-2025-004")
+  // El backend asigna el consecutivo; este valor solo conserva compatibilidad con la vista.
   const nextCodeNumber = plans.reduce((max, plan) => {
     const number = Number(plan.code?.split("-").pop());
     return Number.isFinite(number) ? Math.max(max, number) : max;
   }, 0) + 1;
 
-  const nextCode = `PAI-${new Date().getFullYear()}-${String(
+  const nextCode = `PAA-${new Date().getFullYear()}-${String(
     nextCodeNumber,
   ).padStart(3, "0")}`;
 

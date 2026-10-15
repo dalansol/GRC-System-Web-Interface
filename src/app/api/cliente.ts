@@ -24,7 +24,7 @@ export class ErrorApi extends Error {
 }
 
 interface Opciones {
-  metodo?: "GET" | "POST" | "PATCH";
+  metodo?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   cuerpo?: unknown;
 }
 

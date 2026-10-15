@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Check, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { crearHallazgo } from "../api/hallazgos";
 
 export interface FindingControlOption {
   id: string;
@@ -75,8 +76,7 @@ function calculateResidualRisk(
 }
 
 const metaEnv = (import.meta as any).env;
-const API_BASE_URL = metaEnv?.VITE_API_URL || "http://localhost:3000/api";
-const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND === "true";
+const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND !== "false";
 
 export default function FormularioHallazgo({
   controls,
@@ -154,20 +154,7 @@ export default function FormularioHallazgo({
       let createdFinding: CreatedFinding;
 
       if (USE_REAL_BACKEND) {
-        const response = await fetch(`${API_BASE_URL}/hallazgos`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Error al registrar el hallazgo en el servidor");
-        }
-
-        createdFinding = await response.json();
+        createdFinding = await crearHallazgo(payload);
       } else {
         // Fallback local en memoria
         createdFinding = {

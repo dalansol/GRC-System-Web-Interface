@@ -1,5 +1,5 @@
 import type pg from "pg";
-import type { DatosPlan, EstadoPlan, PlanAuditoria, TipoPlan } from "../domain/planes.js";
+import { periodoClave, type DatosPlan, type EstadoPlan, type PlanAuditoria, type TipoPlan } from "../domain/planes.js";
 import { ErrorCodigoDuplicado, type RepositorioPlanes } from "./planes.js";
 
 interface FilaPlan {
@@ -75,17 +75,49 @@ export class RepositorioPlanesSql implements RepositorioPlanes {
   async listar(responsableId?: number) {
     const consulta = responsableId === undefined
       ? `${SELECT_PLAN} ORDER BY p.start_date DESC`
-      : `${SELECT_PLAN} WHERE p.responsible_id = @responsableId ORDER BY p.start_date DESC`;
-    const solicitud = this.pool.request();
-    if (responsableId !== undefined) solicitud.input("responsableId", sql.Int, responsableId);
-    const resultado = await solicitud.query<FilaPlan>(consulta);
-    return resultado.recordset.map(aPlan);
+      : `${SELECT_PLAN} WHERE p.responsible_id = $1 ORDER BY p.start_date DESC`;
+    const resultado = await this.pool.query<FilaPlan>(
+      consulta,
+      responsableId === undefined ? [] : [responsableId],
+    );
+    return resultado.rows.map(aPlan);
   }
 
   async buscarPorId(id: number) {
     const resultado = await this.pool.query<FilaPlan>(`${SELECT_PLAN} WHERE p.id = $1`, [id]);
     const fila = resultado.rows[0];
     return fila ? aPlan(fila) : null;
+  }
+
+  async siguienteCodigo(datos: DatosPlan) {
+    const year = Number(datos.fechaInicio.slice(0, 4));
+    const quarter = Math.floor((Number(datos.fechaInicio.slice(5, 7)) - 1) / 3) + 1;
+    const inicio = datos.tipo === "Anual"
+      ? `${year}-01-01`
+      : `${year}-${String((quarter - 1) * 3 + 1).padStart(2, "0")}-01`;
+    const fin = datos.tipo === "Anual"
+      ? `${year + 1}-01-01`
+      : `${quarter === 4 ? year + 1 : year}-${String(quarter === 4 ? 1 : quarter * 3 + 1).padStart(2, "0")}-01`;
+    const resultado = await this.pool.query<{ code: string }>(
+      `
+      SELECT p.code
+      FROM audit_plans p
+      WHERE p.type = $1
+        AND p.start_date >= $2::date
+        AND p.start_date < $3::date
+      `,
+      [datos.tipo, inicio, fin],
+    );
+    const ultimo = resultado.rows.reduce((maximo, fila) => {
+      const coincidencia = fila.code.match(/(\d+)$/);
+      return coincidencia ? Math.max(maximo, Number(coincidencia[1])) : maximo;
+    }, 0);
+    const periodo = periodoClave(datos);
+    const sufijoPeriodo = datos.tipo === "Anual"
+      ? periodo
+      : `${datos.fechaInicio.slice(0, 4)}-${periodo.match(/Q[1-4]/)![0]}`;
+    const prefijo = datos.tipo === "Anual" ? "PAA" : "PAT";
+    return `${prefijo}-${sufijoPeriodo}-${String(ultimo + 1).padStart(3, "0")}`;
   }
 
   async crear(datos: DatosPlan, creadoPorId: number) {
