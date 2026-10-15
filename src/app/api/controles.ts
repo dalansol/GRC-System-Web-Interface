@@ -50,4 +50,9 @@ export const registrarHoras = (controlId: string, datos: { horas: number }) =>
 export const actualizarstatusControl = (
   controlId: string,
   datos: { status: "En Revision" | "Completado"; feedback?: string },
-) => pedir(`/controles/${encodeURIComponent(controlId)}/status`, { metodo: "PATCH", cuerpo: datos });
+) => pedir<{
+  id: string;
+  status: "En Revision" | "Completado";
+  hours_spent: string | number;
+  feedback: string | null;
+}>(`/controles/${encodeURIComponent(controlId)}/status`, { metodo: "PATCH", cuerpo: datos });

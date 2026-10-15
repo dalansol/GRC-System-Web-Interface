@@ -137,7 +137,7 @@ export default function VistaControles({ navigate }: Props) {
         c.controlType,
         c.frequency,
         c.currentVulnerability,
-        c.controlStatus,
+        c.status ?? "En Progreso",
         c.nivelRiesgo,
       ])
     );
@@ -168,12 +168,16 @@ export default function VistaControles({ navigate }: Props) {
   const cambiarstatus = async (control: ControlRecord, status: "En Revision" | "Completado") => {
     setGuardando(control.id);
     try {
-      await actualizarstatusControl(control.id, {
+      const actualizado = await actualizarstatusControl(control.id, {
         status,
         feedback: feedback[control.id],
       });
       setControles((actuales) => actuales.map((item) => item.id === control.id
-        ? { ...item, status, feedback: feedback[control.id] ?? item.feedback }
+        ? {
+            ...item,
+            status: actualizado.status ?? status,
+            feedback: actualizado.feedback ?? feedback[control.id] ?? item.feedback,
+          }
         : item));
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "No se pudo actualizar el status.");
@@ -240,11 +244,11 @@ export default function VistaControles({ navigate }: Props) {
 
         <div className="w-px h-4 bg-border mx-1" />
 
-        <span className="text-xs text-muted-foreground font-medium">status:</span>
-        {["Todos", "Activo", "Inactivo", "En Revisión"].map(f => (
-          <button key={f} onClick={() => setFiltros({ ...filtros, status: f })}
-            className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${filtros.status === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>
-            {f}
+        <span className="text-xs text-muted-foreground font-medium">Estado:</span>
+        {(["Todos", "En Progreso", "En Revision", "Completado"] as const).map((estado) => (
+          <button key={estado} onClick={() => setFiltros({ ...filtros, status: estado })}
+            className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${filtros.status === estado ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>
+            {estado}
           </button>
         ))}
 
@@ -388,7 +392,7 @@ export default function VistaControles({ navigate }: Props) {
                                     <input value={feedback[control.id] ?? control.feedback ?? ""} onChange={(event) => setFeedback((actuales) => ({ ...actuales, [control.id]: event.target.value }))} placeholder="Indica qué falta o confirma el cierre" className="mt-1 block w-full rounded-md border border-border bg-white px-2 py-1.5 text-xs" />
                                   </label>
                                   <button type="button" onClick={() => cambiarstatus(control, "En Revision")} disabled={guardando === control.id} className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold">Guardar feedback</button>
-                                  <button type="button" onClick={() => cambiarstatus(control, "Completado")} disabled={guardando === control.id} className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white"><Send size={13} /> Completar</button>
+                                  <button type="button" onClick={() => cambiarstatus(control, "Completado")} disabled={guardando === control.id} className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white"><Send size={13} /> Aprobar</button>
                                 </div>
                               )}
                               {control.status === "En Progreso" && !esJefatura && (
