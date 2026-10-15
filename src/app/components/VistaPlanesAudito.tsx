@@ -119,6 +119,8 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
             });
             setAssigningPlanId(null);
             fetchPlans();
+          }}
+          onCancel={() => setAssigningPlanId(null)}
         />
       )}
 
