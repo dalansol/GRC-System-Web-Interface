@@ -5,6 +5,7 @@ import path from "path";
 import multer from "multer";
 import { poolPromise } from "../db.js";
 import { upload } from "../middleware/upload.js";
+import { usuarioEnSesion } from "../middleware/autenticar.js";
 
 const router = Router();
 
@@ -24,20 +25,49 @@ router.get("/evidencias", async (req: Request, res: Response) => {
 
   try {
     const pool = await poolPromise;
-    let query = "SELECT * FROM evidence WHERE entity_id = $1 ORDER BY created_at DESC";
-    
+    const usuario = usuarioEnSesion(res);
+    let query = `
+      SELECT e.* FROM evidence e
+      WHERE e.entity_id = $1
+        AND e.uploaded_by = $3
+      ORDER BY e.created_at DESC`;
+
     if (entityType === "control") {
-      query = "SELECT * FROM evidence WHERE control_id = $1 ORDER BY created_at DESC";
+      query = `
+        SELECT e.* FROM evidence e
+        WHERE e.control_id = $1
+          AND (
+            ($2 = 'Auditor' AND e.uploaded_by = $3)
+            OR ($2 = 'Auditor Senior' AND EXISTS (
+              SELECT 1 FROM audit_controls ac
+              WHERE ac.control_id = e.control_id AND ac.assigned_by = $3::integer
+            ))
+            OR ($2 = 'Jefe de Auditoría' AND EXISTS (
+              SELECT 1 FROM audit_controls ac
+              JOIN audit_plans ap ON ap.id::text = ac.audit_id::text
+              WHERE ac.control_id = e.control_id AND ap.created_by = $3::integer
+            ))
+          )
+        ORDER BY e.created_at DESC`;
     } else if (entityType === "hallazgo") {
-      query = "SELECT * FROM evidence WHERE finding_id = $1 ORDER BY created_at DESC";
+      query = `
+        SELECT e.* FROM evidence e
+        WHERE e.finding_id = $1
+          AND e.uploaded_by = $3
+        ORDER BY e.created_at DESC`;
     }
 
-    const result = await pool.query(query, [entityId as string]);
+    const result = await pool.query(query, [entityId as string, usuario.rol, String(usuario.id)]);
 
     res.json(result.rows);
   } catch (error) {
     console.error("Error fetching evidencias:", error);
-    res.status(500).json({ error: "Error fetching evidencias from database." });
+    res.status(500).json({
+      error: {
+        codigo: "ERROR_INTERNO",
+        mensaje: "No se pudieron cargar las evidencias.",
+      },
+    });
   }
 });
 
@@ -68,7 +98,8 @@ router.post(
       return res.status(400).json({ error: "No file provided." });
     }
 
-    const { entityId, entityType, uploadedBy, controlId, findingId, auditId, businessEntityId } = req.body;
+    const { entityId, entityType, controlId, findingId, auditId, businessEntityId } = req.body;
+    const usuario = usuarioEnSesion(res);
 
     if (!entityId || !entityType) {
       return res
@@ -83,6 +114,27 @@ router.post(
     }
 
     try {
+      if (entityType === "control") {
+        const pool = await poolPromise;
+        const asignacion = await pool.query(
+          `SELECT 1
+           FROM audit_controls ac
+           JOIN controls c ON c.id = ac.control_id
+           WHERE (c.id::text = $1 OR c.code = $1)
+             AND ac.auditor_id = $2
+           LIMIT 1`,
+          [controlId || entityId, usuario.id],
+        );
+        if (asignacion.rowCount !== 1) {
+          return res.status(403).json({
+            error: {
+              codigo: "ROL_NO_AUTORIZADO",
+              mensaje: "Solo el Auditor asignado puede enviar evidencia para este control.",
+            },
+          });
+        }
+      }
+
       // Generate SHA-256 hash from the file buffer
       const hash = crypto
         .createHash("sha256")
@@ -121,7 +173,7 @@ router.post(
           file.size,
           hash,
           storedName,
-          uploadedBy || null,
+          String(usuario.id),
         ],
       );
 
@@ -139,15 +191,52 @@ router.delete("/evidencias/:id", async (req: Request, res: Response) => {
 
   try {
     const pool = await poolPromise;
+    const usuario = usuarioEnSesion(res);
 
     // Fetch the record first to get the storage path
-    const lookup = await pool.query("SELECT storage_path FROM evidence WHERE id = $1", [id]);
+    const lookup = await pool.query(
+      `SELECT e.storage_path, e.control_id, e.entity_type
+       FROM evidence e
+       WHERE e.id = $1`,
+      [id],
+    );
 
     if (lookup.rows.length === 0) {
       return res.status(404).json({ error: "Evidence not found." });
     }
 
-    const storagePath = path.join(UPLOADS_DIR, lookup.rows[0].storage_path);
+    const evidence = lookup.rows[0] as {
+      storage_path: string;
+      control_id: string | number | null;
+      entity_type: string;
+    };
+    if (evidence.entity_type !== "control" || evidence.control_id === null) {
+      return res.status(403).json({
+        error: {
+          codigo: "ROL_NO_AUTORIZADO",
+          mensaje: "Solo el auditor asignado puede eliminar evidencia de un control.",
+        },
+      });
+    }
+
+    const asignacion = await pool.query(
+      `SELECT 1
+       FROM audit_controls ac
+       WHERE ac.control_id = $1
+         AND ac.auditor_id = $2
+       LIMIT 1`,
+      [evidence.control_id, usuario.id],
+    );
+    if (asignacion.rowCount !== 1) {
+      return res.status(403).json({
+        error: {
+          codigo: "ROL_NO_AUTORIZADO",
+          mensaje: "Solo el auditor asignado puede eliminar evidencia de este control.",
+        },
+      });
+    }
+
+    const storagePath = path.join(UPLOADS_DIR, evidence.storage_path);
 
     // Delete the file from disk (if it exists)
     if (fs.existsSync(storagePath)) {

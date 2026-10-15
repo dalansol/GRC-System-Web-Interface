@@ -10,6 +10,7 @@ import type { RepositorioUsuarios } from "./repos/repositorio.js";
 import { rutasPlanes } from "./routes/planes.js";
 import { rutasPlanesAccion } from "./routes/planesAccion.js";
 import { rutasUsuarios } from "./routes/usuarios.js";
+import auditControls from "./routes/auditControls.js";
 
 export interface DependenciasApp {
   repo: RepositorioUsuarios;
@@ -21,6 +22,8 @@ export interface DependenciasApp {
   registrarEvento?: RegistrarEvento;
   /** Rutas de /api que aún no exigen sesión. Deben pasar a exigirla. */
   rutasSinSesion?: Router[];
+  /** Rutas de /api que requieren sesión y se montan tras autenticar. */
+  rutasConSesion?: Router[];
 }
 
 const manejarErrores: ErrorRequestHandler = (error, _req, res, _next) => {
@@ -59,6 +62,8 @@ export function crearApp(deps: DependenciasApp): Express {
     }),
     rutasPlanes({ repo: deps.repoPlanes, usuarios: deps.repo, registrarEvento }),
     rutasPlanesAccion({ repo: deps.repoPlanesAccion, usuarios: deps.repo, registrarEvento }),
+    auditControls,
+    ...(deps.rutasConSesion ?? []),
     () => {
       throw new ErrorApi(404, "NO_ENCONTRADO", "La ruta no existe.");
     },

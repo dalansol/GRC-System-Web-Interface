@@ -53,3 +53,26 @@ export async function pedir<T>(ruta: string, { metodo = "GET", cuerpo }: Opcione
   }
   return datos as T;
 }
+
+export async function pedirFormData<T>(ruta: string, cuerpo: FormData): Promise<T> {
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(`${URL_API}${ruta}`, {
+      method: "POST",
+      headers: await obtenerCredenciales(),
+      body: cuerpo,
+    });
+  } catch {
+    throw new ErrorApi(0, "SIN_CONEXION", "No se pudo conectar con el servidor de Expedite.");
+  }
+
+  const datos = await respuesta.json().catch(() => null);
+  if (!respuesta.ok) {
+    throw new ErrorApi(
+      respuesta.status,
+      datos?.error?.codigo ?? "ERROR_INTERNO",
+      datos?.error?.mensaje ?? "Ocurrió un error inesperado.",
+    );
+  }
+  return datos as T;
+}

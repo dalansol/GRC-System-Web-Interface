@@ -29,7 +29,6 @@ if (config.datos.modo === "sql") {
   // Las rutas de hallazgos y evidencias usan la misma conexión que las de usuarios.
   registrarPool(repoSql.pool);
   rutasSinSesion.push((await import("./routes/hallazgos.js")).default);
-  rutasSinSesion.push((await import("./routes/evidencias.js")).default);
 } else {
   // Sin base de datos no hay rutas de hallazgos ni de evidencias; el frontend usa sus datos de prueba.
   repo = new RepositorioMemoria();
@@ -43,6 +42,9 @@ const app = crearApp({
   repo,
   repoPlanes,
   repoPlanesAccion,
+  rutasConSesion: config.datos.modo === "sql"
+    ? [(await import("./routes/evidencias.js")).default]
+    : [],
   verificador,
   dominiosPermitidos: config.dominiosPermitidos,
   corsOrigin: config.corsOrigin,
