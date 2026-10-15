@@ -174,6 +174,7 @@ export default function VistaControles({ navigate }: Props) {
       });
       setControles((actuales) => actuales.map((item) => item.id === control.id
         ? { ...item, status, feedback: feedback[control.id] ?? item.feedback }
+        : item));
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "No se pudo actualizar el status.");
     } finally {
