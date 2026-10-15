@@ -1,4 +1,4 @@
-import type { DatosPlan, PlanAuditoria } from "../domain/planes.js";
+import { periodoClave, type DatosPlan, type PlanAuditoria } from "../domain/planes.js";
 import { ErrorCodigoDuplicado, type RepositorioPlanes } from "./planes.js";
 import type { RepositorioUsuarios } from "./repositorio.js";
 import { PLANES_DEMO } from "./semilla.js";
@@ -42,6 +42,30 @@ export class RepositorioPlanesMemoria implements RepositorioPlanes {
     await this.listo;
     const fila = this.filas.find((f) => f.id === id);
     return fila ? this.aPlan(fila) : null;
+  }
+
+  async siguienteCodigo(datos: DatosPlan) {
+    await this.listo;
+    const periodo = periodoClave(datos);
+    const prefijo = datos.tipo === "Anual" ? "PAA" : "PAT";
+    const planes = this.filas.filter((fila) =>
+      fila.tipo === datos.tipo &&
+      (datos.tipo === "Anual"
+        ? fila.fechaInicio.slice(0, 4) === periodo
+        : periodoClave({
+            tipo: fila.tipo,
+            periodo: fila.periodo,
+            fechaInicio: fila.fechaInicio,
+          }) === periodo),
+    );
+    const ultimo = planes.reduce((maximo, fila) => {
+      const coincidencia = fila.codigo.match(/(\d+)$/);
+      return coincidencia ? Math.max(maximo, Number(coincidencia[1])) : maximo;
+    }, 0);
+    const sufijoPeriodo = datos.tipo === "Anual"
+      ? periodo
+      : `${datos.fechaInicio.slice(0, 4)}-${periodo.match(/Q[1-4]/)![0]}`;
+    return `${prefijo}-${sufijoPeriodo}-${String(ultimo + 1).padStart(3, "0")}`;
   }
 
   async crear(datos: DatosPlan) {

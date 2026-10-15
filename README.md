@@ -39,7 +39,7 @@ DATA_MODE=memoria
 ```
 VITE_API_URL=http://localhost:3000/api
 VITE_AUTH_MODE=dev
-VITE_USE_REAL_BACKEND=false
+VITE_USE_REAL_BACKEND=true
 ```
 
 ### 2. Levantar el backend
@@ -81,9 +81,10 @@ En modo de desarrollo se entra escribiendo el correo de un usuario de prueba:
 | `p.sanchez@expedite.com` | Consultor (inactivo) | No puede entrar |
 
 En este modo los datos de usuarios viven en memoria: se reinician cada vez que se
-apaga el backend. La vista de hallazgos usa sus datos de prueba mientras
-`VITE_USE_REAL_BACKEND` sea `false`; sus rutas en el backend solo existen con
-`DATA_MODE=sql`, porque necesitan la base de datos. Los planes de acción de los
+apaga el backend. La vista de hallazgos usa la API por omisión; para trabajar sin
+la base de datos se puede establecer explícitamente `VITE_USE_REAL_BACKEND=false`,
+en cuyo caso usa sus datos de prueba. Las rutas reales de hallazgos solo existen
+con `DATA_MODE=sql`, porque necesitan la base de datos. Los planes de acción de los
 hallazgos (`/api/planes-accion`) sí funcionan en memoria: usan los hallazgos y
 auditorías de prueba, y el portal del auditado muestra los planes asignados al
 usuario con sesión (por ejemplo `c.morales@expedite.com` ya tiene uno).
@@ -130,7 +131,7 @@ Frontend (`.env`):
 | Variable | Descripción |
 |---|---|
 | `VITE_API_URL` | URL de la API, con el prefijo `/api`. Por omisión `http://localhost:3000/api`. |
-| `VITE_USE_REAL_BACKEND` | `true` para que la vista de hallazgos use el backend; con `false` usa datos de prueba. |
+| `VITE_USE_REAL_BACKEND` | `true` (por omisión) para que la vista de hallazgos use el backend; con `false` usa datos de prueba. |
 | `VITE_AUTH_MODE` | `entra` (por omisión) o `dev` (requiere el backend con `AUTH_MODE=dev`). |
 | `VITE_PERMITIR_DEV_EN_PRODUCCION` | `true` permite `VITE_AUTH_MODE=dev` en la compilación de producción (p. ej. en Vercel), solo para una demostración. |
 | `VITE_ENTRA_TENANT_ID`, `VITE_ENTRA_CLIENT_ID` | Obligatorias con `VITE_AUTH_MODE=entra`. |
