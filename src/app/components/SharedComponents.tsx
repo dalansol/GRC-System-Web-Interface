@@ -144,6 +144,10 @@ interface ControlRecord {
   sampleSize: string;
   rotation: string;
   controlStatus: string;
+  status?: "En Progreso" | "En Revision" | "Completado";
+  horasInvertidas?: number;
+  feedback?: string | null;
+  auditIds?: number[];
 }
 interface ProcedureTracking {
   id: string;
