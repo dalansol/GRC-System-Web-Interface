@@ -27,6 +27,10 @@ const SCRIPTS = [
   "007_action_plans.sql",
   "008_estructura_y_controles.sql",
   "010_catalogos_riesgos_y_ejecucion.sql",
+  "011_audit_controls_plan.sql",
+  "012_seguimiento_controles.sql",
+  "013_seguimiento_asignaciones_control.sql",
+  "014_quitar_seguimiento_controles_catalogo.sql",
 ];
 const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql"];
 

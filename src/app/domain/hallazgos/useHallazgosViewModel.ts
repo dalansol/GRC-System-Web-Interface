@@ -70,7 +70,7 @@ export function useHallazgosViewModel() {
     setHallazgoParaPlan(null);
   };
 
-  // La edición solo cambia el plan; el estado del hallazgo no se toca.
+  // La edición solo cambia el plan; el status del hallazgo no se toca.
   const handlePlanActualizado = (plan: PlanAccion) => {
     setPlanesPorHallazgo((prev) => ({ ...prev, [plan.hallazgo.id]: plan }));
     setHallazgoParaPlan(null);
@@ -103,7 +103,7 @@ export function useHallazgosViewModel() {
 
     if (finding?.status !== "Abierto") {
       toast.error(
-        "Solo se pueden eliminar hallazgos en estado Abierto.",
+        "Solo se pueden eliminar hallazgos en status Abierto.",
       );
       return;
     }

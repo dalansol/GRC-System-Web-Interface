@@ -136,6 +136,7 @@ import EvidenciasSection from "./components/EvidenciasSection";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
 import UsuariosRolesView from "./components/UsuariosRolesView";
 import AuditPlansView from "./components/VistaPlanesAudito";
+import VistaControlDetallado from "./components/VistaControlDetallado";
 import { useSesion } from "./auth/SesionContext";
 import { listarMisPlanesAccion, type PlanAccion } from "./api/planesAccion";
 
@@ -1963,202 +1964,6 @@ function AuditEntityDetailView({
         </Card>
       </div>
       <AISummaryCard entityId={ae.id} entityType="Entidad Auditora" />
-    </div>
-  );
-}
-
-// ─── CONTROL DETAIL ───────────────────────────────────────────────────────────
-function ControlDetailView({
-  id,
-  crumbs,
-}: {
-  id: string;
-  crumbs: React.ReactNode;
-}) {
-  const ctrl = CONTROLS.find((c) => c.id === id)!;
-  const ae = AUDIT_ENTITIES.find(
-    (a) => a.id === ctrl.auditEntityId,
-  )!;
-  const procedures = PROCEDURE_TRACKING.filter(
-    (p) => p.controlId === id,
-  );
-
-  return (
-    <div
-      className="flex-1 overflow-auto p-6"
-      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-    >
-      {crumbs}
-      {/* Header */}
-      <Card className="mb-5 p-5">
-        <div className="flex items-start gap-3 mb-3">
-          <div className="p-2 bg-emerald-100 rounded-lg flex-shrink-0">
-            <ClipboardCheck
-              size={18}
-              className="text-emerald-600"
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-xs font-bold text-primary bg-primary/8 px-2.5 py-1 rounded-md">
-                {ctrl.id}
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                Procedimiento de Control
-              </span>
-              <ValidityBadge status={ctrl.validityStatus} />
-            </div>
-            <h1 className="text-xl font-bold text-foreground leading-tight">
-              {ctrl.controlProcedureName}
-            </h1>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-4 pt-3 border-t border-border mb-4">
-          <DetailField label="ID Control" value={ctrl.id} />
-          <DetailField
-            label="Entidad Auditora"
-            value={ae.name}
-          />
-          <DetailField
-            label="ID Entidad Auditora"
-            value={ae.id}
-          />
-        </div>
-        <div className="pt-3 border-t border-border">
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
-            Actividad de Control
-          </div>
-          <p className="text-sm text-foreground leading-relaxed">
-            {ctrl.controlActivity}
-          </p>
-        </div>
-      </Card>
-
-      {/* Transversal Control Procedures */}
-      <Card className="mb-5 p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="text-sm font-bold text-foreground">
-            Procedimientos de Control Transversal
-          </div>
-          <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">
-            {ctrl.controlType}
-          </span>
-        </div>
-        <div className="grid grid-cols-5 gap-4">
-          {[
-            {
-              label: "Tipo de Control",
-              value: ctrl.controlType,
-            },
-            {
-              label: "Frecuencia de Operación",
-              value: ctrl.frequency,
-            },
-            {
-              label: "Tamaño de Muestra",
-              value: ctrl.sampleSize,
-            },
-            { label: "Rotación", value: ctrl.rotation },
-            { label: "Estatus", value: ctrl.controlStatus },
-          ].map((f) => (
-            <div
-              key={f.label}
-              className="bg-muted/40 rounded-lg p-3"
-            >
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                {f.label}
-              </div>
-              <div className="text-sm font-bold text-foreground">
-                {f.value}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Procedure Tracking Table */}
-      <Card>
-        <div className="px-4 pt-4 pb-3 border-b border-border flex items-center gap-2">
-          <ClipboardList size={15} className="text-primary" />
-          <div className="text-sm font-semibold text-foreground">
-            Seguimiento de Procedimientos
-          </div>
-          <span className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-semibold">
-            {procedures.length}
-          </span>
-        </div>
-        {procedures.length === 0 ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">
-            Sin procedimientos de seguimiento registrados
-          </div>
-        ) : (
-          <div className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  {[
-                    "ID Seguimiento",
-                    "Nombre Procedimiento",
-                    "Identificador",
-                    "Depto. Negocio",
-                    "Negocio",
-                    "División",
-                    "Área",
-                    "País",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {procedures.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="hover:bg-secondary/30 transition-colors"
-                  >
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-primary">
-                      {p.id}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-medium text-foreground">
-                      {p.procedureName}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                      {p.identificator}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.businessDeptName}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.businessName}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.divisionName}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.area}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.country}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-      <EvidenciasSection 
-        entityId={ctrl.id} 
-        entityType="control"
-        controlId={ctrl.id}
-        businessEntityId={ctrl.auditEntityId} 
-      />
-      <AISummaryCard entityId={ctrl.id} entityType="Control" />
     </div>
   );
 }
@@ -4870,7 +4675,7 @@ export default function App() {
           );
         case "control":
           return (
-            <ControlDetailView id={top.id} crumbs={crumbs} />
+            <VistaControlDetallado id={top.id} crumbs={crumbs} />
           );
       }
     }
@@ -4894,7 +4699,7 @@ export default function App() {
       case "bitacora":
         return <BitacoraView />;
       case "plans":
-        return <AuditPlansView canCreate={usuario?.rol === "Jefe de Auditoría"} />;
+        return <AuditPlansView canCreate={usuario?.rol === "Jefe de Auditoría"} navigate={navigate} />;
       case "findings":
         return <VistaHallazgo />;
       case "controles":
