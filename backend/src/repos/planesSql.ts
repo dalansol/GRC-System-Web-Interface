@@ -72,13 +72,26 @@ export class RepositorioPlanesSql implements RepositorioPlanes {
     }
   }
 
-  async listar(responsableId?: number) {
-    const consulta = responsableId === undefined
-      ? `${SELECT_PLAN} ORDER BY p.start_date DESC`
-      : `${SELECT_PLAN} WHERE p.responsible_id = $1 ORDER BY p.start_date DESC`;
+  async listar(responsableId?: number, auditorId?: number) {
+    const condiciones: string[] = [];
+    const valores: number[] = [];
+    if (responsableId !== undefined) {
+      valores.push(responsableId);
+      condiciones.push(`p.responsible_id = $${valores.length}`);
+    }
+    if (auditorId !== undefined) {
+      valores.push(auditorId);
+      condiciones.push(`EXISTS (
+        SELECT 1 FROM audit_controls ac
+        WHERE ac.audit_id = p.id AND ac.auditor_id = $${valores.length}
+      )`);
+    }
+    const consulta = `${SELECT_PLAN}${
+      condiciones.length > 0 ? ` WHERE ${condiciones.join(" AND ")}` : ""
+    } ORDER BY p.start_date DESC`;
     const resultado = await this.pool.query<FilaPlan>(
       consulta,
-      responsableId === undefined ? [] : [responsableId],
+      valores,
     );
     return resultado.rows.map(aPlan);
   }

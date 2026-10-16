@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { AUDIT_PLANS_DATA, INITIAL_USERS } from "../../data/mock_data";
+import { AUDIT_PLANS_DATA } from "../../data/mock_data";
 import { pedir } from "../../api/cliente";
 import { useSesion } from "../../auth/SesionContext";
 
@@ -17,6 +17,7 @@ export interface AuditPlanViewModel {
   endDate: string;
   estimatedHours: number;
   responsible: string;
+  responsibleId: number;
   scope: string;
   status: "Borrador" | "Aprobado" | "En Ejecución" | "Cerrado";
 }
@@ -44,7 +45,8 @@ const convertirPlan = (plan: PlanApi): AuditPlanViewModel => ({
   startDate: plan.fechaInicio,
   endDate: plan.fechaFin,
   estimatedHours: plan.horasEstimadas,
-  responsible: nombreCompleto(plan.responsable.nombre),
+  responsible: plan.responsable.nombre,
+  responsibleId: plan.responsable.id,
   scope: plan.alcance ?? "",
   status: plan.estado,
 });
@@ -53,9 +55,6 @@ const nombreCorto = (nombre: string) => {
   const [nombrePrincipal, ...apellidos] = nombre.split(" ");
   return apellidos.length > 0 ? `${nombrePrincipal[0]}. ${apellidos.join(" ")}` : nombre;
 };
-
-const nombreCompleto = (nombre: string) =>
-  INITIAL_USERS.find((usuario) => nombreCorto(usuario.name) === nombre)?.name ?? nombre;
 
 const orderPlans = (plans: AuditPlanViewModel[]) =>
   [...plans].sort((left, right) => {
@@ -92,7 +91,7 @@ export function useAuditPlansViewModel() {
         // Fallback a mock_data.ts
         const plans = (AUDIT_PLANS_DATA as unknown as AuditPlanViewModel[]).map((plan) => ({
           ...plan,
-          responsible: nombreCompleto(plan.responsible),
+          responsible: plan.responsible,
         }));
         setPlans(orderPlans(
           usuario?.rol === "Auditor Senior"
@@ -125,7 +124,7 @@ export function useAuditPlansViewModel() {
             fechaInicio: planData.startDate,
             fechaFin: planData.endDate,
             horasEstimadas: planData.estimatedHours,
-            responsableId: Number(usuario?.id),
+            responsableId: planData.responsibleId,
             alcance: planData.scope || null,
           },
         });
@@ -135,6 +134,7 @@ export function useAuditPlansViewModel() {
         const newPlan: AuditPlanViewModel = {
           ...planData,
           id: `AP-${String(plans.length + 1).padStart(3, "0")}`,
+          responsibleId: Number(usuario?.id ?? 0),
           status: "Borrador"
         };
         setPlans((prev) => orderPlans([newPlan, ...prev]));
@@ -193,7 +193,7 @@ export function useAuditPlansViewModel() {
             fechaInicio: editingPlan.startDate,
             fechaFin: editingPlan.endDate,
             horasEstimadas: editingPlan.estimatedHours,
-            responsableId: Number(usuario?.id),
+            responsableId: editingPlan.responsibleId,
             alcance: editingPlan.scope || null,
             estado: editingPlan.status,
           },

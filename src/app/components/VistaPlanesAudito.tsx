@@ -1,17 +1,17 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowRight, ChevronDown, Plus, Loader2, RefreshCw } from "lucide-react";
+import { ArrowRight, ChevronDown, Plus, Loader2, RefreshCw, Users, X } from "lucide-react";
 
 import { Breadcrumbs, Card, PageHeader, PrimaryBtn } from "./SharedComponents";
 import type { Navigate } from "./SharedComponents";
 import type { AuditPlan } from "./SharedComponents";
 import { useAuditPlansViewModel } from "../domain/planes-auditoria/useAuditPlansViewModel";
-import { INITIAL_USERS } from "../data/mock_data";
 import { useSesion } from "../auth/SesionContext";
+import { pedir } from "../api/cliente";
 import FormularioPlanAudito from "./FormularioPlanAudito";
 import type { DatosFormularioPlanAudito } from "./FormularioPlanAudito";
 import FormularioAsignarControl from "./FormularioAsignarControl";
-import { actualizarAsignacionStatus, listarAsignacionesControl, type AsignacionControl } from "../api/auditControls";
+import { listarAsignacionesControl, type AsignacionControl } from "../api/auditControls";
 
 const PLAN_STATUS_CFG: Record<AuditPlan["status"], { label: string; cls: string }> = {
   "Borrador": { label: "Borrador", cls: "bg-slate-50 text-slate-600 border border-slate-200" },
@@ -31,15 +31,23 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
   const [controlAssignments, setControlAssignments] = useState<Record<string, AsignacionControl[]>>({});
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assigningPlanId, setAssigningPlanId] = useState<string | null>(null);
+  const [selectedAuditors, setSelectedAuditors] = useState<AsignacionControl[] | null>(null);
+  const [empleadosAsignados, setEmpleadosAsignados] = useState<{ id: string; name: string }[]>([]);
 
-  const empleadosAsignados = useMemo(() => {
-    const jefe = INITIAL_USERS.find((user) => user.name === usuario?.nombre && user.role === "Jefe de Auditoría");
-    const managerId = jefe?.id ?? "USR-001";
-
-    return INITIAL_USERS
-      .filter((user) => user.manager === managerId && user.status === "active")
-      .sort((left, right) => left.name.localeCompare(right.name, "es"));
-  }, [usuario?.nombre]);
+  useEffect(() => {
+    if (!canCreate || !["Administrador", "Jefe de Auditoría"].includes(usuario?.rol ?? "")) return;
+    pedir<{ id: number; nombre: string }[]>("/usuarios/responsables-plan")
+      .then((usuarios) => {
+        setEmpleadosAsignados(
+          usuarios
+            .map((usuario) => ({ id: String(usuario.id), name: usuario.nombre }))
+            .sort((left, right) => left.name.localeCompare(right.name, "es")),
+        );
+      })
+      .catch((error: unknown) => {
+        toast.error(error instanceof Error ? error.message : "No se pudieron cargar los responsables.");
+      });
+  }, [canCreate, usuario?.rol]);
   
   const responsableInicial = empleadosAsignados[0]?.name ?? "";
 
@@ -142,7 +150,7 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                   <th className="py-3 px-4 font-semibold text-muted-foreground">Tipo</th>
                   <th className="py-3 px-4 font-semibold text-muted-foreground">Periodo</th>
                   <th className="py-3 px-4 font-semibold text-muted-foreground">Responsable</th>
-                  <th className="py-3 px-4 font-semibold text-muted-foreground">status</th>
+                  <th className="py-3 px-4 font-semibold text-muted-foreground">Estado</th>
                   <th className="py-3 px-4 text-right font-semibold text-muted-foreground">Acciones</th>
                 </tr>
               </thead>
@@ -158,6 +166,14 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                     const statusCfg = PLAN_STATUS_CFG[plan.status as keyof typeof PLAN_STATUS_CFG] || { label: plan.status, cls: "bg-gray-50 text-gray-700" };
                     const isExpanded = expandedPlanCode === plan.code;
                     const assignedControls = controlAssignments[plan.id] ?? [];
+                    const groupedControls = Array.from(
+                      assignedControls.reduce((groups, assignment) => {
+                        const current = groups.get(String(assignment.control_id)) ?? [];
+                        current.push(assignment);
+                        groups.set(String(assignment.control_id), current);
+                        return groups;
+                      }, new Map<string, AsignacionControl[]>()),
+                    ).map(([, assignments]) => assignments);
                     const horasTotales = assignedControls.reduce(
                       (total, assignment) => total + Number(assignment.hours_spent ?? 0),
                       0,
@@ -215,8 +231,25 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                                 <p className="text-sm text-muted-foreground">Este plan no tiene controles asignados.</p>
                               ) : (
                                 <div className="space-y-2">
-                                  {assignedControls.map((assignment) => (
-                                    <div key={assignment.id} className="flex items-center justify-between gap-4 rounded-md border border-border bg-card px-3 py-2">
+                                  {groupedControls.map((assignments) => {
+                                    const assignment = assignments[0];
+                                    const variosAuditores = assignments.length > 1;
+                                    const status = assignments.every((item) => item.status === "En Revision")
+                                      ? "En Revision"
+                                      : assignments.some((item) => item.status === "En Progreso")
+                                        ? "En Progreso"
+                                        : assignment.status;
+                                    const tieneAuditor = assignments.some((item) => item.auditor_role === "Auditor");
+                                    const tieneSenior = assignments.some((item) => item.auditor_role === "Auditor Senior");
+                                    const puedeAprobar =
+                                      status === "En Revision" &&
+                                      (tieneSenior
+                                        ? esJefatura && assignments.every((item) => item.plan_created_by === Number(usuario?.id))
+                                        : tieneAuditor &&
+                                          esAuditorSenior &&
+                                          assignments.every((item) => item.plan_responsible_id === Number(usuario?.id)));
+                                    return (
+                                    <div key={assignment.control_id} className="flex items-center justify-between gap-4 rounded-md border border-border bg-card px-3 py-2">
                                       <button
                                         type="button"
                                         onClick={() => navigate("control", assignment.control_id)}
@@ -229,36 +262,36 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                                             {assignment.control_code} · {assignment.control_name}
                                           </div>
                                           <div className="text-xs text-muted-foreground">
-                                              {assignment.is_lead ? "Auditor líder" : "Auditor asignado"} · {assignment.hours_spent} horas · {assignment.status}
+                                              {variosAuditores ? "Varios auditores asignados" : assignment.is_lead ? "Auditor líder" : "Auditor asignado"} · {assignments.reduce((total, item) => total + Number(item.hours_spent ?? 0), 0)} horas · {status}
                                           </div>
                                         </div>
                                         <ArrowRight size={15} className="shrink-0 text-primary opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100" />
                                       </button>
                                         <div className="flex items-center gap-3">
-                                          {esJefatura && assignment.status === "En Revision" && (
+                                          {puedeAprobar && (
                                             <button
                                               type="button"
-                                              onClick={async () => {
-                                                try {
-                                                  const actualizada = await actualizarAsignacionStatus(plan.id, assignment.control_id, { status: "Completado" });
-                                                  setControlAssignments((current) => ({
-                                                    ...current,
-                                                    [plan.id]: (current[plan.id] ?? []).map((item) => item.id === assignment.id ? { ...item, ...actualizada } : item),
-                                                  }));
-                                                  toast.success("Control marcado como completado.");
-                                                } catch (error: unknown) {
-                                                  toast.error(error instanceof Error ? error.message : "No se pudo actualizar el control.");
-                                                }
-                                              }}
-                                              className="rounded-md bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white"
+                                              onClick={() => navigate("control", assignment.control_id)}
+                                              className="rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-white"
                                             >
-                                              Aprobar
+                                              Revisar
                                             </button>
                                           )}
-                                          <span className="text-sm font-medium text-foreground">{assignment.auditor_name}</span>
+                                          {variosAuditores ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => setSelectedAuditors(assignments)}
+                                              className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+                                            >
+                                              <Users size={14} /> Auditores involucrados
+                                            </button>
+                                          ) : (
+                                            <span className="text-sm font-medium text-foreground">{assignment.auditor_name}</span>
+                                          )}
                                         </div>
                                     </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
                               )}
                             </td>
@@ -273,6 +306,43 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
           )}
         </div>
       </Card>
+      {selectedAuditors && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="presentation" onClick={() => setSelectedAuditors(null)}>
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-xl" role="dialog" aria-modal="true" aria-labelledby="auditores-involucrados" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 id="auditores-involucrados" className="text-base font-semibold">Auditores involucrados</h2>
+              <button type="button" onClick={() => setSelectedAuditors(null)} aria-label="Cerrar">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {selectedAuditors.map((auditor) => (
+                <div key={auditor.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
+                  <div>
+                    <div className="text-sm font-medium">{auditor.auditor_name}</div>
+                    <div className="text-xs text-muted-foreground">{auditor.auditor_role}{auditor.is_lead ? " · Líder" : ""}</div>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${
+                      auditor.status === "En Revision"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : auditor.status === "Completado"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {auditor.status === "En Revision"
+                      ? "En revisión"
+                      : auditor.status === "Completado"
+                        ? "Completado"
+                        : "Pendiente"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

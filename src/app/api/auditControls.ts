@@ -29,6 +29,9 @@ export interface AsignacionControl {
   feedback: string | null;
   auditor_id: number;
   auditor_name: string;
+  auditor_role: string;
+  plan_responsible_id: number;
+  plan_created_by: number;
   is_lead: boolean;
   assigned_by: number;
   created_at: string;
@@ -39,9 +42,20 @@ export interface MiAsignacionControl {
   asignacion: {
     id: number;
     audit_id: number;
-    control_id: number;
+    control_id: string;
+    status: "En Progreso" | "En Revision" | "Completado";
   } | null;
 }
+
+export interface RevisionControl {
+  puede_revisar: boolean;
+  plan_id: number | null;
+  status: string | null;
+  feedback: string | null;
+}
+
+export const consultarRevisionControl = (controlId: string) =>
+  pedir<RevisionControl>(`/controles/${encodeURIComponent(controlId)}/revision`);
 
 export const consultarMiAsignacionControl = (controlId: string) =>
   pedir<MiAsignacionControl>(
@@ -55,7 +69,7 @@ export const listarAsignacionesControl = (planId: string) =>
 export const actualizarAsignacionStatus = (
   planId: string,
   controlId: string,
-  datos: { status: "En Revision" | "Completado"; feedback?: string },
+  datos: { status: "En Progreso" | "En Revision" | "Completado"; feedback?: string },
 ) =>
   pedir<AsignacionControl>(
     `/planes/${encodeURIComponent(planId)}/controles/${encodeURIComponent(controlId)}/status`,

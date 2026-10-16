@@ -8,7 +8,7 @@ export class ErrorCodigoDuplicado extends Error {
 }
 
 export interface RepositorioPlanes {
-  listar(responsableId?: number): Promise<PlanAuditoria[]>;
+  listar(responsableId?: number, auditorId?: number): Promise<PlanAuditoria[]>;
   buscarPorId(id: number): Promise<PlanAuditoria | null>;
   /** Calcula el siguiente código para el año o período del plan. */
   siguienteCodigo(datos: DatosPlan): Promise<string>;

@@ -52,7 +52,9 @@ export const actualizarstatusControl = (
   datos: { status: "En Revision" | "Completado"; feedback?: string },
 ) => pedir<{
   id: string;
-  status: "En Revision" | "Completado";
+  status: "En Progreso" | "En Revision" | "Completado";
   hours_spent: string | number;
   feedback: string | null;
+  todos_en_revision: boolean;
+  auditores_pendientes: number;
 }>(`/controles/${encodeURIComponent(controlId)}/status`, { metodo: "PATCH", cuerpo: datos });

@@ -17,6 +17,7 @@ export interface DatosFormularioPlanAudito {
     endDate: string; // Auto-generated now!
     estimatedHours: number;
     responsible: string;
+    responsibleId: number;
     scope: string;
 }
 
@@ -107,6 +108,7 @@ export default function FormularioPlanAudito({
             ...form,
             type: form.type,
             period,
+            responsibleId: Number(empleadosAsignados.find((empleado) => empleado.name === form.responsible)?.id ?? 0),
             startDate,
             endDate,
             estimatedHours: Number(form.estimatedHours),

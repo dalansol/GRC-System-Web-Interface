@@ -10,6 +10,8 @@ import { ErrorCorreoDuplicado, type RepositorioUsuarios } from "../repos/reposit
 const LARGO_MAXIMO_NOMBRE = 150;
 const LARGO_MAXIMO_CORREO = 254;
 const ID_MAXIMO = 2_147_483_647;
+const ROL_JEFATURA = "Jefe de Auditoría";
+const ROL_AUDITOR_SENIOR = "Auditor Senior";
 
 interface Dependencias {
   repo: RepositorioUsuarios;
@@ -47,6 +49,15 @@ export function rutasUsuarios({ repo, dominiosPermitidos, registrarEvento }: Dep
   rutas.get("/usuarios", autorizar(ROL_ADMINISTRADOR), async (_req, res) => {
     res.json(await repo.listarUsuarios());
   });
+
+  rutas.get(
+    "/usuarios/responsables-plan",
+    autorizar(ROL_ADMINISTRADOR, ROL_JEFATURA),
+    async (_req, res) => {
+      const usuarios = await repo.listarUsuarios();
+      res.json(usuarios.filter((usuario) => usuario.estado === "active" && usuario.rol === ROL_AUDITOR_SENIOR));
+    },
+  );
 
   rutas.post("/usuarios", autorizar(ROL_ADMINISTRADOR), async (req, res) => {
     const cuerpo = campos(req.body);

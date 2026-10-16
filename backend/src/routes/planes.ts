@@ -39,6 +39,9 @@ export function rutasPlanes({ repo, usuarios, registrarEvento }: Dependencias): 
     if (!responsable || responsable.estado !== "active") {
       throw new ErrorApi(400, "DATOS_INVALIDOS", "El responsable no existe o está inactivo.");
     }
+    if (responsable.rol !== ROL_AUDITOR_SENIOR) {
+      throw new ErrorApi(400, "DATOS_INVALIDOS", "El responsable del plan debe ser un Auditor Senior.");
+    }
     return normalizarPlan(datos);
   }
 
@@ -60,7 +63,10 @@ export function rutasPlanes({ repo, usuarios, registrarEvento }: Dependencias): 
 
   rutas.get("/planes", async (_req, res) => {
     const usuario = usuarioEnSesion(res);
-    res.json(await repo.listar(usuario.rol === ROL_AUDITOR_SENIOR ? usuario.id : undefined));
+    res.json(await repo.listar(
+      usuario.rol === ROL_AUDITOR_SENIOR ? usuario.id : undefined,
+      usuario.rol === "Auditor" ? usuario.id : undefined,
+    ));
   });
 
   rutas.get("/planes/:id", async (req, res) => {

@@ -30,11 +30,14 @@ export class RepositorioPlanesMemoria implements RepositorioPlanes {
     return { ...fila, responsable: { id: responsableId, nombre: usuario?.nombre ?? "" } };
   }
 
-  async listar(responsableId?: number) {
+  async listar(responsableId?: number, auditorId?: number) {
     await this.listo;
-    const filas = responsableId === undefined
-      ? this.filas
-      : this.filas.filter((f) => f.responsableId === responsableId);
+    const filas = this.filas.filter((fila) => {
+      const coincideResponsable = responsableId === undefined || fila.responsableId === responsableId;
+      // El repositorio en memoria no modela asignaciones de controles.
+      const coincideAuditor = auditorId === undefined;
+      return coincideResponsable && coincideAuditor;
+    });
     return Promise.all(filas.map((f) => this.aPlan(f)));
   }
 
