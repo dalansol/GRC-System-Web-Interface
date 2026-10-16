@@ -4,9 +4,11 @@ import type { VerificadorToken } from "./auth/verificador.js";
 import { registrarEnConsola, type RegistrarEvento } from "./bitacora.js";
 import { ErrorApi } from "./errores.js";
 import { autenticar } from "./middleware/autenticar.js";
+import type { RepositorioEstructura } from "./repos/estructura.js";
 import type { RepositorioPlanes } from "./repos/planes.js";
 import type { RepositorioPlanesAccion } from "./repos/planesAccion.js";
 import type { RepositorioUsuarios } from "./repos/repositorio.js";
+import { rutasEstructura } from "./routes/estructura.js";
 import { rutasPlanes } from "./routes/planes.js";
 import { rutasPlanesAccion } from "./routes/planesAccion.js";
 import { rutasUsuarios } from "./routes/usuarios.js";
@@ -16,6 +18,7 @@ export interface DependenciasApp {
   repo: RepositorioUsuarios;
   repoPlanes: RepositorioPlanes;
   repoPlanesAccion: RepositorioPlanesAccion;
+  repoEstructura?: RepositorioEstructura;
   verificador: VerificadorToken;
   dominiosPermitidos: readonly string[];
   corsOrigin: string | string[];
@@ -62,6 +65,9 @@ export function crearApp(deps: DependenciasApp): Express {
     }),
     rutasPlanes({ repo: deps.repoPlanes, usuarios: deps.repo, registrarEvento }),
     rutasPlanesAccion({ repo: deps.repoPlanesAccion, usuarios: deps.repo, registrarEvento }),
+    ...(deps.repoEstructura
+      ? [rutasEstructura({ repo: deps.repoEstructura, usuarios: deps.repo, registrarEvento })]
+      : []),
     auditControls,
     ...(deps.rutasConSesion ?? []),
     () => {

@@ -11,6 +11,9 @@ export type CodigoError =
   | "PLAN_DUPLICADO"
   | "ASIGNACION_DUPLICADA"
   | "RESPONSABLE_NO_EDITA"
+  | "NOMBRE_DUPLICADO"
+  | "PERIODO_ACTIVO_NO_CONFIGURADO"
+  | "AUDITORIAS_ACTIVAS"
   | "ERROR_INTERNO";
 
 export class ErrorApi extends Error {
