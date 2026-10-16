@@ -12,6 +12,7 @@ import FormularioPlanAudito from "./FormularioPlanAudito";
 import type { DatosFormularioPlanAudito } from "./FormularioPlanAudito";
 import FormularioAsignarControl from "./FormularioAsignarControl";
 import { actualizarAsignacionStatus, listarAsignacionesControl, type AsignacionControl } from "../api/auditControls";
+import { EtiquetaConflictoPlan, SeccionConflictosPlan } from "./ConflictosPlan";
 
 const PLAN_STATUS_CFG: Record<AuditPlan["status"], { label: string; cls: string }> = {
   "Borrador": { label: "Borrador", cls: "bg-slate-50 text-slate-600 border border-slate-200" },
@@ -168,7 +169,10 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                       <Fragment key={plan.id}>
                         <tr className="border-b border-border hover:bg-muted/20">
                           <td className="py-3 px-4 font-medium">{plan.code}</td>
-                          <td className="py-3 px-4">{plan.name}</td>
+                          <td className="py-3 px-4">
+                            {plan.name}
+                            {USE_REAL_BACKEND && <EtiquetaConflictoPlan planId={plan.id} />}
+                          </td>
                           <td className="py-3 px-4">{plan.type}</td>
                           <td className="py-3 px-4">{plan.period}</td>
                           <td className="py-3 px-4">{plan.responsible}</td>
@@ -190,6 +194,7 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                         {isExpanded && (
                           <tr key={`${plan.id}-details`} className="border-b border-border bg-muted/10">
                             <td colSpan={7} className="px-6 py-4">
+                              {USE_REAL_BACKEND && <SeccionConflictosPlan planId={plan.id} />}
                               <div className="mb-3">
                                 <div className="flex items-center justify-between gap-3">
                                   <div>
