@@ -11,6 +11,7 @@ import {
 import type { ControlRecord } from "./SharedComponents";
 import EvidenciasSection from "./EvidenciasSection";
 import { listarControles, registrarHoras, actualizarstatusControl } from "../api/controles";
+import { AvisoDeclaracionesPendientes, useDeclaracionesPendientes } from "./ConflictosPlan";
 import { actualizarAsignacionStatus, consultarMiAsignacionControl, consultarRevisionControl, type RevisionControl } from "../api/auditControls";
 import { AUDIT_ENTITIES, CONTROLS, PROCEDURE_TRACKING } from "../data/mock_data";
 
@@ -22,6 +23,8 @@ export default function VistaControlDetallado({
   crumbs: React.ReactNode;
 }) {
   const [backendControl, setBackendControl] = useState<ControlRecord | null>(null);
+  // Historia #96: sin declaración de conflictos no se evalúan los controles del plan.
+  const { pendientes: planesPendientes } = useDeclaracionesPendientes();
   const [puedeSubirEvidencia, setPuedeSubirEvidencia] = useState(false);
   const [miAsignacionStatus, setMiAsignacionStatus] = useState<string | null>(null);
   const [revision, setRevision] = useState<RevisionControl | null>(null);
@@ -170,6 +173,10 @@ export default function VistaControlDetallado({
   }, [id]);
 
   const ctrl = backendControl ?? CONTROLS.find((control) => control.id === id);
+  const pendientesDelControl = planesPendientes.filter((plan) =>
+    (ctrl?.auditIds ?? []).some((planId) => String(planId) === String(plan.id)),
+  );
+  const evaluacionBloqueada = pendientesDelControl.length > 0;
   if (loading) {
     return (
       <div className="flex-1 overflow-auto p-6">
@@ -374,6 +381,11 @@ export default function VistaControlDetallado({
       />
       {puedeSubirEvidencia && (
         <Card className="mb-5 p-5">
+          {evaluacionBloqueada && (
+            <div className="mb-4">
+              <AvisoDeclaracionesPendientes pendientes={pendientesDelControl} />
+            </div>
+          )}
           <div className="mb-4">
             <h2 className="text-sm font-semibold text-foreground">Avance del control</h2>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -391,14 +403,14 @@ export default function VistaControlDetallado({
                   step="0.01"
                   value={horas}
                   onChange={(event) => setHoras(event.target.value)}
-                  disabled={guardandoHoras || enviandoRevision || ctrl.status === "En Revision" || ctrl.status === "Completado"}
+                  disabled={guardandoHoras || enviandoRevision || evaluacionBloqueada || ctrl.status === "En Revision" || ctrl.status === "Completado"}
                   className="w-32 rounded-md border border-border bg-white px-3 py-2 text-sm font-normal"
                   placeholder="Ej. 2.5"
                 />
                 <button
                   type="button"
                   onClick={guardarHoras}
-                  disabled={guardandoHoras || enviandoRevision || ctrl.status === "En Revision" || ctrl.status === "Completado"}
+                  disabled={guardandoHoras || enviandoRevision || evaluacionBloqueada || ctrl.status === "En Revision" || ctrl.status === "Completado"}
                   className="rounded-md border border-primary px-3 py-2 text-xs font-semibold text-primary disabled:opacity-50"
                 >
                   {guardandoHoras ? "Guardando..." : "Registrar horas"}
@@ -411,7 +423,7 @@ export default function VistaControlDetallado({
             <button
               type="button"
               onClick={enviarARevision}
-              disabled={enviandoRevision || guardandoHoras || miAsignacionStatus !== "En Progreso"}
+              disabled={enviandoRevision || guardandoHoras || evaluacionBloqueada || miAsignacionStatus !== "En Progreso"}
               className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-white disabled:bg-gray-400 disabled:opacity-100"
             >
               {enviandoRevision ? "Enviando..." : "Enviar a revisión"}

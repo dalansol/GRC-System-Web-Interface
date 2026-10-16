@@ -37,6 +37,7 @@ import { listarControles } from "../api/controles";
 import type { ControlRecord } from "./SharedComponents";
 import { actualizarstatusControl, registrarHoras } from "../api/controles";
 import { consultarMiAsignacionControl } from "../api/auditControls";
+import { AvisoDeclaracionesPendientes, useDeclaracionesPendientes } from "./ConflictosPlan";
 
 // ─── Sub-componentes de presentación ─────────────────────────────────────────
 
@@ -124,6 +125,11 @@ export default function VistaControles({ navigate }: Props) {
   const [feedback, setFeedback] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState<string | null>(null);
   const esJefatura = usuario?.rol === "Jefe de Auditoría";
+  // Historia #96: sin declaración de conflictos no se evalúan los controles del plan.
+  const { pendientes } = useDeclaracionesPendientes();
+  const planesPendientes = new Set(pendientes.map((plan) => String(plan.id)));
+  const evaluacionBloqueada = (control: ControlRecord) =>
+    (control.auditIds ?? []).some((planId) => planesPendientes.has(String(planId)));
 
   // Construir filas de CSV para exportación (SF-13)
   const handleExportar = () => {
@@ -212,6 +218,8 @@ export default function VistaControles({ navigate }: Props) {
           </button>
         </div>
       </div>
+
+      <AvisoDeclaracionesPendientes pendientes={pendientes} />
 
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap mb-5">
@@ -381,10 +389,13 @@ export default function VistaControles({ navigate }: Props) {
                                   Horas del día
                                   <input type="number" min="0.25" max="24" step="0.25" value={horas[control.id] ?? ""} onChange={(event) => setHoras((actuales) => ({ ...actuales, [control.id]: event.target.value }))} className="mt-1 block w-24 rounded-md border border-border bg-white px-2 py-1.5 text-xs" />
                                 </label>
-                                <button type="button" onClick={() => enviarHoras(control)} disabled={guardando === control.id} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
+                                <button type="button" onClick={() => enviarHoras(control)} disabled={guardando === control.id || evaluacionBloqueada(control)} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
                                   <Clock3 size={13} /> Registrar
                                 </button>
                               </div>
+                              {evaluacionBloqueada(control) && (
+                                <p className="mt-2 text-xs text-amber-700">Declara tus conflictos de interés en el plan de este control para poder evaluarlo.</p>
+                              )}
                               {control.status === "En Revision" && esJefatura && (
                                 <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-border pt-3">
                                   <label className="min-w-64 flex-1 text-xs text-muted-foreground">
@@ -396,7 +407,7 @@ export default function VistaControles({ navigate }: Props) {
                                 </div>
                               )}
                               {control.status === "En Progreso" && !esJefatura && (
-                                <button type="button" onClick={() => cambiarstatus(control, "En Revision")} disabled={guardando === control.id} className="mt-3 rounded-md border border-primary px-3 py-1.5 text-xs font-semibold text-primary">Enviar a revisión</button>
+                                <button type="button" onClick={() => cambiarstatus(control, "En Revision")} disabled={guardando === control.id || evaluacionBloqueada(control)} className="mt-3 rounded-md border border-primary disabled:opacity-50 px-3 py-1.5 text-xs font-semibold text-primary">Enviar a revisión</button>
                               )}
                               {control.feedback && <p className="mt-2 text-xs text-amber-700">Feedback: {control.feedback}</p>}
                             </div>
