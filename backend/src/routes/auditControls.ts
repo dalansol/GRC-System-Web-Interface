@@ -3,6 +3,8 @@ import { poolPromise } from "../db.js";
 import { ErrorApi } from "../errores.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import { autorizar } from "../middleware/autorizar.js";
+import { MENSAJE_DECLARACION_PENDIENTE } from "../domain/conflictos.js";
+import { declaracionPendiente } from "../repos/conflictosSql.js";
 
 const router = Router();
 const ROL_SENIOR = "Auditor Senior";
@@ -159,7 +161,11 @@ router.post("/controles/:controlId/horas", async (req, res) => {
     [controlId, usuario.rol, usuario.id, usuario.id],
   );
   if (acceso.rowCount !== 1) throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "No puedes registrar horas para este control.");
-  const asignacion = acceso.rows[0] as { id: number };
+  const asignacion = acceso.rows[0] as { id: number; audit_id: number };
+  // Historia #96: el auditor asignado no evalúa controles del plan sin declarar sus conflictos de interés.
+  if (await declaracionPendiente(pool, asignacion.audit_id, usuario.id)) {
+    throw new ErrorApi(403, "DECLARACION_PENDIENTE", MENSAJE_DECLARACION_PENDIENTE);
+  }
 
   const resultado = await pool.query(
     `UPDATE audit_controls
@@ -200,6 +206,10 @@ router.patch("/controles/:controlId/status", async (req, res) => {
     [controlId, usuario.rol, usuario.id],
   );
   if (actual.rowCount !== 1) throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "No puedes actualizar este control.");
+  // Historia #96: el auditor asignado no envía a revisión sin declarar sus conflictos de interés.
+  if (await declaracionPendiente(pool, actual.rows[0].audit_id as number, usuario.id)) {
+    throw new ErrorApi(403, "DECLARACION_PENDIENTE", MENSAJE_DECLARACION_PENDIENTE);
+  }
   const statusActual = actual.rows[0].status as string;
   const permitido =
     (statusActual === "En Progreso" && status === "En Revision" &&

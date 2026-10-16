@@ -86,3 +86,12 @@ export const PLANES_ACCION_DEMO = [
     fechaCompromiso: "2025-09-15",
   },
 ] as const;
+
+// Auditores con controles asignados en cada plan (modo en memoria). Coinciden con lo que hoy tiene
+// audit_controls en Supabase, donde Carlos Morales y Ana Rodríguez comparten el plan 2.
+// Solo un auditor asignado puede (y debe) declarar conflictos de interés en ese plan (historia #96).
+export const ASIGNACIONES_DEMO = [
+  { plan: "PAI-2025-002", auditor: "c.morales@expedite.com" },
+  { plan: "PAI-2025-002", auditor: "a.rodriguez@expedite.com" },
+  { plan: "PAI-2025-003", auditor: "a.rodriguez@expedite.com" },
+] as const;

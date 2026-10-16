@@ -4,6 +4,9 @@ import { crearApp } from "./app.js";
 import { crearVerificadorDev, crearVerificadorEntra } from "./auth/verificador.js";
 import { cargarConfig } from "./config.js";
 import { registrarPool } from "./db.js";
+import type { RepositorioConflictos } from "./repos/conflictos.js";
+import { RepositorioConflictosMemoria } from "./repos/conflictosMemoria.js";
+import { RepositorioConflictosSql } from "./repos/conflictosSql.js";
 import { RepositorioMemoria } from "./repos/memoria.js";
 import type { RepositorioPlanes } from "./repos/planes.js";
 import type { RepositorioPlanesAccion } from "./repos/planesAccion.js";
@@ -19,6 +22,7 @@ const config = cargarConfig(process.env);
 let repo: RepositorioUsuarios;
 let repoPlanes: RepositorioPlanes;
 let repoPlanesAccion: RepositorioPlanesAccion;
+let repoConflictos: RepositorioConflictos;
 const rutasSinSesion: Router[] = [];
 
 if (config.datos.modo === "sql") {
@@ -26,6 +30,7 @@ if (config.datos.modo === "sql") {
   repo = repoSql;
   repoPlanes = new RepositorioPlanesSql(repoSql.pool);
   repoPlanesAccion = new RepositorioPlanesAccionSql(repoSql.pool);
+  repoConflictos = new RepositorioConflictosSql(repoSql.pool);
   // Las rutas de hallazgos y evidencias usan la misma conexión que las de usuarios.
   registrarPool(repoSql.pool);
   rutasSinSesion.push((await import("./routes/hallazgos.js")).default);
@@ -34,6 +39,7 @@ if (config.datos.modo === "sql") {
   repo = new RepositorioMemoria();
   repoPlanes = new RepositorioPlanesMemoria(repo);
   repoPlanesAccion = new RepositorioPlanesAccionMemoria(repo);
+  repoConflictos = new RepositorioConflictosMemoria(repo, repoPlanes);
 }
 
 const verificador = config.auth.modo === "entra" ? crearVerificadorEntra(config.auth) : crearVerificadorDev();
@@ -42,6 +48,7 @@ const app = crearApp({
   repo,
   repoPlanes,
   repoPlanesAccion,
+  repoConflictos,
   rutasConSesion: config.datos.modo === "sql"
     ? [(await import("./routes/evidencias.js")).default]
     : [],
