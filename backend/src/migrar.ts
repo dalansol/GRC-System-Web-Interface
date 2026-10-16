@@ -31,6 +31,7 @@ const SCRIPTS = [
   "012_seguimiento_controles.sql",
   "013_seguimiento_asignaciones_control.sql",
   "014_quitar_seguimiento_controles_catalogo.sql",
+  "015_conflictos_por_plan.sql",
 ];
 const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql"];
 
