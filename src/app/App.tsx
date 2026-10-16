@@ -137,6 +137,7 @@ import SpreadsheetEditor from "./components/SpreadsheetEditor";
 import UsuariosRolesView from "./components/UsuariosRolesView";
 import AuditPlansView from "./components/VistaPlanesAudito";
 import VistaControlDetallado from "./components/VistaControlDetallado";
+import { HierarchyView } from "./components/catalogo/HierarchyView";
 import { useSesion } from "./auth/SesionContext";
 import { listarMisPlanesAccion, type PlanAccion } from "./api/planesAccion";
 
@@ -2912,7 +2913,7 @@ function TreeRow({
   );
 }
 
-function HierarchyView() {
+function HierarchyViewMockAntigua() {
   // Drill-down path: array of ancestors navigated into
   const [path, setPath] = useState<TreeNode[]>([]);
   const [viewMode, setViewMode] = useState<"cards" | "tree">(
