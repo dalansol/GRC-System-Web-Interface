@@ -54,7 +54,10 @@ export function cargarConfig(env: Entorno): Config {
   const modoAuth = env.AUTH_MODE ?? "entra";
   let auth: ConfigAuth;
   if (modoAuth === "dev") {
-    if (produccion) throw new Error("AUTH_MODE=dev no está permitido en producción.");
+    // Para una demostración desplegada se puede habilitar a propósito: cualquiera entra con solo el correo.
+    if (produccion && env.PERMITIR_DEV_EN_PRODUCCION !== "true") {
+      throw new Error("AUTH_MODE=dev no está permitido en producción.");
+    }
     auth = { modo: "dev" };
   } else if (modoAuth === "entra") {
     auth = { modo: "entra", tenantId: requerida("ENTRA_TENANT_ID"), clientId: requerida("ENTRA_CLIENT_ID") };

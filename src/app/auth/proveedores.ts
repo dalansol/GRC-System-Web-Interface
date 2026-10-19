@@ -95,7 +95,10 @@ export function crearProveedorEntra({ tenantId, clientId, scope }: ConfigEntra):
 export function proveedorPorDefecto(): ProveedorAuth {
   const env = import.meta.env;
   if (env.VITE_AUTH_MODE === "dev") {
-    if (env.PROD) throw new Error("VITE_AUTH_MODE=dev no está permitido en una compilación de producción.");
+    // Para una demostración desplegada se puede habilitar a propósito: cualquiera entra con solo el correo.
+    if (env.PROD && env.VITE_PERMITIR_DEV_EN_PRODUCCION !== "true") {
+      throw new Error("VITE_AUTH_MODE=dev no está permitido en una compilación de producción.");
+    }
     return crearProveedorDev();
   }
   if (!env.VITE_ENTRA_TENANT_ID || !env.VITE_ENTRA_CLIENT_ID) {

@@ -66,6 +66,12 @@ describe("cargarConfig", () => {
     expect(config.dominiosPermitidos).toEqual(["expedite.com", "femsa.com", "kof.com.mx"]);
   });
 
+  it("permite la autenticación de desarrollo en producción solo si se habilita a propósito", () => {
+    const config = cargarConfig({ ...PRODUCCION, AUTH_MODE: "dev", PERMITIR_DEV_EN_PRODUCCION: "true" });
+
+    expect(config.auth).toEqual({ modo: "dev" });
+  });
+
   it.each([
     ["autenticación de desarrollo en producción", { ...PRODUCCION, AUTH_MODE: "dev" }, "AUTH_MODE"],
     ["datos en memoria en producción", { ...PRODUCCION, DATA_MODE: "memoria" }, "DATA_MODE"],

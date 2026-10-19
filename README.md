@@ -117,6 +117,7 @@ Backend (`backend/.env`):
 | `CORS_ORIGIN` | Orígenes del frontend permitidos, separados por coma. Por omisión `http://localhost:5173,http://localhost:5174`. |
 | `DOMINIOS_PERMITIDOS` | Dominios de correo corporativo aceptados al dar de alta usuarios, separados por coma. Obligatoria. |
 | `AUTH_MODE` | `entra` (Microsoft Entra ID, por omisión) o `dev` (solo local; no arranca en producción). |
+| `PERMITIR_DEV_EN_PRODUCCION` | `true` permite `AUTH_MODE=dev` en producción, solo para una demostración: cualquiera entra escribiendo el correo de un usuario registrado. |
 | `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` | Obligatorias con `AUTH_MODE=entra`. |
 | `DATA_MODE` | `sql` (PostgreSQL en Supabase, por omisión) o `memoria` (solo local; no arranca en producción). |
 | `DB_SERVER`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Obligatorias con `DATA_MODE=sql`. Las usan usuarios y hallazgos. |
@@ -131,6 +132,7 @@ Frontend (`.env`):
 | `VITE_API_URL` | URL de la API, con el prefijo `/api`. Por omisión `http://localhost:3000/api`. |
 | `VITE_USE_REAL_BACKEND` | `true` para que la vista de hallazgos use el backend; con `false` usa datos de prueba. |
 | `VITE_AUTH_MODE` | `entra` (por omisión) o `dev` (requiere el backend con `AUTH_MODE=dev`). |
+| `VITE_PERMITIR_DEV_EN_PRODUCCION` | `true` permite `VITE_AUTH_MODE=dev` en la compilación de producción (p. ej. en Vercel), solo para una demostración. |
 | `VITE_ENTRA_TENANT_ID`, `VITE_ENTRA_CLIENT_ID` | Obligatorias con `VITE_AUTH_MODE=entra`. |
 | `VITE_ENTRA_API_SCOPE` | Opcional. Por omisión `api://<VITE_ENTRA_CLIENT_ID>/access_as_user`. |
 
