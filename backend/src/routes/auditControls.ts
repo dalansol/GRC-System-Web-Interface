@@ -360,9 +360,9 @@ router.post("/planes/:planId/controles", autorizar(ROL_SENIOR), async (req, res)
   try {
     const resultado = await pool.query(
       `INSERT INTO audit_controls
-         (audit_id, control_id, auditor_id, is_lead, assigned_by)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, audit_id, control_id, auditor_id, is_lead, assigned_by, created_at`,
+         (audit_id, control_id, auditor_id, is_lead, assigned_by, status)
+       VALUES ($1, $2, $3, $4, $5, 'En Progreso')
+       RETURNING id, audit_id, control_id, auditor_id, is_lead, assigned_by, status, created_at`,
       [planId, controlId.trim(), auditorId, auditorId === senior.id, senior.id],
     );
     res.status(201).json(resultado.rows[0]);
