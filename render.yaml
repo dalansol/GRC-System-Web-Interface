@@ -1,0 +1,38 @@
+# Backend de Expedite (Express) en Render. El frontend vive en Vercel.
+# Los valores marcados con sync: false se capturan en el panel de Render, no en git.
+services:
+  - type: web
+    name: expedite-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build
+    startCommand: node dist/server.js
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # Demostración: inicio de sesión con solo el correo (ver README).
+      - key: AUTH_MODE
+        value: dev
+      - key: PERMITIR_DEV_EN_PRODUCCION
+        value: "true"
+      - key: DOMINIOS_PERMITIDOS
+        value: expedite.com
+      - key: CORS_ORIGIN
+        value: https://expedite-xpdn.vercel.app
+      - key: DATA_MODE
+        value: sql
+      - key: DB_SERVER
+        value: aws-0-us-east-1.pooler.supabase.com
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        value: postgres
+      - key: DB_USER
+        value: postgres.uufkodojhxxwqivfqmjw
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_CA_CERT
+        value: certs/supabase-ca.crt
