@@ -11,13 +11,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { URL_API } from "../api/cliente";
 import { Card } from "./SharedComponents";
 import SpreadsheetEditor from "./SpreadsheetEditor.tsx";
 
 // ─── Evidencias Section ───────────────────────────────────────────────────────
 const BLOCKED_EXTENSIONS = [".exe", ".bat", ".js", ".msi", ".sh", ".cmd", ".vbs", ".ps1"];
 
-const API_BASE = "http://localhost:3000/api";
+const API_BASE = URL_API;
 
 interface EvidenceFile {
   id: string;

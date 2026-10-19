@@ -1,7 +1,7 @@
 // Cliente HTTP de la API de Expedite.
 
 // VITE_API_URL incluye el prefijo /api; las rutas se escriben sin él.
-const URL_API = (import.meta.env.VITE_API_URL || "http://localhost:3000/api").replace(/\/+$/, "");
+export const URL_API = (import.meta.env.VITE_API_URL || "http://localhost:3000/api").replace(/\/+$/, "");
 
 type Credenciales = () => Promise<Record<string, string>>;
 
