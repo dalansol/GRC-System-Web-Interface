@@ -122,7 +122,7 @@ Backend (`backend/.env`):
 | `DATA_MODE` | `sql` (PostgreSQL en Supabase, por omisión) o `memoria` (solo local; no arranca en producción). |
 | `DB_SERVER`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Obligatorias con `DATA_MODE=sql`. Las usan usuarios y hallazgos. |
 | `DB_PORT` | Puerto de la base. Por omisión `5432`. |
-| `DB_CA_CERT` | Archivo con el certificado de la autoridad que firma el del servidor; con Supabase, el que se descarga del proyecto. |
+| `DB_CA_CERT` | Archivo con el certificado de la autoridad que firma el del servidor; con Supabase, el que se descarga del proyecto. También acepta el contenido del certificado (`-----BEGIN CERTIFICATE-----…`), como se usa en Vercel. |
 | `DB_TRUST_CERT` | `true` para un PostgreSQL local con certificado autofirmado; no arranca en producción. La conexión siempre va cifrada. |
 
 Frontend (`.env`):

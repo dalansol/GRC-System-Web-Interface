@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import multer from "multer";
 import { poolPromise } from "../db.js";
@@ -9,7 +10,11 @@ import { upload } from "../middleware/upload.js";
 const router = Router();
 
 // ─── Ensure uploads directory exists ─────────────────────────────────────────
-const UPLOADS_DIR = path.resolve(import.meta.dirname, "../../uploads");
+// En Vercel solo /tmp admite escritura y se borra entre instancias: sirve para demostración,
+// no como almacenamiento definitivo (proveedor pendiente, SF-08/INT-03).
+const UPLOADS_DIR = process.env.VERCEL
+  ? path.join(os.tmpdir(), "expedite-uploads")
+  : path.resolve(import.meta.dirname, "../../uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }

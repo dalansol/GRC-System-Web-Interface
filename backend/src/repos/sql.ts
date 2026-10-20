@@ -45,6 +45,11 @@ function aUsuario(fila: FilaUsuario): Usuario {
 }
 
 // Repositorio sobre PostgreSQL (Supabase). Todas las consultas usan parámetros.
+// DB_CA_CERT puede ser la ruta del archivo o el certificado mismo; en Vercel el archivo no viaja con la función.
+function leerCertificado(valor: string): string {
+  return valor.includes("BEGIN CERTIFICATE") ? valor.replace(/\\n/g, "\n") : readFileSync(valor, "utf8");
+}
+
 export class RepositorioSql implements RepositorioUsuarios {
   private constructor(readonly pool: pg.Pool) {}
 
@@ -57,7 +62,7 @@ export class RepositorioSql implements RepositorioUsuarios {
       password: conexion.contrasena,
       ssl: {
         rejectUnauthorized: !(conexion.confiarCertificado ?? false),
-        ...(conexion.certificadoCa ? { ca: readFileSync(conexion.certificadoCa, "utf8") } : {}),
+        ...(conexion.certificadoCa ? { ca: leerCertificado(conexion.certificadoCa) } : {}),
       },
     });
     // Una conexión en reposo que el servidor cierra no debe tumbar el proceso; el pool abre otra.
