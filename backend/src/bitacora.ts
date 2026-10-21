@@ -9,12 +9,11 @@ export interface EventoBitacora {
     | "plan.edicion"
     | "plan_accion.alta"
     | "plan_accion.edicion"
-    | "unidad_negocio.alta"
-    | "unidad_negocio.edicion"
-    | "unidad_negocio.baja"
-    | "proceso.alta"
-    | "proceso.edicion"
-    | "proceso.baja";
+    | "estructura.alta"
+    | "estructura.edicion"
+    | "estructura.baja"
+    | "periodo.alta"
+    | "periodo.edicion";
   actor: string;
   detalle: Record<string, unknown>;
 }

@@ -64,6 +64,10 @@ huella del contenido y fecha) y la siguiente vez solo corre los que faltan.
 | `008_estructura_y_controles.sql` | `fiscal_periods`, `business_units`, `processes`, `controls`, `audit_controls`, `conflict_declarations` |
 | `009_seed_controles.sql` | Controles de prueba. Solo con `--datos-prueba` |
 | `010_catalogos_riesgos_y_ejecucion.sql` | Catálogos (`catalogs`, `catalog_department`, `catalog_domain`, `audit_status`, `audit_procedure_type`), estructura (`division`, `business`, `area`, `audit_entity`), riesgos (`risk_library`, `control_procedure`, `risk_register`) y ejecución (`audit_engagement`, `audit_engagement_team`, `audit_procedures`); agrega `business_units.catalog_id` |
+| `017_jerarquia_organizacional.sql` | Jerarquía organizacional (SF-03): `division.business_unit_id`, `business.division_id` y `business.country` (`business` = subdivisión), `area.business_id`, `business_units.audit_department_id`, `audit_entity.business_id`; departamentos `Retail & Spin` y `Beverage`; periodos trimestrales `2026Q1…Q4` con `2026Q4` activo |
+| `018_seed_jerarquia.sql` | Dos unidades (`UDN-0001`, `UDN-0003`) con una rama cada una. Solo con `--datos-prueba`; requiere un Jefe de Auditoría activo |
+| `019_riesgos_jerarquia.sql` | Riesgos en la jerarquía: `risk_register.business_id` (el riesgo cuelga de la subdivisión) y `risk_library.level` (Crítico, Alto, Medio o Bajo; opcional) |
+| `020_seed_riesgos.sql` | Cuatro riesgos con nivel y dos procedimientos de control sobre las subdivisiones de 018. Solo con `--datos-prueba` |
 
 ### Cómo agregar un cambio al esquema
 
@@ -141,6 +145,11 @@ erDiagram
     audits ||..o{ evidence : "audit_id"
     controls ||..o{ evidence : "control_id"
     findings ||..o{ evidence : "finding_id"
+    business_units ||--o{ division : "business_unit_id"
+    division ||--o{ business : "division_id"
+    business ||--o{ area : "business_id"
+    business ||--o{ audit_entity : "business_id"
+    catalog_department ||--o{ business_units : "audit_department_id"
     catalogs ||--o{ division : "catalog_id"
     catalogs ||--o{ business : "catalog_id"
     catalogs ||--o{ area : "catalog_id"
@@ -148,6 +157,7 @@ erDiagram
     catalogs ||--o{ control_procedure : "catalog_id"
     catalogs ||--o{ risk_register : "catalog_id"
     risk_library ||--o{ risk_register : "risk_library_id"
+    business ||--o{ risk_register : "business_id"
     control_procedure ||--o{ risk_register : "control_procedure_id"
     catalog_department ||--o{ audit_entity : "department_id"
     catalog_domain ||--o{ audit_entity : "domain_id"
@@ -219,6 +229,7 @@ erDiagram
         int created_by FK
         datetime created_at
         int catalog_id FK
+        int audit_department_id FK
     }
     processes {
         int id PK
@@ -317,26 +328,32 @@ erDiagram
         int division_id PK
         string name
         int catalog_id FK
+        int business_unit_id FK
     }
     business {
         int business_id PK
         string business_name
         int catalog_id FK
+        int division_id FK
+        string country
     }
     area {
         int area_id PK
         string area_name
         int catalog_id FK
+        int business_id FK
     }
     audit_entity {
         int id PK
         string name
         int department_id FK
         int domain_id FK
+        int business_id FK
     }
     risk_library {
         int risk_library_id PK
         string name
+        string level
     }
     control_procedure {
         int control_procedure_id PK
@@ -348,6 +365,7 @@ erDiagram
         int catalog_id FK
         int risk_library_id FK
         int control_procedure_id FK
+        int business_id FK
     }
     audit_status {
         int id PK
@@ -390,7 +408,11 @@ erDiagram
 | Tabla | Regla |
 |---|---|
 | `fiscal_periods` | Nombre único; la fecha de fin es posterior a la de inicio; un solo periodo activo a la vez |
-| `business_units` | Nombre único; gerente responsable y periodo fiscal obligatorios |
+| `business_units` | Nombre único (sin distinguir mayúsculas; sí acentos, por `sin_mayusculas`); gerente responsable y periodo fiscal obligatorios |
+| `division`, `business`, `area` | Jerarquía unidad → división → subdivisión (`business`) → área; cada nivel exige su padre. Los nombres se repiten entre ramas: no son únicos |
+| `risk_library` | `level` es nulo o uno de Crítico, Alto, Medio, Bajo (escala por confirmar con FEMSA) |
+| `risk_register` | Cuelga de la subdivisión (`business_id`, nulo si el dato no viene en el Consolidado). El backend no deja eliminar una subdivisión con riesgos registrados |
+| `audit_entity` | Cuelga de la subdivisión (`business_id`); si la subdivisión se elimina, la entidad se conserva sin vínculo |
 | `processes` | El nombre no se repite dentro de la misma unidad de negocio |
 | `controls` | Código único. El `id` es texto (`CTR-001`), igual que en `findings.controlId` y `evidence.control_id` |
 | `audit_controls` | Un auditor se asigna una sola vez al mismo control en una auditoría; un control tiene a lo más un auditor líder por auditoría |
@@ -407,4 +429,17 @@ erDiagram
 - Las tablas de `010_catalogos_riesgos_y_ejecucion.sql` solo tienen las columnas del
   diagrama de Miro y ninguna ruta del backend las usa todavía. Faltan sus reglas de
   negocio (nombres únicos, qué llaves son obligatorias) y definir cómo conviven `audits`
-  con `audit_engagement`, y `business_units` con `business`, `division` y `area`.
+  con `audit_engagement`.
+- Regla de borrado de la estructura (en el backend, no en la base): no se elimina una
+  unidad, división, subdivisión o área si un `audit_engagement` de un plan `Aprobado` o
+  `En Ejecución` apunta a una entidad auditable de su rama (para un área, la de su
+  subdivisión), ni si tiene hijos; no se borra en cascada.
+- `processes` y `controls.process_id` ya no los usa la parametrización (el "proceso" de
+  la historia es el área). Falta decidir si se retiran (TBD). Al eliminar una unidad de
+  la primera versión se borran sus procesos y los controles quedan sin proceso (016).
+- El comentario de `015_seed_estructura.sql` dice "solo con --datos-prueba", pero el
+  script se aplica siempre; no se corrige para no cambiar un script ya aplicado.
+- Mapeo de `UDN-0001…0006` a nombres reales: TBD.
+- Riesgos: el catálogo solo los muestra (sin alta ni edición); falta el CRUD del catálogo
+  de riesgos de la historia original, confirmar la escala de `level` y definir si un
+  riesgo tiene estado (el explorador de prueba anterior lo tenía; el modelo no). TBD.

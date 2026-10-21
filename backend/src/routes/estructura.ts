@@ -1,29 +1,44 @@
 // Rutas Express para parametrización de estructura organizacional (SF-03).
-// Endpoints para periodos fiscales, unidades de negocio y procesos.
+// Periodos de auditoría, departamentos, unidades de negocio y su jerarquía
+// (división → subdivisión → área). Consultan todos los usuarios con sesión;
+// escriben Administrador y Jefe de Auditoría.
 
 import { Router } from "express";
 import type { RegistrarEvento } from "../bitacora.js";
 import {
-  normalizarAltaProceso,
+  NIVEL_PADRE,
+  normalizarAltaNodo,
   normalizarAltaUnidad,
-  validarAltaProceso,
+  normalizarEdicionNodo,
+  normalizarEdicionUnidad,
+  normalizarPeriodo,
+  validarAltaNodo,
+  validarAltaPeriodo,
   validarAltaUnidad,
-  validarEdicionProceso,
+  validarEdicionNodo,
+  validarEdicionPeriodo,
   validarEdicionUnidad,
+  type AltaPeriodoInput,
+  type NivelEstructura,
+  type NivelNodo,
 } from "../domain/estructura.js";
 import { ROL_ADMINISTRADOR } from "../domain/tipos.js";
 import { ErrorApi } from "../errores.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import { autorizar } from "../middleware/autorizar.js";
-import {
-  ErrorAuditoriasActivas,
-  ErrorNombreDuplicado,
-  type RepositorioEstructura,
-} from "../repos/estructura.js";
+import { ErrorNombreDuplicado, type RepositorioEstructura } from "../repos/estructura.js";
 import type { RepositorioUsuarios } from "../repos/repositorio.js";
 
 const ROL_JEFATURA = "Jefe de Auditoría";
 const ROLES_GESTION = [ROL_ADMINISTRADOR, ROL_JEFATURA];
+
+/** Ruta y textos de cada nivel. */
+const NIVELES: Record<NivelEstructura, { ruta: string; etiqueta: string; articulo: string }> = {
+  unidad: { ruta: "unidades-negocio", etiqueta: "unidad de negocio", articulo: "la" },
+  division: { ruta: "divisiones", etiqueta: "división", articulo: "la" },
+  subdivision: { ruta: "subdivisiones", etiqueta: "subdivisión", articulo: "la" },
+  area: { ruta: "areas", etiqueta: "área", articulo: "el" },
+};
 
 interface Dependencias {
   repo: RepositorioEstructura;
@@ -43,10 +58,64 @@ function parseId(valor: unknown, entidad: string): number {
   return Number(texto);
 }
 
+function noEncontrado(nivel: NivelEstructura): ErrorApi {
+  const { articulo, etiqueta } = NIVELES[nivel];
+  return new ErrorApi(404, "NO_ENCONTRADO", `${articulo === "la" ? "La" : "El"} ${etiqueta} no existe.`);
+}
+
+/** Traduce el error de nombre duplicado del repositorio a 409. */
+async function sinDuplicados<T>(trabajo: () => Promise<T>): Promise<T> {
+  try {
+    return await trabajo();
+  } catch (error) {
+    if (error instanceof ErrorNombreDuplicado) throw new ErrorApi(409, "NOMBRE_DUPLICADO", error.message);
+    throw error;
+  }
+}
+
 export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencias): Router {
   const rutas = Router();
 
-  // ── Periodos Fiscales ────────────────────────────────────────────────────────
+  /** El gerente responsable debe ser un usuario activo con rol Jefe de Auditoría. */
+  async function validarGerente(id: number): Promise<void> {
+    const gerente = await usuarios.buscarPorId(id);
+    if (!gerente || gerente.estado !== "active" || gerente.rol !== ROL_JEFATURA) {
+      throw new ErrorApi(400, "DATOS_INVALIDOS", "El gerente responsable debe ser un Jefe de Auditoría activo.");
+    }
+  }
+
+  async function validarDepartamento(id: number | null | undefined): Promise<void> {
+    if (id === null || id === undefined) return;
+    const departamentos = await repo.listarDepartamentos();
+    if (!departamentos.some((d) => d.id === id)) {
+      throw new ErrorApi(400, "DATOS_INVALIDOS", "El departamento de auditoría no existe.");
+    }
+  }
+
+  async function existe(nivel: NivelEstructura, id: number): Promise<boolean> {
+    return nivel === "unidad" ? (await repo.buscarUnidadPorId(id)) !== null : (await repo.buscarNodo(nivel, id)) !== null;
+  }
+
+  /** AC3: no se borra con auditorías activas en la rama, ni con hijos (no se borra en cascada). */
+  async function validarBorrado(nivel: NivelEstructura, id: number): Promise<void> {
+    const { articulo, etiqueta } = NIVELES[nivel];
+    if (await repo.tieneAuditoriasActivas(nivel, id)) {
+      throw new ErrorApi(
+        409,
+        "AUDITORIAS_ACTIVAS",
+        `No se puede eliminar ${articulo} ${etiqueta} mientras existan auditorías activas asociadas.`,
+      );
+    }
+    if (await repo.tieneHijos(nivel, id)) {
+      throw new ErrorApi(
+        409,
+        "HIJOS_EXISTENTES",
+        `No se puede eliminar ${articulo} ${etiqueta} porque tiene elementos dependientes (niveles inferiores o riesgos registrados). Elimínalos primero.`,
+      );
+    }
+  }
+
+  // ── Periodos de auditoría ───────────────────────────────────────────────────
 
   rutas.get("/periodos/activo", async (_req, res) => {
     const periodo = await repo.obtenerPeriodoActivo();
@@ -57,242 +126,191 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
   });
 
   rutas.get("/periodos", async (_req, res) => {
-    const periodos = await repo.listarPeriodos();
-    res.json(periodos);
+    res.json(await repo.listarPeriodos());
   });
 
-  // ── Unidades de Negocio ──────────────────────────────────────────────────────
+  rutas.post("/periodos", autorizar(...ROLES_GESTION), async (req, res) => {
+    const cuerpo = campos(req.body);
+    const error = validarAltaPeriodo(cuerpo);
+    if (error) throw new ErrorApi(400, "DATOS_INVALIDOS", error);
+
+    const datos = { activo: false, ...normalizarPeriodo(cuerpo) } as AltaPeriodoInput;
+    const periodo = await sinDuplicados(() => repo.crearPeriodo(datos));
+    registrarEvento({
+      accion: "periodo.alta",
+      actor: usuarioEnSesion(res).correo,
+      detalle: { periodoId: periodo.id, nombre: periodo.nombre, activo: periodo.activo },
+    });
+    res.status(201).json(periodo);
+  });
+
+  rutas.patch("/periodos/:id", autorizar(...ROLES_GESTION), async (req, res) => {
+    const id = parseId(req.params.id, "el periodo");
+    const actual = await repo.buscarPeriodoPorId(id);
+    if (!actual) throw new ErrorApi(404, "NO_ENCONTRADO", "El periodo no existe.");
+
+    const cuerpo = campos(req.body);
+    const error = validarEdicionPeriodo(cuerpo, actual);
+    if (error) throw new ErrorApi(400, "DATOS_INVALIDOS", error);
+
+    const datos = normalizarPeriodo(cuerpo);
+    const periodo = (await sinDuplicados(() => repo.editarPeriodo(id, datos)))!;
+    registrarEvento({
+      accion: "periodo.edicion",
+      actor: usuarioEnSesion(res).correo,
+      detalle: { periodoId: id, campos: Object.keys(datos) },
+    });
+    res.json(periodo);
+  });
+
+  rutas.get("/departamentos-auditoria", async (_req, res) => {
+    res.json(await repo.listarDepartamentos());
+  });
+
+  // ── Unidades de negocio ─────────────────────────────────────────────────────
 
   rutas.get("/unidades-negocio", async (_req, res) => {
-    const unidades = await repo.listarUnidades();
-    res.json(unidades);
+    res.json(await repo.listarUnidades());
   });
 
   rutas.get("/unidades-negocio/responsables", autorizar(...ROLES_GESTION), async (_req, res) => {
     const todos = await usuarios.listarUsuarios();
-    const activos = todos.filter((u) => u.estado === "active");
-    res.json(activos.map(({ id, nombre, correo, rol }) => ({ id, nombre, correo, rol })));
+    const jefes = todos.filter((u) => u.estado === "active" && u.rol === ROL_JEFATURA);
+    res.json(jefes.map(({ id, nombre, correo, rol }) => ({ id, nombre, correo, rol })));
   });
 
   rutas.get("/unidades-negocio/:id", async (req, res) => {
     const id = parseId(req.params.id, "la unidad de negocio");
     const unidad = await repo.buscarUnidadPorId(id);
-    if (!unidad) {
-      throw new ErrorApi(404, "NO_ENCONTRADO", "La unidad de negocio no existe.");
-    }
+    if (!unidad) throw noEncontrado("unidad");
     res.json(unidad);
   });
 
   rutas.post("/unidades-negocio", autorizar(...ROLES_GESTION), async (req, res) => {
     const cuerpo = campos(req.body);
-    const errorValidacion = validarAltaUnidad(cuerpo);
-    if (errorValidacion) {
-      throw new ErrorApi(400, "DATOS_INVALIDOS", errorValidacion);
-    }
+    const error = validarAltaUnidad(cuerpo);
+    if (error) throw new ErrorApi(400, "DATOS_INVALIDOS", error);
 
-    const responsable = await usuarios.buscarPorId(Number(cuerpo.responsableId));
-    if (!responsable || responsable.estado !== "active") {
-      throw new ErrorApi(400, "DATOS_INVALIDOS", "El gerente responsable no existe o está inactivo.");
-    }
+    const datos = normalizarAltaUnidad(cuerpo);
+    await validarGerente(datos.responsableId);
+    await validarDepartamento(datos.departamentoAuditoriaId);
 
     const periodoActivo = await repo.obtenerPeriodoActivo();
     if (!periodoActivo) {
       throw new ErrorApi(
-        400,
+        409,
         "PERIODO_ACTIVO_NO_CONFIGURADO",
-        "No hay un periodo de auditoría activo configurado.",
+        "No hay un periodo de auditoría activo configurado. Activa uno antes de dar de alta unidades.",
       );
     }
 
-    const datos = normalizarAltaUnidad(cuerpo);
     const usuarioActual = usuarioEnSesion(res);
-
-    try {
-      const nuevaUnidad = await repo.crearUnidadConProceso(datos, periodoActivo.id, usuarioActual.id);
-
-      registrarEvento({
-        accion: "unidad_negocio.alta",
-        actor: usuarioActual.correo,
-        detalle: {
-          unidadId: nuevaUnidad.id,
-          nombre: nuevaUnidad.nombre,
-          periodoId: periodoActivo.id,
-          responsableId: nuevaUnidad.responsableId,
-        },
-      });
-
-      res.status(201).json(nuevaUnidad);
-    } catch (error) {
-      if (error instanceof ErrorNombreDuplicado) {
-        throw new ErrorApi(409, "NOMBRE_DUPLICADO", error.message);
-      }
-      throw error;
-    }
+    const unidad = await sinDuplicados(() => repo.crearUnidad(datos, periodoActivo.id, usuarioActual.id));
+    registrarEvento({
+      accion: "estructura.alta",
+      actor: usuarioActual.correo,
+      detalle: {
+        nivel: "unidad",
+        id: unidad.id,
+        nombre: unidad.nombre,
+        periodoId: periodoActivo.id,
+        responsableId: unidad.responsableId,
+      },
+    });
+    res.status(201).json(unidad);
   });
 
   rutas.patch("/unidades-negocio/:id", autorizar(...ROLES_GESTION), async (req, res) => {
     const id = parseId(req.params.id, "la unidad de negocio");
     const cuerpo = campos(req.body);
-    const errorValidacion = validarEdicionUnidad(cuerpo);
-    if (errorValidacion) {
-      throw new ErrorApi(400, "DATOS_INVALIDOS", errorValidacion);
-    }
+    const error = validarEdicionUnidad(cuerpo);
+    if (error) throw new ErrorApi(400, "DATOS_INVALIDOS", error);
 
-    if (cuerpo.responsableId !== undefined) {
-      const resp = await usuarios.buscarPorId(Number(cuerpo.responsableId));
-      if (!resp || resp.estado !== "active") {
-        throw new ErrorApi(400, "DATOS_INVALIDOS", "El gerente responsable no existe o está inactivo.");
-      }
-    }
+    const datos = normalizarEdicionUnidad(cuerpo);
+    if (datos.responsableId !== undefined) await validarGerente(datos.responsableId);
+    await validarDepartamento(datos.departamentoAuditoriaId);
 
-    const datosEdicion: { nombre?: string; responsableId?: number } = {};
-    if (cuerpo.nombre !== undefined) datosEdicion.nombre = (cuerpo.nombre as string).trim();
-    if (cuerpo.responsableId !== undefined) datosEdicion.responsableId = Number(cuerpo.responsableId);
-
-    try {
-      const unidadActualizada = await repo.editarUnidad(id, datosEdicion);
-      if (!unidadActualizada) {
-        throw new ErrorApi(404, "NO_ENCONTRADO", "La unidad de negocio no existe.");
-      }
-
-      const usuarioActual = usuarioEnSesion(res);
-      registrarEvento({
-        accion: "unidad_negocio.edicion",
-        actor: usuarioActual.correo,
-        detalle: { unidadId: id, campos: Object.keys(datosEdicion) },
-      });
-
-      res.json(unidadActualizada);
-    } catch (error) {
-      if (error instanceof ErrorNombreDuplicado) {
-        throw new ErrorApi(409, "NOMBRE_DUPLICADO", error.message);
-      }
-      throw error;
-    }
+    const unidad = await sinDuplicados(() => repo.editarUnidad(id, datos));
+    if (!unidad) throw noEncontrado("unidad");
+    registrarEvento({
+      accion: "estructura.edicion",
+      actor: usuarioEnSesion(res).correo,
+      detalle: { nivel: "unidad", id, campos: Object.keys(datos) },
+    });
+    res.json(unidad);
   });
 
   rutas.delete("/unidades-negocio/:id", autorizar(...ROLES_GESTION), async (req, res) => {
     const id = parseId(req.params.id, "la unidad de negocio");
     const unidad = await repo.buscarUnidadPorId(id);
-    if (!unidad) {
-      throw new ErrorApi(404, "NO_ENCONTRADO", "La unidad de negocio no existe.");
-    }
+    if (!unidad) throw noEncontrado("unidad");
 
-    const tieneAuditorias = await repo.tieneAuditoriasActivas(id);
-    if (tieneAuditorias) {
-      throw new ErrorApi(
-        409,
-        "AUDITORIAS_ACTIVAS",
-        "No se puede eliminar la unidad de negocio porque tiene auditorías activas asociadas.",
-      );
-    }
-
+    await validarBorrado("unidad", id);
     await repo.eliminarUnidad(id);
-
-    const usuarioActual = usuarioEnSesion(res);
     registrarEvento({
-      accion: "unidad_negocio.baja",
-      actor: usuarioActual.correo,
-      detalle: { unidadId: id, nombre: unidad.nombre },
+      accion: "estructura.baja",
+      actor: usuarioEnSesion(res).correo,
+      detalle: { nivel: "unidad", id, nombre: unidad.nombre },
     });
-
     res.status(204).end();
   });
 
-  // ── Procesos ─────────────────────────────────────────────────────────────────
+  // ── División, subdivisión y área ────────────────────────────────────────────
+  // Los nombres se repiten legítimamente entre ramas: no se validan duplicados.
 
-  rutas.post("/procesos", autorizar(...ROLES_GESTION), async (req, res) => {
-    const cuerpo = campos(req.body);
-    const errorValidacion = validarAltaProceso(cuerpo);
-    if (errorValidacion) {
-      throw new ErrorApi(400, "DATOS_INVALIDOS", errorValidacion);
-    }
+  for (const nivel of ["division", "subdivision", "area"] as NivelNodo[]) {
+    const { ruta, articulo, etiqueta } = NIVELES[nivel];
+    const entidad = `${articulo} ${etiqueta}`;
 
-    const unidad = await repo.buscarUnidadPorId(Number(cuerpo.unidadNegocioId));
-    if (!unidad) {
-      throw new ErrorApi(404, "NO_ENCONTRADO", "La unidad de negocio especificada no existe.");
-    }
+    rutas.post(`/${ruta}`, autorizar(...ROLES_GESTION), async (req, res) => {
+      const cuerpo = campos(req.body);
+      const error = validarAltaNodo(nivel, cuerpo);
+      if (error) throw new ErrorApi(400, "DATOS_INVALIDOS", error);
 
-    const datos = normalizarAltaProceso(cuerpo);
-    try {
-      const proceso = await repo.crearProceso(datos);
+      const datos = normalizarAltaNodo(nivel, cuerpo);
+      if (!(await existe(NIVEL_PADRE[nivel], datos.padreId))) throw noEncontrado(NIVEL_PADRE[nivel]);
 
-      const usuarioActual = usuarioEnSesion(res);
+      const nodo = await repo.crearNodo(nivel, datos);
       registrarEvento({
-        accion: "proceso.alta",
-        actor: usuarioActual.correo,
-        detalle: { procesoId: proceso.id, nombre: proceso.nombre, unidadNegocioId: proceso.unidadNegocioId },
+        accion: "estructura.alta",
+        actor: usuarioEnSesion(res).correo,
+        detalle: { nivel, id: nodo.id, nombre: nodo.nombre, padreId: nodo.padreId },
       });
-
-      res.status(201).json(proceso);
-    } catch (error) {
-      if (error instanceof ErrorNombreDuplicado) {
-        throw new ErrorApi(409, "NOMBRE_DUPLICADO", error.message);
-      }
-      throw error;
-    }
-  });
-
-  rutas.patch("/procesos/:id", autorizar(...ROLES_GESTION), async (req, res) => {
-    const id = parseId(req.params.id, "el proceso");
-    const cuerpo = campos(req.body);
-    const errorValidacion = validarEdicionProceso(cuerpo);
-    if (errorValidacion) {
-      throw new ErrorApi(400, "DATOS_INVALIDOS", errorValidacion);
-    }
-
-    const nuevoNombre = (cuerpo.nombre as string).trim();
-    try {
-      const procesoActualizado = await repo.editarProceso(id, nuevoNombre);
-      if (!procesoActualizado) {
-        throw new ErrorApi(404, "NO_ENCONTRADO", "El proceso no existe.");
-      }
-
-      const usuarioActual = usuarioEnSesion(res);
-      registrarEvento({
-        accion: "proceso.edicion",
-        actor: usuarioActual.correo,
-        detalle: { procesoId: id, nuevoNombre },
-      });
-
-      res.json(procesoActualizado);
-    } catch (error) {
-      if (error instanceof ErrorNombreDuplicado) {
-        throw new ErrorApi(409, "NOMBRE_DUPLICADO", error.message);
-      }
-      throw error;
-    }
-  });
-
-  rutas.delete("/procesos/:id", autorizar(...ROLES_GESTION), async (req, res) => {
-    const id = parseId(req.params.id, "el proceso");
-
-    const unidades = await repo.listarUnidades();
-    const proceso = unidades.flatMap((unidad) => unidad.procesos).find((item) => item.id === id);
-    if (!proceso) {
-      throw new ErrorApi(404, "NO_ENCONTRADO", "El proceso no existe.");
-    }
-
-    const tieneAuditorias = await repo.tieneAuditoriasActivasProceso(id);
-    if (tieneAuditorias) {
-      throw new ErrorApi(
-        409,
-        "AUDITORIAS_ACTIVAS",
-        "No se puede eliminar el proceso porque tiene auditorías activas asociadas.",
-      );
-    }
-
-    await repo.eliminarProceso(id);
-
-    const usuarioActual = usuarioEnSesion(res);
-    registrarEvento({
-      accion: "proceso.baja",
-      actor: usuarioActual.correo,
-      detalle: { procesoId: id, nombre: proceso.nombre },
+      res.status(201).json(nodo);
     });
 
-    res.status(204).end();
-  });
+    rutas.patch(`/${ruta}/:id`, autorizar(...ROLES_GESTION), async (req, res) => {
+      const id = parseId(req.params.id, entidad);
+      const cuerpo = campos(req.body);
+      const error = validarEdicionNodo(nivel, cuerpo);
+      if (error) throw new ErrorApi(400, "DATOS_INVALIDOS", error);
+
+      const datos = normalizarEdicionNodo(nivel, cuerpo);
+      const nodo = await repo.editarNodo(nivel, id, datos);
+      if (!nodo) throw noEncontrado(nivel);
+      registrarEvento({
+        accion: "estructura.edicion",
+        actor: usuarioEnSesion(res).correo,
+        detalle: { nivel, id, campos: Object.keys(datos) },
+      });
+      res.json(nodo);
+    });
+
+    rutas.delete(`/${ruta}/:id`, autorizar(...ROLES_GESTION), async (req, res) => {
+      const id = parseId(req.params.id, entidad);
+      const nodo = await repo.buscarNodo(nivel, id);
+      if (!nodo) throw noEncontrado(nivel);
+
+      await validarBorrado(nivel, id);
+      await repo.eliminarNodo(nivel, id);
+      registrarEvento({
+        accion: "estructura.baja",
+        actor: usuarioEnSesion(res).correo,
+        detalle: { nivel, id, nombre: nodo.nombre },
+      });
+      res.status(204).end();
+    });
+  }
 
   return rutas;
 }

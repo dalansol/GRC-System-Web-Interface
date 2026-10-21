@@ -1,15 +1,27 @@
 // Implementación SQL del repositorio de estructura organizacional (SF-03).
-// Usa el pool de pg compartido por el backend.
+// Usa el pool de pg compartido por el backend. En la base, la subdivisión es la tabla
+// `business` (ver 017_jerarquia_organizacional.sql).
 
 import type pg from "pg";
-import type {
-  PeriodoFiscal,
-  UnidadNegocio,
-  Proceso,
-  AltaUnidadInput,
-  AltaProcesoInput,
+import {
+  ESTADOS_PLAN_ACTIVOS,
+  type AltaNodoInput,
+  type AltaPeriodoInput,
+  type AltaUnidadInput,
+  type DepartamentoAuditoria,
+  type Division,
+  type EdicionNodoInput,
+  type EdicionPeriodoInput,
+  type EdicionUnidadInput,
+  type NivelEstructura,
+  type NivelNodo,
+  type NodoPlano,
+  type NivelRiesgo,
+  type PeriodoFiscal,
+  type Riesgo,
+  type UnidadNegocio,
 } from "../domain/estructura.js";
-import { ErrorNombreDuplicado, ErrorAuditoriasActivas, type RepositorioEstructura } from "./estructura.js";
+import { ErrorNombreDuplicado, type RepositorioEstructura } from "./estructura.js";
 
 const UNIQUE_VIOLATION = "23505";
 
@@ -17,92 +29,233 @@ function esDuplicado(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: string }).code === UNIQUE_VIOLATION;
 }
 
+// Tabla y columnas de cada nivel. Valores fijos: nunca vienen de la petición.
+const TABLAS: Record<NivelNodo, { tabla: string; id: string; nombre: string; padre: string }> = {
+  division: { tabla: "division", id: "division_id", nombre: "name", padre: "business_unit_id" },
+  subdivision: { tabla: "business", id: "business_id", nombre: "business_name", padre: "division_id" },
+  area: { tabla: "area", id: "area_id", nombre: "area_name", padre: "business_id" },
+};
+
+// Condición sobre la rama para la regla de auditoría activa (alias b = business, d = division).
+const RAMA: Record<NivelEstructura, string> = {
+  unidad: "d.business_unit_id = $1",
+  division: "d.division_id = $1",
+  subdivision: "b.business_id = $1",
+  area: "b.business_id = (SELECT business_id FROM area WHERE area_id = $1)",
+};
+
+// Consulta de hijos directos de cada nivel.
+const HIJOS: Record<NivelEstructura, string | null> = {
+  unidad: "SELECT 1 FROM division WHERE business_unit_id = $1",
+  division: "SELECT 1 FROM business WHERE division_id = $1",
+  // Los riesgos registrados también dependen de la subdivisión: no se desligan en silencio.
+  subdivision: "SELECT 1 FROM area WHERE business_id = $1 UNION ALL SELECT 1 FROM risk_register WHERE business_id = $1",
+  area: null,
+};
+
+interface FilaPeriodo {
+  id: number;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean;
+}
+
+interface FilaUnidad {
+  id: number;
+  name: string;
+  manager_id: number;
+  manager_name: string;
+  fiscal_period_id: number;
+  fiscal_period_name: string;
+  audit_department_id: number | null;
+  audit_department_name: string | null;
+  created_by: number;
+  created_at: string;
+}
+
+interface FilaRama {
+  business_unit_id: number;
+  division_id: number;
+  division_name: string;
+  business_id: number | null;
+  business_name: string | null;
+  country: string | null;
+  area_id: number | null;
+  area_name: string | null;
+}
+
+interface FilaRiesgo {
+  risk_register_id: number;
+  business_id: number;
+  name: string;
+  level: NivelRiesgo | null;
+  description: string | null;
+}
+
+const SELECT_PERIODO = "SELECT id, name, start_date::text, end_date::text, is_active FROM fiscal_periods";
+
+const SELECT_UNIDAD = `
+  SELECT bu.id, bu.name, bu.manager_id, u.name AS manager_name,
+         bu.fiscal_period_id, fp.name AS fiscal_period_name,
+         bu.audit_department_id, cd.name AS audit_department_name,
+         bu.created_by, bu.created_at
+  FROM business_units bu
+  JOIN users u ON u.id = bu.manager_id
+  JOIN fiscal_periods fp ON fp.id = bu.fiscal_period_id
+  LEFT JOIN catalog_department cd ON cd.id = bu.audit_department_id`;
+
+// Una fila por área (o por división/subdivisión sin hijos); se arma el árbol en memoria.
+const SELECT_RAMA = `
+  SELECT d.business_unit_id, d.division_id, d.name AS division_name,
+         b.business_id, b.business_name, b.country,
+         a.area_id, a.area_name
+  FROM division d
+  LEFT JOIN business b ON b.division_id = d.division_id
+  LEFT JOIN area a ON a.business_id = b.business_id`;
+
+// Riesgos registrados en subdivisiones; se cuelgan del árbol en armarDivisiones.
+const SELECT_RIESGOS = `
+  SELECT rr.risk_register_id, rr.business_id, rl.name, rl.level, cp.description
+  FROM risk_register rr
+  JOIN risk_library rl ON rl.risk_library_id = rr.risk_library_id
+  LEFT JOIN control_procedure cp ON cp.control_procedure_id = rr.control_procedure_id`;
+
+function mapearPeriodo(row: FilaPeriodo): PeriodoFiscal {
+  return { id: row.id, nombre: row.name, fechaInicio: row.start_date, fechaFin: row.end_date, activo: row.is_active };
+}
+
+function agruparRiesgos(filas: FilaRiesgo[]): Map<number, Riesgo[]> {
+  const porSubdivision = new Map<number, Riesgo[]>();
+  for (const fila of filas) {
+    const lista = porSubdivision.get(fila.business_id) ?? [];
+    lista.push({ id: fila.risk_register_id, nombre: fila.name, nivel: fila.level, procedimientoControl: fila.description });
+    porSubdivision.set(fila.business_id, lista);
+  }
+  return porSubdivision;
+}
+
+function armarDivisiones(filas: FilaRama[], riesgos: Map<number, Riesgo[]>): Map<number, Division[]> {
+  const porUnidad = new Map<number, Division[]>();
+  const divisiones = new Map<number, Division>();
+  const subdivisiones = new Map<number, Division["subdivisiones"][number]>();
+
+  for (const fila of filas) {
+    let division = divisiones.get(fila.division_id);
+    if (!division) {
+      division = { id: fila.division_id, nombre: fila.division_name, unidadNegocioId: fila.business_unit_id, subdivisiones: [] };
+      divisiones.set(division.id, division);
+      const lista = porUnidad.get(fila.business_unit_id) ?? [];
+      lista.push(division);
+      porUnidad.set(fila.business_unit_id, lista);
+    }
+    if (fila.business_id === null) continue;
+
+    let subdivision = subdivisiones.get(fila.business_id);
+    if (!subdivision) {
+      subdivision = {
+        id: fila.business_id,
+        nombre: fila.business_name ?? "",
+        pais: fila.country,
+        divisionId: division.id,
+        areas: [],
+        riesgos: riesgos.get(fila.business_id) ?? [],
+      };
+      subdivisiones.set(subdivision.id, subdivision);
+      division.subdivisiones.push(subdivision);
+    }
+    if (fila.area_id !== null) {
+      subdivision.areas.push({ id: fila.area_id, nombre: fila.area_name ?? "", subdivisionId: subdivision.id });
+    }
+  }
+  return porUnidad;
+}
+
 export class RepositorioEstructuraSql implements RepositorioEstructura {
   constructor(private pool: pg.Pool) {}
 
+  // ── Periodos ───────────────────────────────────────────────────────────────
+
   async obtenerPeriodoActivo(): Promise<PeriodoFiscal | null> {
-    const { rows } = await this.pool.query<{
-      id: number; name: string; start_date: string; end_date: string; is_active: boolean;
-    }>(
-      "SELECT id, name, start_date::text, end_date::text, is_active FROM fiscal_periods WHERE is_active = TRUE LIMIT 1",
-    );
-    return rows[0] ? this.mapearPeriodo(rows[0]) : null;
+    const { rows } = await this.pool.query<FilaPeriodo>(`${SELECT_PERIODO} WHERE is_active = TRUE LIMIT 1`);
+    return rows[0] ? mapearPeriodo(rows[0]) : null;
   }
 
   async listarPeriodos(): Promise<PeriodoFiscal[]> {
-    const { rows } = await this.pool.query<{
-      id: number; name: string; start_date: string; end_date: string; is_active: boolean;
-    }>("SELECT id, name, start_date::text, end_date::text, is_active FROM fiscal_periods ORDER BY start_date DESC");
-    return rows.map(this.mapearPeriodo);
+    const { rows } = await this.pool.query<FilaPeriodo>(`${SELECT_PERIODO} ORDER BY start_date DESC`);
+    return rows.map(mapearPeriodo);
   }
 
-  async listarUnidades(): Promise<UnidadNegocio[]> {
-    const { rows: unidades } = await this.pool.query<{
-      id: number; name: string; manager_id: number; manager_name: string;
-      fiscal_period_id: number; fiscal_period_name: string;
-      created_by: number; created_at: string;
-    }>(`
-      SELECT bu.id, bu.name, bu.manager_id,
-             u.name AS manager_name,
-             bu.fiscal_period_id,
-             fp.name AS fiscal_period_name,
-             bu.created_by,
-             bu.created_at
-      FROM business_units bu
-      JOIN users u ON u.id = bu.manager_id
-      JOIN fiscal_periods fp ON fp.id = bu.fiscal_period_id
-      ORDER BY bu.name
-    `);
+  async buscarPeriodoPorId(id: number): Promise<PeriodoFiscal | null> {
+    const { rows } = await this.pool.query<FilaPeriodo>(`${SELECT_PERIODO} WHERE id = $1`, [id]);
+    return rows[0] ? mapearPeriodo(rows[0]) : null;
+  }
 
-    const { rows: procesos } = await this.pool.query<{
-      id: number; business_unit_id: number; name: string; created_at: string;
-    }>("SELECT id, business_unit_id, name, created_at FROM processes ORDER BY name");
-
-    const procesosPorUnidad = new Map<number, Proceso[]>();
-    for (const p of procesos) {
-      const lista = procesosPorUnidad.get(p.business_unit_id) ?? [];
-      lista.push({ id: p.id, nombre: p.name, unidadNegocioId: p.business_unit_id, creadoEn: String(p.created_at) });
-      procesosPorUnidad.set(p.business_unit_id, lista);
+  /** Activar un periodo desactiva los demás en la misma transacción (índice uq_fiscal_periods_active). */
+  private async enTransaccion<T>(trabajo: (cliente: pg.PoolClient) => Promise<T>): Promise<T> {
+    const cliente = await this.pool.connect();
+    try {
+      await cliente.query("BEGIN");
+      const resultado = await trabajo(cliente);
+      await cliente.query("COMMIT");
+      return resultado;
+    } catch (error) {
+      await cliente.query("ROLLBACK");
+      throw error;
+    } finally {
+      cliente.release();
     }
-
-    return unidades.map((u) => ({
-      id: u.id,
-      nombre: u.name,
-      responsableId: u.manager_id,
-      responsableNombre: u.manager_name,
-      periodoFiscalId: u.fiscal_period_id,
-      periodoFiscalNombre: u.fiscal_period_name,
-      creadoPor: u.created_by,
-      creadoEn: String(u.created_at),
-      procesos: procesosPorUnidad.get(u.id) ?? [],
-    }));
   }
 
-  async buscarUnidadPorId(id: number): Promise<UnidadNegocio | null> {
-    const { rows } = await this.pool.query<{
-      id: number; name: string; manager_id: number; manager_name: string;
-      fiscal_period_id: number; fiscal_period_name: string;
-      created_by: number; created_at: string;
-    }>(`
-      SELECT bu.id, bu.name, bu.manager_id,
-             u.name AS manager_name,
-             bu.fiscal_period_id,
-             fp.name AS fiscal_period_name,
-             bu.created_by,
-             bu.created_at
-      FROM business_units bu
-      JOIN users u ON u.id = bu.manager_id
-      JOIN fiscal_periods fp ON fp.id = bu.fiscal_period_id
-      WHERE bu.id = $1
-    `, [id]);
+  async crearPeriodo(datos: AltaPeriodoInput): Promise<PeriodoFiscal> {
+    try {
+      return await this.enTransaccion(async (cliente) => {
+        if (datos.activo) await cliente.query("UPDATE fiscal_periods SET is_active = FALSE WHERE is_active");
+        const { rows } = await cliente.query<FilaPeriodo>(
+          `INSERT INTO fiscal_periods (name, start_date, end_date, is_active) VALUES ($1, $2, $3, $4)
+           RETURNING id, name, start_date::text, end_date::text, is_active`,
+          [datos.nombre, datos.fechaInicio, datos.fechaFin, datos.activo],
+        );
+        return mapearPeriodo(rows[0]!);
+      });
+    } catch (error) {
+      if (esDuplicado(error)) throw new ErrorNombreDuplicado("un periodo", datos.nombre);
+      throw error;
+    }
+  }
 
-    if (!rows[0]) return null;
+  async editarPeriodo(id: number, campos: EdicionPeriodoInput): Promise<PeriodoFiscal | null> {
+    try {
+      return await this.enTransaccion(async (cliente) => {
+        if (campos.activo) {
+          await cliente.query("UPDATE fiscal_periods SET is_active = FALSE WHERE is_active AND id <> $1", [id]);
+        }
+        const { rows } = await cliente.query<FilaPeriodo>(
+          `UPDATE fiscal_periods
+           SET name = COALESCE($2, name), start_date = COALESCE($3::date, start_date),
+               end_date = COALESCE($4::date, end_date), is_active = COALESCE($5, is_active)
+           WHERE id = $1
+           RETURNING id, name, start_date::text, end_date::text, is_active`,
+          [id, campos.nombre ?? null, campos.fechaInicio ?? null, campos.fechaFin ?? null, campos.activo ?? null],
+        );
+        return rows[0] ? mapearPeriodo(rows[0]) : null;
+      });
+    } catch (error) {
+      if (esDuplicado(error)) throw new ErrorNombreDuplicado("un periodo", campos.nombre ?? "");
+      throw error;
+    }
+  }
 
-    const { rows: procesos } = await this.pool.query<{
-      id: number; business_unit_id: number; name: string; created_at: string;
-    }>("SELECT id, business_unit_id, name, created_at FROM processes WHERE business_unit_id = $1 ORDER BY name", [id]);
+  async listarDepartamentos(): Promise<DepartamentoAuditoria[]> {
+    const { rows } = await this.pool.query<{ id: number; name: string }>(
+      "SELECT id, name FROM catalog_department ORDER BY name",
+    );
+    return rows.map((r) => ({ id: r.id, nombre: r.name }));
+  }
 
-    const u = rows[0];
+  // ── Unidades ───────────────────────────────────────────────────────────────
+
+  private aUnidad(u: FilaUnidad, divisiones: Division[]): UnidadNegocio {
     return {
       id: u.id,
       nombre: u.name,
@@ -110,66 +263,74 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
       responsableNombre: u.manager_name,
       periodoFiscalId: u.fiscal_period_id,
       periodoFiscalNombre: u.fiscal_period_name,
+      departamentoAuditoriaId: u.audit_department_id,
+      departamentoAuditoriaNombre: u.audit_department_name,
       creadoPor: u.created_by,
       creadoEn: String(u.created_at),
-      procesos: procesos.map((p) => ({
-        id: p.id,
-        nombre: p.name,
-        unidadNegocioId: p.business_unit_id,
-        creadoEn: String(p.created_at),
-      })),
+      divisiones,
     };
   }
 
-  async crearUnidadConProceso(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio> {
-    const client = await this.pool.connect();
+  async listarUnidades(): Promise<UnidadNegocio[]> {
+    const { rows: unidades } = await this.pool.query<FilaUnidad>(`${SELECT_UNIDAD} ORDER BY bu.name`);
+    const { rows: rama } = await this.pool.query<FilaRama>(
+      `${SELECT_RAMA} ORDER BY d.name, d.division_id, b.business_name, b.business_id, a.area_name, a.area_id`,
+    );
+    const { rows: riesgos } = await this.pool.query<FilaRiesgo>(
+      `${SELECT_RIESGOS} WHERE rr.business_id IS NOT NULL ORDER BY rl.name, rr.risk_register_id`,
+    );
+    const divisiones = armarDivisiones(rama, agruparRiesgos(riesgos));
+    return unidades.map((u) => this.aUnidad(u, divisiones.get(u.id) ?? []));
+  }
+
+  async buscarUnidadPorId(id: number): Promise<UnidadNegocio | null> {
+    const { rows } = await this.pool.query<FilaUnidad>(`${SELECT_UNIDAD} WHERE bu.id = $1`, [id]);
+    if (!rows[0]) return null;
+    const { rows: rama } = await this.pool.query<FilaRama>(
+      `${SELECT_RAMA} WHERE d.business_unit_id = $1
+       ORDER BY d.name, d.division_id, b.business_name, b.business_id, a.area_name, a.area_id`,
+      [id],
+    );
+    const { rows: riesgos } = await this.pool.query<FilaRiesgo>(
+      `${SELECT_RIESGOS}
+       JOIN business b ON b.business_id = rr.business_id
+       JOIN division d ON d.division_id = b.division_id
+       WHERE d.business_unit_id = $1
+       ORDER BY rl.name, rr.risk_register_id`,
+      [id],
+    );
+    return this.aUnidad(rows[0], armarDivisiones(rama, agruparRiesgos(riesgos)).get(id) ?? []);
+  }
+
+  async crearUnidad(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio> {
     try {
-      await client.query("BEGIN");
-      let unidadId: number;
-      try {
-        const { rows } = await client.query<{ id: number }>(
-          `INSERT INTO business_units (name, manager_id, fiscal_period_id, created_by)
-           VALUES ($1, $2, $3, $4) RETURNING id`,
-          [datos.nombre, datos.responsableId, periodoFiscalId, creadoPor],
-        );
-        unidadId = rows[0]!.id;
-      } catch (error) {
-        if (esDuplicado(error)) throw new ErrorNombreDuplicado("una unidad de negocio", datos.nombre);
-        throw error;
-      }
-
-      try {
-        await client.query(
-          "INSERT INTO processes (business_unit_id, name) VALUES ($1, $2)",
-          [unidadId, datos.proceso],
-        );
-      } catch (error) {
-        if (esDuplicado(error)) throw new ErrorNombreDuplicado("un proceso", datos.proceso);
-        throw error;
-      }
-
-      await client.query("COMMIT");
-      return (await this.buscarUnidadPorId(unidadId))!;
+      const { rows } = await this.pool.query<{ id: number }>(
+        `INSERT INTO business_units (name, manager_id, fiscal_period_id, audit_department_id, created_by)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [datos.nombre, datos.responsableId, periodoFiscalId, datos.departamentoAuditoriaId, creadoPor],
+      );
+      return (await this.buscarUnidadPorId(rows[0]!.id))!;
     } catch (error) {
-      await client.query("ROLLBACK");
+      if (esDuplicado(error)) throw new ErrorNombreDuplicado("una unidad de negocio", datos.nombre);
       throw error;
-    } finally {
-      client.release();
     }
   }
 
-  async editarUnidad(id: number, campos: { nombre?: string; responsableId?: number }): Promise<UnidadNegocio | null> {
+  async editarUnidad(id: number, campos: EdicionUnidadInput): Promise<UnidadNegocio | null> {
     const sets: string[] = [];
     const vals: unknown[] = [];
-    let i = 1;
-    if (campos.nombre !== undefined) { sets.push(`name = $${i++}`); vals.push(campos.nombre); }
-    if (campos.responsableId !== undefined) { sets.push(`manager_id = $${i++}`); vals.push(campos.responsableId); }
+    if (campos.nombre !== undefined) { vals.push(campos.nombre); sets.push(`name = $${vals.length}`); }
+    if (campos.responsableId !== undefined) { vals.push(campos.responsableId); sets.push(`manager_id = $${vals.length}`); }
+    if (campos.departamentoAuditoriaId !== undefined) {
+      vals.push(campos.departamentoAuditoriaId);
+      sets.push(`audit_department_id = $${vals.length}`);
+    }
     if (sets.length === 0) return this.buscarUnidadPorId(id);
 
     vals.push(id);
     try {
       const { rowCount } = await this.pool.query(
-        `UPDATE business_units SET ${sets.join(", ")} WHERE id = $${i}`,
+        `UPDATE business_units SET ${sets.join(", ")} WHERE id = $${vals.length}`,
         vals,
       );
       if (rowCount === 0) return null;
@@ -180,81 +341,82 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
     return this.buscarUnidadPorId(id);
   }
 
-  async tieneAuditoriasActivas(unidadId: number): Promise<boolean> {
-    const { rows } = await this.pool.query<{ tiene: boolean }>(`
-      SELECT EXISTS (
-        SELECT 1
-        FROM processes p
-        JOIN controls c ON c.process_id = p.id
-        JOIN audit_controls ac ON ac.control_id = c.id
-        JOIN audit_plans ap ON ap.id = ac.audit_id
-        WHERE p.business_unit_id = $1
-          AND ap.status != 'Cerrado'
-      ) AS tiene
-    `, [unidadId]);
-    return rows[0]?.tiene ?? false;
-  }
-
   async eliminarUnidad(id: number): Promise<void> {
-    // Eliminar procesos hijos primero, luego la unidad.
-    await this.pool.query("DELETE FROM processes WHERE business_unit_id = $1", [id]);
-    await this.pool.query("DELETE FROM business_units WHERE id = $1", [id]);
+    // Las unidades de la primera versión pueden tener procesos (tabla en desuso); se retiran
+    // con la unidad y sus controles quedan sin proceso (016).
+    await this.enTransaccion(async (cliente) => {
+      await cliente.query("DELETE FROM processes WHERE business_unit_id = $1", [id]);
+      await cliente.query("DELETE FROM business_units WHERE id = $1", [id]);
+    });
   }
 
-  async crearProceso(datos: AltaProcesoInput): Promise<Proceso> {
-    try {
-      const { rows } = await this.pool.query<{ id: number; business_unit_id: number; name: string; created_at: string }>(
-        "INSERT INTO processes (business_unit_id, name) VALUES ($1, $2) RETURNING id, business_unit_id, name, created_at",
-        [datos.unidadNegocioId, datos.nombre],
-      );
-      const p = rows[0]!;
-      return { id: p.id, nombre: p.name, unidadNegocioId: p.business_unit_id, creadoEn: String(p.created_at) };
-    } catch (error) {
-      if (esDuplicado(error)) throw new ErrorNombreDuplicado("un proceso", datos.nombre);
-      throw error;
-    }
+  // ── División, subdivisión y área ───────────────────────────────────────────
+
+  async buscarNodo(nivel: NivelNodo, id: number): Promise<NodoPlano | null> {
+    const t = TABLAS[nivel];
+    const { rows } = await this.pool.query<NodoPlano>(
+      `SELECT ${t.id} AS id, ${t.nombre} AS nombre, ${t.padre} AS "padreId" FROM ${t.tabla} WHERE ${t.id} = $1`,
+      [id],
+    );
+    return rows[0] ?? null;
   }
 
-  async editarProceso(id: number, nombre: string): Promise<Proceso | null> {
-    try {
-      const { rows } = await this.pool.query<{ id: number; business_unit_id: number; name: string; created_at: string }>(
-        "UPDATE processes SET name = $1 WHERE id = $2 RETURNING id, business_unit_id, name, created_at",
-        [nombre, id],
-      );
-      if (!rows[0]) return null;
-      const p = rows[0];
-      return { id: p.id, nombre: p.name, unidadNegocioId: p.business_unit_id, creadoEn: String(p.created_at) };
-    } catch (error) {
-      if (esDuplicado(error)) throw new ErrorNombreDuplicado("un proceso", nombre);
-      throw error;
-    }
+  async crearNodo(nivel: NivelNodo, datos: AltaNodoInput): Promise<NodoPlano> {
+    const t = TABLAS[nivel];
+    const conPais = nivel === "subdivision";
+    const { rows } = await this.pool.query<NodoPlano>(
+      `INSERT INTO ${t.tabla} (${t.nombre}, ${t.padre}${conPais ? ", country" : ""})
+       VALUES ($1, $2${conPais ? ", $3" : ""})
+       RETURNING ${t.id} AS id, ${t.nombre} AS nombre, ${t.padre} AS "padreId"`,
+      conPais ? [datos.nombre, datos.padreId, datos.pais] : [datos.nombre, datos.padreId],
+    );
+    return rows[0]!;
   }
 
-  async tieneAuditoriasActivasProceso(procesoId: number): Promise<boolean> {
-    const { rows } = await this.pool.query<{ tiene: boolean }>(`
-      SELECT EXISTS (
-        SELECT 1
-        FROM controls c
-        JOIN audit_controls ac ON ac.control_id = c.id
-        JOIN audit_plans ap ON ap.id = ac.audit_id
-        WHERE c.process_id = $1
-          AND ap.status != 'Cerrado'
-      ) AS tiene
-    `, [procesoId]);
+  async editarNodo(nivel: NivelNodo, id: number, campos: EdicionNodoInput): Promise<NodoPlano | null> {
+    const t = TABLAS[nivel];
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    if (campos.nombre !== undefined) { vals.push(campos.nombre); sets.push(`${t.nombre} = $${vals.length}`); }
+    if (nivel === "subdivision" && campos.pais !== undefined) { vals.push(campos.pais); sets.push(`country = $${vals.length}`); }
+    if (sets.length === 0) return this.buscarNodo(nivel, id);
+
+    vals.push(id);
+    const { rows } = await this.pool.query<NodoPlano>(
+      `UPDATE ${t.tabla} SET ${sets.join(", ")} WHERE ${t.id} = $${vals.length}
+       RETURNING ${t.id} AS id, ${t.nombre} AS nombre, ${t.padre} AS "padreId"`,
+      vals,
+    );
+    return rows[0] ?? null;
+  }
+
+  async eliminarNodo(nivel: NivelNodo, id: number): Promise<void> {
+    const t = TABLAS[nivel];
+    await this.pool.query(`DELETE FROM ${t.tabla} WHERE ${t.id} = $1`, [id]);
+  }
+
+  // ── Reglas de borrado ──────────────────────────────────────────────────────
+
+  async tieneAuditoriasActivas(nivel: NivelEstructura, id: number): Promise<boolean> {
+    const { rows } = await this.pool.query<{ tiene: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM audit_engagement ae
+         JOIN audit_plans ap ON ap.id = ae.audit_plan_id
+         JOIN audit_entity e ON e.id = ae.audit_entity_id
+         JOIN business b ON b.business_id = e.business_id
+         JOIN division d ON d.division_id = b.division_id
+         WHERE ap.status = ANY($2::text[]) AND ${RAMA[nivel]}
+       ) AS tiene`,
+      [id, [...ESTADOS_PLAN_ACTIVOS]],
+    );
     return rows[0]?.tiene ?? false;
   }
 
-  async eliminarProceso(id: number): Promise<void> {
-    await this.pool.query("DELETE FROM processes WHERE id = $1", [id]);
-  }
-
-  private mapearPeriodo(row: { id: number; name: string; start_date: string; end_date: string; is_active: boolean }): PeriodoFiscal {
-    return {
-      id: row.id,
-      nombre: row.name,
-      fechaInicio: row.start_date,
-      fechaFin: row.end_date,
-      activo: row.is_active,
-    };
+  async tieneHijos(nivel: NivelEstructura, id: number): Promise<boolean> {
+    const consulta = HIJOS[nivel];
+    if (!consulta) return false;
+    const { rows } = await this.pool.query<{ tiene: boolean }>(`SELECT EXISTS (${consulta}) AS tiene`, [id]);
+    return rows[0]?.tiene ?? false;
   }
 }

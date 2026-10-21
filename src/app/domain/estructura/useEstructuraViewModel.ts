@@ -1,24 +1,51 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  crearProceso as apiCrearProceso,
+  crearNodo as apiCrearNodo,
   crearUnidadNegocio as apiCrearUnidad,
-  editarProceso as apiEditarProceso,
+  editarNodo as apiEditarNodo,
   editarUnidadNegocio as apiEditarUnidad,
-  eliminarProceso as apiEliminarProceso,
+  eliminarNodo as apiEliminarNodo,
   eliminarUnidadNegocio as apiEliminarUnidad,
+  ETIQUETA_NIVEL,
+  listarDepartamentos as apiListarDepartamentos,
   listarPeriodos as apiListarPeriodos,
   listarResponsables as apiListarResponsables,
   listarUnidades as apiListarUnidades,
   obtenerPeriodoActivo as apiObtenerPeriodoActivo,
+  obtenerUnidadPorId as apiObtenerUnidad,
   ROLES_GESTION_ESTRUCTURA,
   type AltaUnidadInput,
+  type DepartamentoAuditoria,
+  type EdicionNodoInput,
+  type EdicionUnidadInput,
+  type NivelNodo,
   type PeriodoFiscal,
-  type Proceso,
+  type Responsable,
   type UnidadNegocio,
 } from "../../api/estructura";
-import { listarUsuarios, type Usuario } from "../../api/usuarios";
 import { useSesion } from "../../auth/SesionContext";
+
+/** Nodo de la jerarquía (división, subdivisión o área) junto con la unidad a la que pertenece. */
+export interface NodoSeleccionado {
+  nivel: NivelNodo;
+  id: number;
+  nombre: string;
+  pais?: string | null;
+  unidadId: number;
+}
+
+/** Contexto para dar de alta un nodo hijo. */
+export interface AltaNodoContexto {
+  nivel: NivelNodo;
+  padreId: number;
+  padreNombre: string;
+  unidadId: number;
+}
+
+function mensajeDe(err: unknown, porDefecto: string): string {
+  return (err as { message?: string })?.message ?? porDefecto;
+}
 
 export function useEstructuraViewModel() {
   const { usuario } = useSesion();
@@ -26,21 +53,21 @@ export function useEstructuraViewModel() {
   const [unidades, setUnidades] = useState<UnidadNegocio[]>([]);
   const [periodoActivo, setPeriodoActivo] = useState<PeriodoFiscal | null>(null);
   const [periodos, setPeriodos] = useState<PeriodoFiscal[]>([]);
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [departamentos, setDepartamentos] = useState<DepartamentoAuditoria[]>([]);
+  const [responsables, setResponsables] = useState<Responsable[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
   const [guardando, setGuardando] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Estados de modales
   const [modalAltaAbierto, setModalAltaAbierto] = useState<boolean>(false);
   const [errorModalAlta, setErrorModalAlta] = useState<string | null>(null);
 
-  const [modalProcesoAbierto, setModalProcesoAbierto] = useState<boolean>(false);
-  const [unidadSeleccionadaParaProceso, setUnidadSeleccionadaParaProceso] = useState<UnidadNegocio | null>(null);
-  const [errorModalProceso, setErrorModalProceso] = useState<string | null>(null);
+  const [altaNodo, setAltaNodo] = useState<AltaNodoContexto | null>(null);
+  const [errorModalNodo, setErrorModalNodo] = useState<string | null>(null);
 
   const [unidadEditando, setUnidadEditando] = useState<UnidadNegocio | null>(null);
-  const [procesoEditando, setProcesoEditando] = useState<{ proceso: Proceso; unidadId: number } | null>(null);
+  const [nodoEditando, setNodoEditando] = useState<NodoSeleccionado | null>(null);
+  const [errorModalEdicion, setErrorModalEdicion] = useState<string | null>(null);
 
   const puedeGestionar = useMemo(() => {
     if (!usuario?.rol) return false;
@@ -49,48 +76,34 @@ export function useEstructuraViewModel() {
 
   const cargarDatos = useCallback(async () => {
     setCargando(true);
-    setError(null);
-    try {
-      const [periodoRes, periodosRes, unidadesRes, usuariosRes] = await Promise.allSettled([
-        apiObtenerPeriodoActivo(),
-        apiListarPeriodos(),
-        apiListarUnidades(),
-        puedeGestionar
-          ? apiListarResponsables().catch(() => listarUsuarios().catch(() => []))
-          : Promise.resolve([]),
-      ]);
+    const [periodoRes, periodosRes, unidadesRes, departamentosRes, responsablesRes] = await Promise.allSettled([
+      apiObtenerPeriodoActivo(),
+      apiListarPeriodos(),
+      apiListarUnidades(),
+      apiListarDepartamentos(),
+      puedeGestionar ? apiListarResponsables() : Promise.resolve([]),
+    ]);
 
-      if (periodoRes.status === "fulfilled") {
-        setPeriodoActivo(periodoRes.value);
-      } else {
-        setPeriodoActivo(null);
-      }
-
-      if (periodosRes.status === "fulfilled") {
-        setPeriodos(periodosRes.value);
-      }
-
-      if (unidadesRes.status === "fulfilled") {
-        setUnidades(unidadesRes.value);
-      } else {
-        setUnidades([]);
-      }
-
-      if (usuariosRes.status === "fulfilled" && Array.isArray(usuariosRes.value)) {
-        setUsuarios(usuariosRes.value.filter((u: any) => u.estado === "active" || u.estado === undefined));
-      }
-    } catch {
-      // Manejo no intrusivo: no mostrar pancartas rojas agresivas en la vista
-    } finally {
-      setCargando(false);
-    }
+    // Manejo no intrusivo: lo que falle queda vacío en la vista.
+    setPeriodoActivo(periodoRes.status === "fulfilled" ? periodoRes.value : null);
+    if (periodosRes.status === "fulfilled") setPeriodos(periodosRes.value);
+    setUnidades(unidadesRes.status === "fulfilled" ? unidadesRes.value : []);
+    if (departamentosRes.status === "fulfilled") setDepartamentos(departamentosRes.value);
+    if (responsablesRes.status === "fulfilled") setResponsables(responsablesRes.value);
+    setCargando(false);
   }, [puedeGestionar]);
 
   useEffect(() => {
     cargarDatos();
   }, [cargarDatos]);
 
-  // ── Alta de Unidad de Negocio ────────────────────────────────────────────────
+  /** Vuelve a leer una unidad con su jerarquía tras cambiar uno de sus nodos. */
+  const refrescarUnidad = async (unidadId: number) => {
+    const actualizada = await apiObtenerUnidad(unidadId);
+    setUnidades((prev) => prev.map((u) => (u.id === unidadId ? actualizada : u)));
+  };
+
+  // ── Alta de unidad de negocio ───────────────────────────────────────────────
 
   const abrirModalAlta = () => {
     setErrorModalAlta(null);
@@ -107,12 +120,12 @@ export function useEstructuraViewModel() {
     setErrorModalAlta(null);
     try {
       const nueva = await apiCrearUnidad(datos);
-      setUnidades((prev) => [...prev, nueva]);
+      setUnidades((prev) => [...prev, nueva].sort((a, b) => a.nombre.localeCompare(b.nombre)));
       toast.success(`Unidad de negocio "${nueva.nombre}" creada exitosamente.`);
       cerrarModalAlta();
       return true;
-    } catch (err: any) {
-      const mensaje = err?.message ?? "Error al registrar la unidad de negocio.";
+    } catch (err) {
+      const mensaje = mensajeDe(err, "Error al registrar la unidad de negocio.");
       setErrorModalAlta(mensaje);
       toast.error(mensaje);
       return false;
@@ -121,29 +134,68 @@ export function useEstructuraViewModel() {
     }
   };
 
-  // ── Edición de Unidad de Negocio ─────────────────────────────────────────────
+  // ── Alta de división, subdivisión o área ────────────────────────────────────
+
+  const abrirAltaNodo = (contexto: AltaNodoContexto) => {
+    setErrorModalNodo(null);
+    setAltaNodo(contexto);
+  };
+
+  const cerrarAltaNodo = () => {
+    setAltaNodo(null);
+    setErrorModalNodo(null);
+  };
+
+  const guardarNuevoNodo = async (datos: { nombre: string; pais?: string | null }): Promise<boolean> => {
+    if (!altaNodo) return false;
+    setGuardando(true);
+    setErrorModalNodo(null);
+    try {
+      const nodo = await apiCrearNodo(altaNodo.nivel, { ...datos, padreId: altaNodo.padreId });
+      await refrescarUnidad(altaNodo.unidadId);
+      toast.success(`${ETIQUETA_NIVEL[altaNodo.nivel]} "${nodo.nombre}" agregada exitosamente.`);
+      cerrarAltaNodo();
+      return true;
+    } catch (err) {
+      const mensaje = mensajeDe(err, "Error al agregar el elemento.");
+      setErrorModalNodo(mensaje);
+      toast.error(mensaje);
+      return false;
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  // ── Edición ─────────────────────────────────────────────────────────────────
 
   const abrirEditarUnidad = (unidad: UnidadNegocio) => {
+    setErrorModalEdicion(null);
     setUnidadEditando(unidad);
   };
 
-  const cerrarEditarUnidad = () => {
-    setUnidadEditando(null);
+  const abrirEditarNodo = (nodo: NodoSeleccionado) => {
+    setErrorModalEdicion(null);
+    setNodoEditando(nodo);
   };
 
-  const guardarEdicionUnidad = async (
-    id: number,
-    cambios: { nombre?: string; responsableId?: number },
-  ): Promise<boolean> => {
+  const cerrarEdicion = () => {
+    setUnidadEditando(null);
+    setNodoEditando(null);
+    setErrorModalEdicion(null);
+  };
+
+  const guardarEdicionUnidad = async (id: number, cambios: EdicionUnidadInput): Promise<boolean> => {
     setGuardando(true);
+    setErrorModalEdicion(null);
     try {
       const actualizada = await apiEditarUnidad(id, cambios);
       setUnidades((prev) => prev.map((u) => (u.id === id ? actualizada : u)));
       toast.success("Unidad de negocio actualizada exitosamente.");
-      cerrarEditarUnidad();
+      cerrarEdicion();
       return true;
-    } catch (err: any) {
-      const mensaje = err?.message ?? "Error al editar la unidad de negocio.";
+    } catch (err) {
+      const mensaje = mensajeDe(err, "Error al editar la unidad de negocio.");
+      setErrorModalEdicion(mensaje);
       toast.error(mensaje);
       return false;
     } finally {
@@ -151,117 +203,51 @@ export function useEstructuraViewModel() {
     }
   };
 
-  // ── Eliminación de Unidad de Negocio ─────────────────────────────────────────
+  const guardarEdicionNodo = async (nodo: NodoSeleccionado, cambios: EdicionNodoInput): Promise<boolean> => {
+    setGuardando(true);
+    setErrorModalEdicion(null);
+    try {
+      await apiEditarNodo(nodo.nivel, nodo.id, cambios);
+      await refrescarUnidad(nodo.unidadId);
+      toast.success(`${ETIQUETA_NIVEL[nodo.nivel]} actualizada exitosamente.`);
+      cerrarEdicion();
+      return true;
+    } catch (err) {
+      const mensaje = mensajeDe(err, "Error al editar el elemento.");
+      setErrorModalEdicion(mensaje);
+      toast.error(mensaje);
+      return false;
+    } finally {
+      setGuardando(false);
+    }
+  };
 
-  const eliminarUnidad = async (unidad: UnidadNegocio): Promise<boolean> => {
+  // ── Eliminación (AC3) ───────────────────────────────────────────────────────
+  // Devuelven el mensaje de error (auditorías activas, elementos dependientes) o null.
+
+  const eliminarUnidad = async (unidad: UnidadNegocio): Promise<string | null> => {
     try {
       await apiEliminarUnidad(unidad.id);
       setUnidades((prev) => prev.filter((u) => u.id !== unidad.id));
       toast.success(`Unidad de negocio "${unidad.nombre}" eliminada exitosamente.`);
-      return true;
-    } catch (err: any) {
-      const mensaje = err?.message ?? "Error al eliminar la unidad de negocio.";
+      return null;
+    } catch (err) {
+      const mensaje = mensajeDe(err, "Error al eliminar la unidad de negocio.");
       toast.error(mensaje);
-      return false;
+      return mensaje;
     }
   };
 
-  // ── Procesos ─────────────────────────────────────────────────────────────────
-
-  const abrirModalProceso = (unidad: UnidadNegocio) => {
-    setUnidadSeleccionadaParaProceso(unidad);
-    setErrorModalProceso(null);
-    setModalProcesoAbierto(true);
-  };
-
-  const cerrarModalProceso = () => {
-    setModalProcesoAbierto(false);
-    setUnidadSeleccionadaParaProceso(null);
-    setErrorModalProceso(null);
-  };
-
-  const guardarNuevoProceso = async (unidadId: number, nombre: string): Promise<boolean> => {
-    setGuardando(true);
-    setErrorModalProceso(null);
+  const eliminarNodo = async (nodo: NodoSeleccionado): Promise<string | null> => {
     try {
-      const nuevoProceso = await apiCrearProceso({ unidadNegocioId: unidadId, nombre });
-      setUnidades((prev) =>
-        prev.map((u) => {
-          if (u.id !== unidadId) return u;
-          return {
-            ...u,
-            procesos: [...u.procesos, nuevoProceso],
-          };
-        }),
-      );
-      toast.success(`Proceso "${nuevoProceso.nombre}" agregado exitosamente.`);
-      cerrarModalProceso();
-      return true;
-    } catch (err: any) {
-      const mensaje = err?.message ?? "Error al agregar el proceso.";
-      setErrorModalProceso(mensaje);
+      await apiEliminarNodo(nodo.nivel, nodo.id);
+      await refrescarUnidad(nodo.unidadId);
+      toast.success(`${ETIQUETA_NIVEL[nodo.nivel]} "${nodo.nombre}" eliminada exitosamente.`);
+      return null;
+    } catch (err) {
+      const mensaje = mensajeDe(err, "Error al eliminar el elemento.");
       toast.error(mensaje);
-      return false;
-    } finally {
-      setGuardando(false);
-    }
-  };
-
-  const abrirEditarProceso = (proceso: Proceso, unidadId: number) => {
-    setProcesoEditando({ proceso, unidadId });
-  };
-
-  const cerrarEditarProceso = () => {
-    setProcesoEditando(null);
-  };
-
-  const guardarEdicionProceso = async (
-    procesoId: number,
-    nombre: string,
-    unidadId: number,
-  ): Promise<boolean> => {
-    setGuardando(true);
-    try {
-      const actualizado = await apiEditarProceso(procesoId, { nombre });
-      setUnidades((prev) =>
-        prev.map((u) => {
-          if (u.id !== unidadId) return u;
-          return {
-            ...u,
-            procesos: u.procesos.map((p) => (p.id === procesoId ? actualizado : p)),
-          };
-        }),
-      );
-      toast.success("Proceso actualizado exitosamente.");
-      cerrarEditarProceso();
-      return true;
-    } catch (err: any) {
-      const mensaje = err?.message ?? "Error al editar el proceso.";
-      toast.error(mensaje);
-      return false;
-    } finally {
-      setGuardando(false);
-    }
-  };
-
-  const eliminarProceso = async (proceso: Proceso, unidadId: number): Promise<boolean> => {
-    try {
-      await apiEliminarProceso(proceso.id);
-      setUnidades((prev) =>
-        prev.map((u) => {
-          if (u.id !== unidadId) return u;
-          return {
-            ...u,
-            procesos: u.procesos.filter((p) => p.id !== proceso.id),
-          };
-        }),
-      );
-      toast.success(`Proceso "${proceso.nombre}" eliminado exitosamente.`);
-      return true;
-    } catch (err: any) {
-      const mensaje = err?.message ?? "Error al eliminar el proceso.";
-      toast.error(mensaje);
-      return false;
+      return mensaje;
     }
   };
 
@@ -269,36 +255,35 @@ export function useEstructuraViewModel() {
     unidades,
     periodoActivo,
     periodos,
-    usuarios,
+    departamentos,
+    responsables,
     cargando,
     guardando,
-    error,
     puedeGestionar,
-    // Modales
+    // Alta de unidad
     modalAltaAbierto,
     errorModalAlta,
     abrirModalAlta,
     cerrarModalAlta,
     guardarNuevaUnidad,
-    // Edición Unidad
+    // Alta de nodo
+    altaNodo,
+    errorModalNodo,
+    abrirAltaNodo,
+    cerrarAltaNodo,
+    guardarNuevoNodo,
+    // Edición
     unidadEditando,
+    nodoEditando,
+    errorModalEdicion,
     abrirEditarUnidad,
-    cerrarEditarUnidad,
+    abrirEditarNodo,
+    cerrarEdicion,
     guardarEdicionUnidad,
+    guardarEdicionNodo,
+    // Eliminación
     eliminarUnidad,
-    // Procesos
-    modalProcesoAbierto,
-    unidadSeleccionadaParaProceso,
-    errorModalProceso,
-    abrirModalProceso,
-    cerrarModalProceso,
-    guardarNuevoProceso,
-    // Edición Proceso
-    procesoEditando,
-    abrirEditarProceso,
-    cerrarEditarProceso,
-    guardarEdicionProceso,
-    eliminarProceso,
+    eliminarNodo,
     // Recarga
     recargar: cargarDatos,
   };

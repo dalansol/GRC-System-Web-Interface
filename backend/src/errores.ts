@@ -14,6 +14,7 @@ export type CodigoError =
   | "NOMBRE_DUPLICADO"
   | "PERIODO_ACTIVO_NO_CONFIGURADO"
   | "AUDITORIAS_ACTIVAS"
+  | "HIJOS_EXISTENTES"
   | "ERROR_INTERNO";
 
 export class ErrorApi extends Error {

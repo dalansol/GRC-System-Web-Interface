@@ -1,46 +1,67 @@
 import { useEffect, useState } from "react";
-import { Edit3, Loader2, X } from "lucide-react";
-import type { Proceso, UnidadNegocio } from "../../api/estructura";
-import type { Usuario } from "../../api/usuarios";
+import { AlertCircle, Edit3, Loader2, X } from "lucide-react";
+import {
+  ETIQUETA_NIVEL,
+  type DepartamentoAuditoria,
+  type EdicionNodoInput,
+  type EdicionUnidadInput,
+  type Responsable,
+  type UnidadNegocio,
+} from "../../api/estructura";
+import type { NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
 
 interface ModalEditarEntidadProps {
   unidad: UnidadNegocio | null;
-  proceso: { proceso: Proceso; unidadId: number } | null;
-  usuarios: Usuario[];
+  nodo: NodoSeleccionado | null;
+  responsables: Responsable[];
+  departamentos: DepartamentoAuditoria[];
   guardando: boolean;
-  onGuardarUnidad: (id: number, cambios: { nombre?: string; responsableId?: number }) => Promise<boolean>;
-  onGuardarProceso: (procesoId: number, nombre: string, unidadId: number) => Promise<boolean>;
+  errorServidor: string | null;
+  onGuardarUnidad: (id: number, cambios: EdicionUnidadInput) => Promise<boolean>;
+  onGuardarNodo: (nodo: NodoSeleccionado, cambios: EdicionNodoInput) => Promise<boolean>;
   onCerrar: () => void;
 }
 
 export function ModalEditarEntidad({
   unidad,
-  proceso,
-  usuarios,
+  nodo,
+  responsables,
+  departamentos,
   guardando,
+  errorServidor,
   onGuardarUnidad,
+  onGuardarNodo,
   onCerrar,
-  onGuardarProceso,
 }: ModalEditarEntidadProps) {
-  const abierto = Boolean(unidad || proceso);
+  const abierto = Boolean(unidad || nodo);
 
   const [nombre, setNombre] = useState("");
   const [responsableId, setResponsableId] = useState<number | "">("");
+  const [departamentoId, setDepartamentoId] = useState<number | "">("");
+  const [pais, setPais] = useState("");
   const [errorLocal, setErrorLocal] = useState("");
 
   useEffect(() => {
     if (unidad) {
       setNombre(unidad.nombre);
       setResponsableId(unidad.responsableId);
-      setErrorLocal("");
-    } else if (proceso) {
-      setNombre(proceso.proceso.nombre);
-      setErrorLocal("");
+      setDepartamentoId(unidad.departamentoAuditoriaId ?? "");
+    } else if (nodo) {
+      setNombre(nodo.nombre);
+      setPais(nodo.pais ?? "");
     }
-  }, [unidad, proceso]);
+    setErrorLocal("");
+  }, [unidad, nodo]);
 
   if (!abierto) return null;
+
+  const conPais = nodo?.nivel === "subdivision";
+  // El gerente actual puede ya no ser Jefe de Auditoría; se muestra para no perderlo.
+  const opcionesResponsable =
+    unidad && !responsables.some((r) => r.id === unidad.responsableId)
+      ? [{ id: unidad.responsableId, nombre: unidad.responsableNombre }, ...responsables]
+      : responsables;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,12 +71,14 @@ export function ModalEditarEntidad({
     }
 
     if (unidad) {
-      await onGuardarUnidad(unidad.id, {
+      const cambios: EdicionUnidadInput = {
         nombre: nombre.trim(),
-        responsableId: responsableId ? Number(responsableId) : undefined,
-      });
-    } else if (proceso) {
-      await onGuardarProceso(proceso.proceso.id, nombre.trim(), proceso.unidadId);
+        departamentoAuditoriaId: departamentoId ? Number(departamentoId) : null,
+      };
+      if (responsableId && responsableId !== unidad.responsableId) cambios.responsableId = Number(responsableId);
+      await onGuardarUnidad(unidad.id, cambios);
+    } else if (nodo) {
+      await onGuardarNodo(nodo, conPais ? { nombre: nombre.trim(), pais: pais.trim() || null } : { nombre: nombre.trim() });
     }
   };
 
@@ -67,6 +90,7 @@ export function ModalEditarEntidad({
           disabled={guardando}
           className="absolute right-4 top-4 rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors disabled:opacity-50"
           title="Cerrar modal"
+          aria-label="Cerrar modal"
         >
           <X size={18} />
         </button>
@@ -77,18 +101,29 @@ export function ModalEditarEntidad({
           </div>
           <div>
             <h2 className="text-base font-bold text-foreground">
-              {unidad ? "Editar Unidad de Negocio" : "Editar Proceso"}
+              Editar {unidad ? "Unidad de Negocio" : ETIQUETA_NIVEL[nodo!.nivel]}
             </h2>
             <p className="text-xs text-muted-foreground">Actualiza la información en la estructura organizacional.</p>
           </div>
         </div>
 
+        {errorServidor && (
+          <div
+            role="alert"
+            className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2"
+          >
+            <AlertCircle size={16} className="flex-shrink-0 mt-0.5 text-red-600" />
+            <span>{errorServidor}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
+            <label htmlFor="editar-nombre" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
               Nombre <span className="text-red-500">*</span>
             </label>
             <input
+              id="editar-nombre"
               type="text"
               value={nombre}
               onChange={(e) => {
@@ -105,22 +140,67 @@ export function ModalEditarEntidad({
           </div>
 
           {unidad && (
+            <>
+              <div>
+                <label
+                  htmlFor="editar-responsable"
+                  className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5"
+                >
+                  Gerente Responsable
+                </label>
+                <select
+                  id="editar-responsable"
+                  value={responsableId}
+                  onChange={(e) => setResponsableId(e.target.value ? Number(e.target.value) : "")}
+                  disabled={guardando}
+                  className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                >
+                  {opcionesResponsable.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label
+                  htmlFor="editar-departamento"
+                  className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5"
+                >
+                  Departamento de Auditoría
+                </label>
+                <select
+                  id="editar-departamento"
+                  value={departamentoId}
+                  onChange={(e) => setDepartamentoId(e.target.value ? Number(e.target.value) : "")}
+                  disabled={guardando}
+                  className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                >
+                  <option value="">Sin asignar</option>
+                  {departamentos.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          {conPais && (
             <div>
-              <label className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
-                Gerente Responsable
+              <label htmlFor="editar-pais" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
+                País o región
               </label>
-              <select
-                value={responsableId}
-                onChange={(e) => setResponsableId(e.target.value ? Number(e.target.value) : "")}
+              <input
+                id="editar-pais"
+                type="text"
+                value={pais}
+                onChange={(e) => setPais(e.target.value)}
+                maxLength={100}
                 disabled={guardando}
                 className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-              >
-                {usuarios.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.nombre} ({u.rol})
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           )}
 

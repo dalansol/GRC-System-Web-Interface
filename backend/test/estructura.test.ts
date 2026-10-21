@@ -13,6 +13,8 @@ import { escuchar } from "./servidor.js";
 const ADMIN = "s.ramirez@expedite.com";
 const JEFA = "m.garcia@expedite.com";
 const AUDITOR_SENIOR = "c.morales@expedite.com";
+const AUDITOR = "a.rodriguez@expedite.com";
+const INACTIVO = "p.sanchez@expedite.com";
 
 let app: Server;
 let usuarios: RepositorioMemoria;
@@ -46,237 +48,270 @@ const como = (correo: string) => ({
 
 const idDe = async (correo: string) => (await usuarios.buscarPorCorreo(correo))!.id;
 
-describe("Parametrización de la Estructura Organizacional (SF-03)", () => {
+async function altaUnidad(nombre: string, correo = JEFA) {
+  return como(correo).post("/api/unidades-negocio").send({
+    nombre,
+    responsableId: await idDe(JEFA),
+    departamentoAuditoriaId: 1,
+  });
+}
+
+/** Crea una unidad con una rama completa y devuelve los ids de cada nivel. */
+async function altaRama(nombre: string) {
+  const unidadId = (await altaUnidad(nombre)).body.id as number;
+  const divisionId = (await como(JEFA).post("/api/divisiones").send({ nombre: "DIVISION-0001", padreId: unidadId })).body
+    .id as number;
+  const subdivisionId = (
+    await como(JEFA).post("/api/subdivisiones").send({ nombre: "SUBDIVISION-0001", padreId: divisionId, pais: "México" })
+  ).body.id as number;
+  const areaId = (await como(JEFA).post("/api/areas").send({ nombre: "Nómina", padreId: subdivisionId })).body
+    .id as number;
+  return { unidadId, divisionId, subdivisionId, areaId };
+}
+
+describe("Parametrización de la estructura organizacional (SF-03)", () => {
   describe("Periodos de auditoría", () => {
-    it("permite consultar el periodo fiscal activo actual", async () => {
-      const res = await como(JEFA).get("/api/periodos/activo");
+    it("consulta el periodo trimestral activo", async () => {
+      const res = await como(AUDITOR).get("/api/periodos/activo");
       expect(res.status).toBe(200);
-      expect(res.body.nombre).toBe("Fiscal 2026");
-      expect(res.body.activo).toBe(true);
+      expect(res.body).toMatchObject({ nombre: "2026Q4", activo: true });
     });
 
-    it("permite listar todos los periodos fiscales", async () => {
-      const res = await como(JEFA).get("/api/periodos");
-      expect(res.status).toBe(200);
-      expect(res.body.length).toBeGreaterThanOrEqual(1);
+    it("al activar un periodo nuevo desactiva el anterior y lo registra en bitácora", async () => {
+      const res = await como(ADMIN).post("/api/periodos").send({
+        nombre: "2027Q1",
+        fechaInicio: "2027-01-01",
+        fechaFin: "2027-03-31",
+        activo: true,
+      });
+      expect(res.status).toBe(201);
+      const periodos = (await como(JEFA).get("/api/periodos")).body as Array<{ nombre: string; activo: boolean }>;
+      expect(periodos.filter((p) => p.activo).map((p) => p.nombre)).toEqual(["2027Q1"]);
+      expect(eventos.some((e) => e.accion === "periodo.alta")).toBe(true);
+    });
+
+    it("rechaza fechas invertidas y nombres de periodo repetidos", async () => {
+      const invertido = await como(JEFA).post("/api/periodos").send({
+        nombre: "2027Q2",
+        fechaInicio: "2027-06-30",
+        fechaFin: "2027-04-01",
+      });
+      expect(invertido.status).toBe(400);
+
+      const repetido = await como(JEFA).post("/api/periodos").send({
+        nombre: "2026q4",
+        fechaInicio: "2026-10-01",
+        fechaFin: "2026-12-31",
+      });
+      expect(repetido.status).toBe(409);
+      expect(repetido.body.error.codigo).toBe("NOMBRE_DUPLICADO");
+    });
+
+    it("lista los departamentos de auditoría", async () => {
+      const res = await como(AUDITOR).get("/api/departamentos-auditoria");
+      expect(res.body.map((d: { nombre: string }) => d.nombre)).toEqual(["Retail & Spin", "Beverage"]);
     });
   });
 
-  describe("CP-EST-01 y CP-EST-02: Alta de unidad de negocio con proceso inicial (AC1)", () => {
-    it("como Jefe de Auditoría crea una unidad con proceso inicial y periodo activo", async () => {
-      const jefaId = await idDe(JEFA);
-      const res = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "Banca Minorista",
-        proceso: "Originación de Créditos",
-        responsableId: jefaId,
+  describe("CP-EST-01: Alta en la jerarquía con periodo activo (AC1)", () => {
+    it("como Jefe de Auditoría crea una unidad con gerente, departamento y periodo activo", async () => {
+      const res = await altaUnidad("UDN-0001");
+      expect(res.status).toBe(201);
+      expect(res.body).toMatchObject({
+        nombre: "UDN-0001",
+        responsableId: await idDe(JEFA),
+        periodoFiscalNombre: "2026Q4",
+        departamentoAuditoriaNombre: "Retail & Spin",
+        divisiones: [],
       });
 
-      expect(res.status).toBe(201);
-      expect(res.body.id).toBeDefined();
-      expect(res.body.nombre).toBe("Banca Minorista");
-      expect(res.body.periodoFiscalNombre).toBe("Fiscal 2026");
-      expect(res.body.responsableId).toBe(jefaId);
-      expect(res.body.procesos).toHaveLength(1);
-      expect(res.body.procesos[0].nombre).toBe("Originación de Créditos");
-
-      // Trazabilidad y bitácora
-      const evento = eventos.find((e) => e.accion === "unidad_negocio.alta");
-      expect(evento).toBeDefined();
+      const evento = eventos.find((e) => e.accion === "estructura.alta");
       expect(evento?.actor).toBe(JEFA);
+      expect(evento?.detalle.nivel).toBe("unidad");
     });
 
-    it("como Administrador crea una unidad de negocio válida", async () => {
-      const jefaId = await idDe(JEFA);
-      const res = await como(ADMIN).post("/api/unidades-negocio").send({
-        nombre: "Tesorería Global",
-        proceso: "Gestión de Liquidez",
-        responsableId: jefaId,
-      });
+    it("la rama completa queda visible en el catálogo central para cualquier usuario con sesión", async () => {
+      await altaRama("UDN-0003");
+      const res = await como(AUDITOR).get("/api/unidades-negocio");
+      expect(res.status).toBe(200);
+      const [unidad] = res.body;
+      expect(unidad.divisiones[0].nombre).toBe("DIVISION-0001");
+      expect(unidad.divisiones[0].subdivisiones[0]).toMatchObject({ nombre: "SUBDIVISION-0001", pais: "México" });
+      expect(unidad.divisiones[0].subdivisiones[0].areas[0].nombre).toBe("Nómina");
+    });
 
-      expect(res.status).toBe(201);
-      expect(res.body.nombre).toBe("Tesorería Global");
+    it("como Administrador también puede dar de alta", async () => {
+      expect((await altaUnidad("UDN-0002", ADMIN)).status).toBe(201);
+    });
+
+    it("rechaza crear un nodo cuyo padre no existe (404)", async () => {
+      const res = await como(JEFA).post("/api/areas").send({ nombre: "Compras", padreId: 999 });
+      expect(res.status).toBe(404);
     });
   });
 
-  describe("CP-EST-03: Control de acceso por roles (Seguridad / SNF-05)", () => {
-    it("un auditor sin rol de gestión no puede dar de alta una unidad de negocio (403)", async () => {
-      const jefaId = await idDe(JEFA);
-      const res = await como(AUDITOR_SENIOR).post("/api/unidades-negocio").send({
-        nombre: "Operaciones",
-        proceso: "Conciliaciones",
-        responsableId: jefaId,
-      });
+  describe("CP-EST-02: Control de acceso por roles (SNF-05)", () => {
+    it("un Auditor no puede dar de alta unidades ni nodos (403)", async () => {
+      const unidad = await como(AUDITOR).post("/api/unidades-negocio").send({ nombre: "X", responsableId: 1 });
+      expect(unidad.status).toBe(403);
+      expect(unidad.body.error.codigo).toBe("ROL_NO_AUTORIZADO");
 
-      expect(res.status).toBe(403);
-      expect(res.body.error.codigo).toBe("ROL_NO_AUTORIZADO");
+      const division = await como(AUDITOR_SENIOR).post("/api/divisiones").send({ nombre: "X", padreId: 1 });
+      expect(division.status).toBe(403);
     });
 
-    it("un auditor sin rol de gestión no puede eliminar una unidad de negocio (403)", async () => {
+    it("un Auditor no puede eliminar (403)", async () => {
       const res = await como(AUDITOR_SENIOR).delete("/api/unidades-negocio/1");
       expect(res.status).toBe(403);
-      expect(res.body.error.codigo).toBe("ROL_NO_AUTORIZADO");
     });
   });
 
-  describe("CP-EST-04: Validación cuando no existe periodo activo (AC1)", () => {
-    it("rechaza la creación de unidad con 400 si no hay ningún periodo activo", async () => {
+  describe("CP-EST-03: Gerente responsable", () => {
+    it("rechaza un gerente inexistente, inactivo o sin rol Jefe de Auditoría (400)", async () => {
+      for (const responsableId of [9999, await idDe(INACTIVO), await idDe(AUDITOR)]) {
+        const res = await como(JEFA).post("/api/unidades-negocio").send({ nombre: "UDN-0009", responsableId });
+        expect(res.status).toBe(400);
+        expect(res.body.error.codigo).toBe("DATOS_INVALIDOS");
+      }
+    });
+
+    it("solo ofrece Jefes de Auditoría activos como responsables", async () => {
+      const res = await como(ADMIN).get("/api/unidades-negocio/responsables");
+      expect(res.body.map((u: { correo: string }) => u.correo)).toEqual([JEFA]);
+    });
+  });
+
+  describe("CP-EST-04: Sin periodo activo", () => {
+    it("rechaza el alta con 409 PERIODO_ACTIVO_NO_CONFIGURADO", async () => {
       estructura.limpiarPeriodos();
-      const jefaId = await idDe(JEFA);
-
-      const res = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "Nueva Unidad",
-        proceso: "Proceso Inicial",
-        responsableId: jefaId,
-      });
-
-      expect(res.status).toBe(400);
+      const res = await altaUnidad("UDN-0004");
+      expect(res.status).toBe(409);
       expect(res.body.error.codigo).toBe("PERIODO_ACTIVO_NO_CONFIGURADO");
     });
   });
 
-  describe("CP-EST-05 y CP-EST-06: Bloqueo de nombres duplicados (AC2)", () => {
-    it("rechaza crear una unidad con nombre duplicado con 409 NOMBRE_DUPLICADO", async () => {
-      const jefaId = await idDe(JEFA);
-      const cuerpo = {
-        nombre: "Riesgos Corporativos",
-        proceso: "Monitoreo",
-        responsableId: jefaId,
-      };
-
-      const primera = await como(JEFA).post("/api/unidades-negocio").send(cuerpo);
-      expect(primera.status).toBe(201);
-
-      const segunda = await como(JEFA).post("/api/unidades-negocio").send(cuerpo);
-      expect(segunda.status).toBe(409);
-      expect(segunda.body.error.codigo).toBe("NOMBRE_DUPLICADO");
+  describe("CP-EST-05: Nombres duplicados (AC2)", () => {
+    // La intercalación sin_mayusculas ignora mayúsculas pero distingue acentos.
+    it("rechaza una unidad con el mismo nombre, sin importar mayúsculas", async () => {
+      expect((await altaUnidad("Proximidad y Salud")).status).toBe(201);
+      for (const nombre of ["Proximidad y Salud", "PROXIMIDAD Y SALUD", "  proximidad y salud "]) {
+        const res = await altaUnidad(nombre);
+        expect(res.status).toBe(409);
+        expect(res.body.error.codigo).toBe("NOMBRE_DUPLICADO");
+      }
     });
 
-    it("rechaza crear un proceso con nombre duplicado en la misma unidad con 409 NOMBRE_DUPLICADO", async () => {
-      const jefaId = await idDe(JEFA);
-      const altaUnidad = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "Finanzas",
-        proceso: "Facturación",
-        responsableId: jefaId,
-      });
-      const unidadId = altaUnidad.body.id;
-
-      // Intentar agregar otro proceso con el mismo nombre "Facturación" a la misma unidad
-      const res = await como(JEFA).post("/api/procesos").send({
-        unidadNegocioId: unidadId,
-        nombre: "Facturación",
-      });
-
+    it("rechaza renombrar una unidad con el nombre de otra", async () => {
+      await altaUnidad("UDN-0001");
+      const otra = (await altaUnidad("UDN-0002")).body.id;
+      const res = await como(JEFA).patch(`/api/unidades-negocio/${otra}`).send({ nombre: "udn-0001" });
       expect(res.status).toBe(409);
-      expect(res.body.error.codigo).toBe("NOMBRE_DUPLICADO");
+    });
+
+    it("permite áreas con el mismo nombre en subdivisiones distintas", async () => {
+      const a = await altaRama("UDN-0001");
+      const b = await altaRama("UDN-0002");
+      const repetida = await como(JEFA).post("/api/areas").send({ nombre: "Recursos Humanos", padreId: a.subdivisionId });
+      const otra = await como(JEFA).post("/api/areas").send({ nombre: "Recursos Humanos", padreId: b.subdivisionId });
+      expect(repetida.status).toBe(201);
+      expect(otra.status).toBe(201);
     });
   });
 
-  describe("CP-EST-07 y CP-EST-08: Bloqueo y eliminación de unidades y procesos (AC3)", () => {
-    it("bloquea con 409 AUDITORIAS_ACTIVAS la eliminación de una unidad con auditorías activas", async () => {
-      const jefaId = await idDe(JEFA);
-      const resAlta = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "Ciberseguridad",
-        proceso: "Gestión de Vulnerabilidades",
-        responsableId: jefaId,
-      });
-      const unidadId = resAlta.body.id;
+  describe("CP-EST-06: Bloqueo de eliminación con auditorías activas (AC3)", () => {
+    it.each(["Aprobado", "En Ejecución"])("bloquea cada nivel de la rama con un plan %s", async (estado) => {
+      const rama = await altaRama("UDN-0005");
+      estructura.registrarAuditoria(rama.subdivisionId, estado);
 
-      // Simular auditorías activas vinculadas
-      estructura.marcarUnidadConAuditoriaActiva(unidadId, true);
-
-      const resDel = await como(JEFA).delete(`/api/unidades-negocio/${unidadId}`);
-      expect(resDel.status).toBe(409);
-      expect(resDel.body.error.codigo).toBe("AUDITORIAS_ACTIVAS");
+      for (const [ruta, id] of [
+        ["areas", rama.areaId],
+        ["subdivisiones", rama.subdivisionId],
+        ["divisiones", rama.divisionId],
+        ["unidades-negocio", rama.unidadId],
+      ] as const) {
+        const res = await como(JEFA).delete(`/api/${ruta}/${id}`);
+        expect(res.status).toBe(409);
+        expect(res.body.error.codigo).toBe("AUDITORIAS_ACTIVAS");
+      }
     });
 
-    it("permite eliminar una unidad sin auditorías activas y registra en bitácora", async () => {
-      const jefaId = await idDe(JEFA);
-      const resAlta = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "Soporte Técnico",
-        proceso: "Mesa de Ayuda",
-        responsableId: jefaId,
-      });
-      const unidadId = resAlta.body.id;
+    it.each(["Borrador", "Cerrado"])("con un plan %s permite eliminar de la hoja a la raíz", async (estado) => {
+      const rama = await altaRama("UDN-0006");
+      estructura.registrarAuditoria(rama.subdivisionId, estado);
 
-      const resDel = await como(JEFA).delete(`/api/unidades-negocio/${unidadId}`);
-      expect(resDel.status).toBe(204);
-
-      // Verificar que ya no existe
-      const resGet = await como(JEFA).get(`/api/unidades-negocio/${unidadId}`);
-      expect(resGet.status).toBe(404);
-
-      // Evento en bitácora
-      const evento = eventos.find((e) => e.accion === "unidad_negocio.baja");
-      expect(evento).toBeDefined();
-      expect(evento?.actor).toBe(JEFA);
+      for (const [ruta, id] of [
+        ["areas", rama.areaId],
+        ["subdivisiones", rama.subdivisionId],
+        ["divisiones", rama.divisionId],
+        ["unidades-negocio", rama.unidadId],
+      ] as const) {
+        expect((await como(JEFA).delete(`/api/${ruta}/${id}`)).status).toBe(204);
+      }
+      expect((await como(JEFA).get(`/api/unidades-negocio/${rama.unidadId}`)).status).toBe(404);
+      expect(eventos.filter((e) => e.accion === "estructura.baja")).toHaveLength(4);
     });
 
-    it("bloquea con 409 AUDITORIAS_ACTIVAS la eliminación de un proceso con auditorías activas", async () => {
-      const jefaId = await idDe(JEFA);
-      const resAlta = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "Logística",
-        proceso: "Despacho",
-        responsableId: jefaId,
-      });
-      const procesoId = resAlta.body.procesos[0].id;
-
-      estructura.marcarProcesoConAuditoriaActiva(procesoId, true);
-
-      const resDel = await como(JEFA).delete(`/api/procesos/${procesoId}`);
-      expect(resDel.status).toBe(409);
-      expect(resDel.body.error.codigo).toBe("AUDITORIAS_ACTIVAS");
-    });
-
-    it("permite eliminar un proceso sin auditorías activas", async () => {
-      const jefaId = await idDe(JEFA);
-      const resAlta = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "Marketing",
-        proceso: "Campañas",
-        responsableId: jefaId,
-      });
-      const procesoId = resAlta.body.procesos[0].id;
-
-      const resDel = await como(JEFA).delete(`/api/procesos/${procesoId}`);
-      expect(resDel.status).toBe(204);
-
-      const evento = eventos.find((e) => e.accion === "proceso.baja");
-      expect(evento).toBeDefined();
+    it("no elimina en cascada: un nodo con hijos responde 409 HIJOS_EXISTENTES", async () => {
+      const rama = await altaRama("UDN-0007");
+      const res = await como(JEFA).delete(`/api/divisiones/${rama.divisionId}`);
+      expect(res.status).toBe(409);
+      expect(res.body.error.codigo).toBe("HIJOS_EXISTENTES");
     });
   });
 
-  describe("Edición de unidades y procesos", () => {
-    it("permite editar el nombre de una unidad de negocio", async () => {
-      const jefaId = await idDe(JEFA);
-      const resAlta = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "Recursos Humanos",
-        proceso: "Nómina",
-        responsableId: jefaId,
-      });
-      const unidadId = resAlta.body.id;
-
-      const resEdit = await como(JEFA).patch(`/api/unidades-negocio/${unidadId}`).send({
-        nombre: "Gestión del Talento",
+  describe("Riesgos en la jerarquía (consolidación con el explorador de riesgos)", () => {
+    it("los riesgos registrados aparecen bajo su subdivisión en el catálogo", async () => {
+      const rama = await altaRama("UDN-0001");
+      estructura.registrarRiesgo(rama.subdivisionId, {
+        nombre: "Pagos de nómina sin doble aprobación",
+        nivel: "Alto",
+        procedimientoControl: "Doble aprobación del layout",
       });
 
-      expect(resEdit.status).toBe(200);
-      expect(resEdit.body.nombre).toBe("Gestión del Talento");
+      const res = await como(AUDITOR).get("/api/unidades-negocio");
+      expect(res.body[0].divisiones[0].subdivisiones[0].riesgos).toEqual([
+        { id: 1, nombre: "Pagos de nómina sin doble aprobación", nivel: "Alto", procedimientoControl: "Doble aprobación del layout" },
+      ]);
     });
 
-    it("permite editar el nombre de un proceso", async () => {
-      const jefaId = await idDe(JEFA);
-      const resAlta = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "Compras",
-        proceso: "Licitaciones",
-        responsableId: jefaId,
-      });
-      const procesoId = resAlta.body.procesos[0].id;
+    it("no elimina una subdivisión con riesgos registrados (409 HIJOS_EXISTENTES)", async () => {
+      const rama = await altaRama("UDN-0002");
+      await como(JEFA).delete(`/api/areas/${rama.areaId}`);
+      estructura.registrarRiesgo(rama.subdivisionId, { nombre: "Fraude", nivel: null, procedimientoControl: null });
 
-      const resEdit = await como(JEFA).patch(`/api/procesos/${procesoId}`).send({
-        nombre: "Adjudicaciones",
-      });
+      const res = await como(JEFA).delete(`/api/subdivisiones/${rama.subdivisionId}`);
+      expect(res.status).toBe(409);
+      expect(res.body.error.codigo).toBe("HIJOS_EXISTENTES");
+    });
+  });
 
-      expect(resEdit.status).toBe(200);
-      expect(resEdit.body.nombre).toBe("Adjudicaciones");
+  describe("Edición", () => {
+    it("edita nombre, gerente y departamento de una unidad y lo registra en bitácora", async () => {
+      const id = (await altaUnidad("UDN-0001")).body.id;
+      const res = await como(JEFA).patch(`/api/unidades-negocio/${id}`).send({
+        nombre: "UDN-0010",
+        departamentoAuditoriaId: 2,
+      });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ nombre: "UDN-0010", departamentoAuditoriaNombre: "Beverage" });
+      expect(eventos.some((e) => e.accion === "estructura.edicion")).toBe(true);
+    });
+
+    it("edita el nombre y país de una subdivisión", async () => {
+      const rama = await altaRama("UDN-0001");
+      const res = await como(JEFA).patch(`/api/subdivisiones/${rama.subdivisionId}`).send({
+        nombre: "SUBDIVISION-0002",
+        pais: "KFS RTR",
+      });
+      expect(res.status).toBe(200);
+      const unidad = (await como(JEFA).get(`/api/unidades-negocio/${rama.unidadId}`)).body;
+      expect(unidad.divisiones[0].subdivisiones[0]).toMatchObject({ nombre: "SUBDIVISION-0002", pais: "KFS RTR" });
+    });
+
+    it("rechaza un departamento de auditoría inexistente (400)", async () => {
+      const id = (await altaUnidad("UDN-0001")).body.id;
+      const res = await como(JEFA).patch(`/api/unidades-negocio/${id}`).send({ departamentoAuditoriaId: 99 });
+      expect(res.status).toBe(400);
     });
   });
 });

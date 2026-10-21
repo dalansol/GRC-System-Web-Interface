@@ -1,31 +1,32 @@
 import { useState } from "react";
-import { AlertCircle, Building2, Calendar, Loader2, User, Workflow, X } from "lucide-react";
-import type { PeriodoFiscal } from "../../api/estructura";
-import type { Usuario } from "../../api/usuarios";
+import { AlertCircle, Building2, Calendar, Landmark, Loader2, User, X } from "lucide-react";
+import type { AltaUnidadInput, DepartamentoAuditoria, PeriodoFiscal, Responsable } from "../../api/estructura";
 import { Card } from "../SharedComponents";
 
 interface ModalRegistrarUnidadProps {
   abierto: boolean;
   periodoActivo: PeriodoFiscal | null;
-  usuarios: Usuario[];
+  responsables: Responsable[];
+  departamentos: DepartamentoAuditoria[];
   guardando: boolean;
   errorServidor: string | null;
-  onGuardar: (datos: { nombre: string; proceso: string; responsableId: number }) => Promise<boolean>;
+  onGuardar: (datos: AltaUnidadInput) => Promise<boolean>;
   onCerrar: () => void;
 }
 
 export function ModalRegistrarUnidad({
   abierto,
   periodoActivo,
-  usuarios,
+  responsables,
+  departamentos,
   guardando,
   errorServidor,
   onGuardar,
   onCerrar,
 }: ModalRegistrarUnidadProps) {
   const [nombre, setNombre] = useState("");
-  const [proceso, setProceso] = useState("");
   const [responsableId, setResponsableId] = useState<number | "">("");
+  const [departamentoId, setDepartamentoId] = useState<number | "">("");
   const [errores, setErrores] = useState<Record<string, string>>({});
 
   if (!abierto) return null;
@@ -33,7 +34,6 @@ export function ModalRegistrarUnidad({
   const validar = () => {
     const err: Record<string, string> = {};
     if (!nombre.trim()) err.nombre = "El nombre de la unidad es obligatorio.";
-    if (!proceso.trim()) err.proceso = "El proceso operativo inicial es obligatorio.";
     if (!responsableId) err.responsableId = "Debes seleccionar un gerente responsable.";
     if (!periodoActivo) err.periodo = "No hay un periodo de auditoría activo configurado.";
     return err;
@@ -49,14 +49,14 @@ export function ModalRegistrarUnidad({
 
     const exito = await onGuardar({
       nombre: nombre.trim(),
-      proceso: proceso.trim(),
       responsableId: Number(responsableId),
+      departamentoAuditoriaId: departamentoId ? Number(departamentoId) : null,
     });
 
     if (exito) {
       setNombre("");
-      setProceso("");
       setResponsableId("");
+      setDepartamentoId("");
       setErrores({});
     }
   };
@@ -83,14 +83,17 @@ export function ModalRegistrarUnidad({
           <div>
             <h2 className="text-lg font-bold text-foreground">Nueva Unidad de Negocio</h2>
             <p className="text-xs text-muted-foreground">
-              Parametriza una unidad de negocio con su proceso inicial y periodo fiscal activo.
+              Registra la unidad con su gerente responsable; queda asignada al periodo de auditoría activo.
             </p>
           </div>
         </div>
 
         {/* Error del servidor o duplicados */}
         {errorServidor && (
-          <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2">
+          <div
+            role="alert"
+            className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2"
+          >
             <AlertCircle size={16} className="flex-shrink-0 mt-0.5 text-red-600" />
             <div>
               <span className="font-semibold">Error al registrar:</span> {errorServidor}
@@ -101,17 +104,21 @@ export function ModalRegistrarUnidad({
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Nombre de la Unidad */}
           <div>
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
+            <label
+              htmlFor="unidad-nombre"
+              className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5"
+            >
               Nombre de la Unidad de Negocio <span className="text-red-500">*</span>
             </label>
             <input
+              id="unidad-nombre"
               type="text"
               value={nombre}
               onChange={(e) => {
                 setNombre(e.target.value);
                 setErrores((prev) => ({ ...prev, nombre: "" }));
               }}
-              placeholder="Ej. Banca Minorista, Logística y Distribución…"
+              placeholder="Ej. UDN-0007, Proximidad y Salud…"
               maxLength={150}
               disabled={guardando}
               className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
@@ -121,36 +128,17 @@ export function ModalRegistrarUnidad({
             {errores.nombre && <p className="text-xs text-red-600 mt-1">{errores.nombre}</p>}
           </div>
 
-          {/* Proceso Operativo Inicial */}
-          <div>
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5 flex items-center gap-1.5">
-              <Workflow size={13} className="text-muted-foreground" />
-              Proceso Operativo Inicial <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={proceso}
-              onChange={(e) => {
-                setProceso(e.target.value);
-                setErrores((prev) => ({ ...prev, proceso: "" }));
-              }}
-              placeholder="Ej. Originación de Créditos, Gestión de Compras…"
-              maxLength={150}
-              disabled={guardando}
-              className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
-                errores.proceso ? "border-red-400 focus:ring-red-100" : "border-border"
-              }`}
-            />
-            {errores.proceso && <p className="text-xs text-red-600 mt-1">{errores.proceso}</p>}
-          </div>
-
           {/* Gerente Responsable */}
           <div>
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5 flex items-center gap-1.5">
+            <label
+              htmlFor="unidad-responsable"
+              className="text-xs font-semibold text-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5"
+            >
               <User size={13} className="text-muted-foreground" />
               Gerente Responsable <span className="text-red-500">*</span>
             </label>
             <select
+              id="unidad-responsable"
               value={responsableId}
               onChange={(e) => {
                 setResponsableId(e.target.value ? Number(e.target.value) : "");
@@ -161,17 +149,42 @@ export function ModalRegistrarUnidad({
                 errores.responsableId ? "border-red-400" : "border-border"
               }`}
             >
-              <option value="">Selecciona un responsable activo…</option>
-              {usuarios.map((u) => (
+              <option value="">Selecciona un Jefe de Auditoría activo…</option>
+              {responsables.map((u) => (
                 <option key={u.id} value={u.id}>
-                  {u.nombre} ({u.rol})
+                  {u.nombre}
                 </option>
               ))}
             </select>
             {errores.responsableId && <p className="text-xs text-red-600 mt-1">{errores.responsableId}</p>}
           </div>
 
-          {/* Periodo Fiscal Activo (Automático e informativo) */}
+          {/* Departamento de Auditoría */}
+          <div>
+            <label
+              htmlFor="unidad-departamento"
+              className="text-xs font-semibold text-foreground uppercase tracking-wide mb-1.5 flex items-center gap-1.5"
+            >
+              <Landmark size={13} className="text-muted-foreground" />
+              Departamento de Auditoría
+            </label>
+            <select
+              id="unidad-departamento"
+              value={departamentoId}
+              onChange={(e) => setDepartamentoId(e.target.value ? Number(e.target.value) : "")}
+              disabled={guardando}
+              className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+            >
+              <option value="">Sin asignar</option>
+              {departamentos.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Periodo de auditoría activo (automático, solo lectura) */}
           <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -189,7 +202,7 @@ export function ModalRegistrarUnidad({
               )}
             </div>
             <p className="text-[11px] text-muted-foreground mt-1.5">
-              La unidad de negocio se vincula automáticamente al periodo fiscal vigente del sistema.
+              La unidad de negocio se vincula automáticamente al periodo de auditoría vigente.
             </p>
             {errores.periodo && <p className="text-xs text-red-600 mt-1">{errores.periodo}</p>}
           </div>

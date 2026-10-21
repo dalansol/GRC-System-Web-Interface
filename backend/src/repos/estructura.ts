@@ -1,6 +1,19 @@
 // Interfaz del repositorio de estructura organizacional (SF-03).
 
-import type { PeriodoFiscal, UnidadNegocio, Proceso, AltaUnidadInput, AltaProcesoInput } from "../domain/estructura.js";
+import type {
+  AltaNodoInput,
+  AltaPeriodoInput,
+  AltaUnidadInput,
+  DepartamentoAuditoria,
+  EdicionNodoInput,
+  EdicionPeriodoInput,
+  EdicionUnidadInput,
+  NivelEstructura,
+  NivelNodo,
+  NodoPlano,
+  PeriodoFiscal,
+  UnidadNegocio,
+} from "../domain/estructura.js";
 
 export class ErrorNombreDuplicado extends Error {
   constructor(entidad: string, nombre: string) {
@@ -9,38 +22,40 @@ export class ErrorNombreDuplicado extends Error {
   }
 }
 
-export class ErrorAuditoriasActivas extends Error {
-  constructor(entidad: string) {
-    super(`No se puede eliminar ${entidad} porque tiene auditorías activas asociadas.`);
-    this.name = "ErrorAuditoriasActivas";
-  }
-}
-
 export interface RepositorioEstructura {
+  // Periodos de auditoría (uno activo a la vez: activar uno desactiva los demás).
   obtenerPeriodoActivo(): Promise<PeriodoFiscal | null>;
   listarPeriodos(): Promise<PeriodoFiscal[]>;
+  buscarPeriodoPorId(id: number): Promise<PeriodoFiscal | null>;
+  /** Lanza ErrorNombreDuplicado. */
+  crearPeriodo(datos: AltaPeriodoInput): Promise<PeriodoFiscal>;
+  /** Lanza ErrorNombreDuplicado. */
+  editarPeriodo(id: number, campos: EdicionPeriodoInput): Promise<PeriodoFiscal | null>;
+
+  listarDepartamentos(): Promise<DepartamentoAuditoria[]>;
+
+  // Unidades de negocio, con su jerarquía anidada.
   listarUnidades(): Promise<UnidadNegocio[]>;
   buscarUnidadPorId(id: number): Promise<UnidadNegocio | null>;
-
-  /** Crea unidad + proceso inicial en una transacción. Lanza ErrorNombreDuplicado. */
-  crearUnidadConProceso(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio>;
-
-  /** Edita nombre y/o responsable de una unidad. Lanza ErrorNombreDuplicado si el nuevo nombre ya existe. */
-  editarUnidad(id: number, campos: { nombre?: string; responsableId?: number }): Promise<UnidadNegocio | null>;
-
-  /** Retorna true si la unidad (vía sus procesos → controles → audit_controls → audit_plans) tiene auditorías no cerradas. */
-  tieneAuditoriasActivas(unidadId: number): Promise<boolean>;
-
+  /** Lanza ErrorNombreDuplicado. */
+  crearUnidad(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio>;
+  /** Lanza ErrorNombreDuplicado si el nuevo nombre ya existe. */
+  editarUnidad(id: number, campos: EdicionUnidadInput): Promise<UnidadNegocio | null>;
   eliminarUnidad(id: number): Promise<void>;
 
-  /** Crea un proceso en una unidad. Lanza ErrorNombreDuplicado. */
-  crearProceso(datos: AltaProcesoInput): Promise<Proceso>;
+  // División, subdivisión y área. Sus nombres no son únicos.
+  buscarNodo(nivel: NivelNodo, id: number): Promise<NodoPlano | null>;
+  crearNodo(nivel: NivelNodo, datos: AltaNodoInput): Promise<NodoPlano>;
+  editarNodo(nivel: NivelNodo, id: number, campos: EdicionNodoInput): Promise<NodoPlano | null>;
+  eliminarNodo(nivel: NivelNodo, id: number): Promise<void>;
 
-  /** Edita el nombre de un proceso. Lanza ErrorNombreDuplicado. */
-  editarProceso(id: number, nombre: string): Promise<Proceso | null>;
+  /**
+   * True si algún `audit_engagement` de un plan Aprobado o En Ejecución apunta a una
+   * entidad auditable de esta rama. Las entidades cuelgan de la subdivisión, así que
+   * para un área se revisa su subdivisión.
+   */
+  tieneAuditoriasActivas(nivel: NivelEstructura, id: number): Promise<boolean>;
 
-  /** Retorna true si el proceso (vía controles → audit_controls → audit_plans) tiene auditorías no cerradas. */
-  tieneAuditoriasActivasProceso(procesoId: number): Promise<boolean>;
-
-  eliminarProceso(id: number): Promise<void>;
+  /** True si el nodo tiene hijos en el nivel siguiente (para una subdivisión, también riesgos registrados). */
+  tieneHijos(nivel: NivelEstructura, id: number): Promise<boolean>;
 }

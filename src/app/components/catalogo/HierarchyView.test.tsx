@@ -1,41 +1,46 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ErrorApi } from "../../api/cliente";
 import * as apiEstructura from "../../api/estructura";
-import * as apiUsuarios from "../../api/usuarios";
-import type { PeriodoFiscal, UnidadNegocio } from "../../api/estructura";
-import type { Usuario } from "../../api/usuarios";
+import type { DepartamentoAuditoria, PeriodoFiscal, Responsable, UnidadNegocio } from "../../api/estructura";
 import { HierarchyView } from "./HierarchyView";
 
 vi.mock("../../api/estructura", async (original) => ({
   ...(await original<typeof apiEstructura>()),
   obtenerPeriodoActivo: vi.fn(),
   listarPeriodos: vi.fn(),
+  listarDepartamentos: vi.fn(),
   listarUnidades: vi.fn(),
+  listarResponsables: vi.fn(),
   obtenerUnidadPorId: vi.fn(),
   crearUnidadNegocio: vi.fn(),
   editarUnidadNegocio: vi.fn(),
   eliminarUnidadNegocio: vi.fn(),
-  crearProceso: vi.fn(),
-  editarProceso: vi.fn(),
-  eliminarProceso: vi.fn(),
+  crearNodo: vi.fn(),
+  editarNodo: vi.fn(),
+  eliminarNodo: vi.fn(),
 }));
 
-vi.mock("../../api/usuarios", async (original) => ({
-  ...(await original<typeof apiUsuarios>()),
-  listarUsuarios: vi.fn(),
-}));
+const ADMIN = {
+  id: 1,
+  nombre: "Sofía Ramírez",
+  correo: "s.ramirez@expedite.com",
+  rol: "Administrador",
+  estado: "active" as const,
+  ultimoAcceso: null,
+  permisos: ["Ver Dashboard"],
+};
 
 const sesion = vi.hoisted(() => ({
-  usuario: {
-    id: 1,
-    nombre: "Sofía Ramírez",
-    correo: "s.ramirez@expedite.com",
-    rol: "Administrador",
-    estado: "active" as const,
-    ultimoAcceso: null,
-    permisos: ["Ver Dashboard"],
+  usuario: null as unknown as {
+    id: number;
+    nombre: string;
+    correo: string;
+    rol: string;
+    estado: "active";
+    ultimoAcceso: null;
+    permisos: string[];
   },
   esAdministrador: true,
   recargar: vi.fn(async () => {}),
@@ -52,235 +57,259 @@ const toast = vi.hoisted(() => ({
 vi.mock("sonner", () => ({ toast }));
 
 const PERIODO_ACTIVO: PeriodoFiscal = {
-  id: 1,
-  nombre: "Fiscal 2026",
-  fechaInicio: "2026-01-01",
+  id: 2,
+  nombre: "2026Q4",
+  fechaInicio: "2026-10-01",
   fechaFin: "2026-12-31",
   activo: true,
 };
 
-const USUARIOS: Usuario[] = [
-  { id: 1, nombre: "Sofía Ramírez", correo: "s.ramirez@expedite.com", rol: "Administrador", estado: "active", ultimoAcceso: null },
-  { id: 2, nombre: "María García", correo: "m.garcia@expedite.com", rol: "Jefe de Auditoría", estado: "active", ultimoAcceso: null },
-  { id: 3, nombre: "Carlos Morales", correo: "c.morales@expedite.com", rol: "Auditor Senior", estado: "active", ultimoAcceso: null },
+const DEPARTAMENTOS: DepartamentoAuditoria[] = [
+  { id: 1, nombre: "Retail & Spin" },
+  { id: 2, nombre: "Beverage" },
 ];
 
-const UNIDADES: UnidadNegocio[] = [
-  {
-    id: 10,
-    nombre: "Banca Minorista",
-    responsableId: 2,
-    responsableNombre: "María García",
-    periodoFiscalId: 1,
-    periodoFiscalNombre: "Fiscal 2026",
-    creadoPor: 1,
-    creadoEn: "2026-02-01T10:00:00Z",
-    procesos: [
-      { id: 101, nombre: "Originación de Créditos", unidadNegocioId: 10, creadoEn: "2026-02-01T10:00:00Z" },
-    ],
-  },
+const RESPONSABLES: Responsable[] = [
+  { id: 2, nombre: "María García", correo: "m.garcia@expedite.com", rol: "Jefe de Auditoría" },
 ];
+
+const UNIDAD: UnidadNegocio = {
+  id: 10,
+  nombre: "UDN-0001",
+  responsableId: 2,
+  responsableNombre: "María García",
+  periodoFiscalId: 2,
+  periodoFiscalNombre: "2026Q4",
+  departamentoAuditoriaId: 1,
+  departamentoAuditoriaNombre: "Retail & Spin",
+  creadoPor: 1,
+  creadoEn: "2026-10-01T10:00:00Z",
+  divisiones: [
+    {
+      id: 100,
+      nombre: "DIVISION-0001",
+      unidadNegocioId: 10,
+      subdivisiones: [
+        {
+          id: 200,
+          nombre: "SUBDIVISION-0001",
+          pais: "México",
+          divisionId: 100,
+          areas: [{ id: 300, nombre: "Nómina", subdivisionId: 200 }],
+          riesgos: [
+            {
+              id: 900,
+              nombre: "Pagos de nómina sin doble aprobación",
+              nivel: "Alto",
+              procedimientoControl: "Doble aprobación del layout",
+            },
+            { id: 901, nombre: "Altas de proveedores sin validación", nivel: "Bajo", procedimientoControl: null },
+          ],
+        },
+      ],
+    },
+  ],
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
-  sesion.usuario = {
-    id: 1,
-    nombre: "Sofía Ramírez",
-    correo: "s.ramirez@expedite.com",
-    rol: "Administrador",
-    estado: "active",
-    ultimoAcceso: null,
-    permisos: ["Ver Dashboard"],
-  };
+  sesion.usuario = { ...ADMIN };
   sesion.esAdministrador = true;
 
   vi.mocked(apiEstructura.obtenerPeriodoActivo).mockResolvedValue(PERIODO_ACTIVO);
   vi.mocked(apiEstructura.listarPeriodos).mockResolvedValue([PERIODO_ACTIVO]);
-  vi.mocked(apiEstructura.listarUnidades).mockResolvedValue(UNIDADES);
-  vi.mocked(apiUsuarios.listarUsuarios).mockResolvedValue(USUARIOS);
+  vi.mocked(apiEstructura.listarDepartamentos).mockResolvedValue(DEPARTAMENTOS);
+  vi.mocked(apiEstructura.listarUnidades).mockResolvedValue([UNIDAD]);
+  vi.mocked(apiEstructura.listarResponsables).mockResolvedValue(RESPONSABLES);
 });
 
-describe("Catálogo de Estructura Organizacional (HierarchyView Frontend)", () => {
-  it("CP-FE-01 (AC1): Renderiza la jerarquía cargada desde la API y muestra el badge del periodo fiscal activo", async () => {
+describe("Catálogo de estructura organizacional (HierarchyView)", () => {
+  it("CP-FE-01 (AC1): muestra la jerarquía completa, gerente, departamento y periodo activo", async () => {
     render(<HierarchyView />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/Periodo Activo: Fiscal 2026/i)).toBeInTheDocument();
-    });
+    await waitFor(() => expect(screen.getByText(/Periodo Activo: 2026Q4/i)).toBeInTheDocument());
 
-    expect(screen.getByText("Banca Minorista")).toBeInTheDocument();
-    expect(screen.getByText("Originación de Créditos")).toBeInTheDocument();
-    expect(screen.getByText(/María García/i)).toBeInTheDocument();
+    expect(screen.getByText("UDN-0001")).toBeInTheDocument();
+    expect(screen.getByText("María García")).toBeInTheDocument();
+    expect(screen.getByText("Retail & Spin")).toBeInTheDocument();
+    expect(screen.getByText("DIVISION-0001")).toBeInTheDocument();
+    expect(screen.getByText("SUBDIVISION-0001")).toBeInTheDocument();
+    expect(screen.getByText("México")).toBeInTheDocument();
+    expect(within(screen.getByTestId("nodo-area-300")).getByText("Nómina")).toBeInTheDocument();
+    expect(within(screen.getByTestId("nodo-area-300")).getByText("Área (proceso)")).toBeInTheDocument();
   });
 
-  it("CP-FE-02 (AC1): Abre modal y al enviar formulario exitoso, crea la unidad y muestra toast de éxito", async () => {
+  it("CP-FE-02 (AC1): crea una unidad con gerente y departamento, sin proceso inicial", async () => {
     const usuario = userEvent.setup();
-    const nuevaUnidad: UnidadNegocio = {
+    vi.mocked(apiEstructura.crearUnidadNegocio).mockResolvedValue({
+      ...UNIDAD,
       id: 20,
-      nombre: "Tesorería Global",
-      responsableId: 1,
-      responsableNombre: "Sofía Ramírez",
-      periodoFiscalId: 1,
-      periodoFiscalNombre: "Fiscal 2026",
-      creadoPor: 1,
-      creadoEn: "2026-02-02T10:00:00Z",
-      procesos: [
-        { id: 201, nombre: "Gestión de Liquidez", unidadNegocioId: 20, creadoEn: "2026-02-02T10:00:00Z" },
-      ],
-    };
-    vi.mocked(apiEstructura.crearUnidadNegocio).mockResolvedValue(nuevaUnidad);
-
-    render(<HierarchyView />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("btn-nueva-unidad")).toBeInTheDocument();
+      nombre: "UDN-0003",
+      departamentoAuditoriaId: 2,
+      departamentoAuditoriaNombre: "Beverage",
+      divisiones: [],
     });
 
-    // Abrir modal
-    await usuario.click(screen.getByTestId("btn-nueva-unidad"));
+    render(<HierarchyView />);
+    await usuario.click(await screen.findByTestId("btn-nueva-unidad"));
 
-    // Llenar formulario
-    await usuario.type(
-      screen.getByPlaceholderText(/Banca Minorista, Logística/i),
-      "Tesorería Global",
-    );
-    await usuario.type(
-      screen.getByPlaceholderText(/Originación de Créditos, Gestión de Compras/i),
-      "Gestión de Liquidez",
-    );
-    await usuario.selectOptions(
-      screen.getByRole("combobox"),
-      "1", // Sofía Ramírez
-    );
-
-    // Guardar
+    await usuario.type(screen.getByLabelText(/Nombre de la Unidad de Negocio/i), "UDN-0003");
+    await usuario.selectOptions(screen.getByLabelText(/Gerente Responsable/i), "2");
+    await usuario.selectOptions(screen.getByLabelText(/Departamento de Auditoría/i), "2");
     await usuario.click(screen.getByRole("button", { name: /Guardar Unidad/i }));
 
     await waitFor(() => {
       expect(apiEstructura.crearUnidadNegocio).toHaveBeenCalledWith({
-        nombre: "Tesorería Global",
-        proceso: "Gestión de Liquidez",
-        responsableId: 1,
+        nombre: "UDN-0003",
+        responsableId: 2,
+        departamentoAuditoriaId: 2,
       });
-      expect(toast.success).toHaveBeenCalledWith(
-        expect.stringContaining('Unidad de negocio "Tesorería Global" creada exitosamente'),
-      );
+      expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('"UDN-0003" creada exitosamente'));
     });
+    expect(screen.getByText("UDN-0003")).toBeInTheDocument();
   });
 
-  it("CP-FE-03 (AC2): Cuando la API responde con NOMBRE_DUPLICADO, muestra error y mantiene modal abierto", async () => {
+  it("CP-FE-03 (AC2): con NOMBRE_DUPLICADO muestra el mensaje en el formulario y lo mantiene abierto", async () => {
     const usuario = userEvent.setup();
-    vi.mocked(apiEstructura.crearUnidadNegocio).mockRejectedValue(
-      new ErrorApi(409, "NOMBRE_DUPLICADO", 'Ya existe una unidad de negocio con el nombre "Banca Minorista".'),
-    );
+    const mensaje = 'Ya existe una unidad de negocio con el nombre "UDN-0001".';
+    vi.mocked(apiEstructura.crearUnidadNegocio).mockRejectedValue(new ErrorApi(409, "NOMBRE_DUPLICADO", mensaje));
 
     render(<HierarchyView />);
+    await usuario.click(await screen.findByTestId("btn-nueva-unidad"));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("btn-nueva-unidad")).toBeInTheDocument();
-    });
-
-    await usuario.click(screen.getByTestId("btn-nueva-unidad"));
-
-    await usuario.type(
-      screen.getByPlaceholderText(/Banca Minorista, Logística/i),
-      "Banca Minorista",
-    );
-    await usuario.type(
-      screen.getByPlaceholderText(/Originación de Créditos/i),
-      "Proceso Prueba",
-    );
-    await usuario.selectOptions(screen.getByRole("combobox"), "2");
-
+    await usuario.type(screen.getByLabelText(/Nombre de la Unidad de Negocio/i), "udn-0001");
+    await usuario.selectOptions(screen.getByLabelText(/Gerente Responsable/i), "2");
     await usuario.click(screen.getByRole("button", { name: /Guardar Unidad/i }));
 
-    await waitFor(() => {
-      expect(screen.getByText(/Ya existe una unidad de negocio con el nombre "Banca Minorista"/i)).toBeInTheDocument();
-      expect(toast.error).toHaveBeenCalledWith(
-        'Ya existe una unidad de negocio con el nombre "Banca Minorista".',
-      );
-    });
-
-    // El modal debe permanecer abierto
+    expect(await screen.findByRole("alert")).toHaveTextContent(mensaje);
+    expect(toast.error).toHaveBeenCalledWith(mensaje);
     expect(screen.getByRole("button", { name: /Guardar Unidad/i })).toBeInTheDocument();
   });
 
-  it("CP-FE-04 (AC3): Al intentar eliminar unidad con auditorías activas, muestra notificación de bloqueo", async () => {
+  it("CP-FE-04 (AC1): agrega una subdivisión con país dentro de una división y refresca la unidad", async () => {
     const usuario = userEvent.setup();
-    vi.mocked(apiEstructura.eliminarUnidadNegocio).mockRejectedValue(
-      new ErrorApi(
-        409,
-        "AUDITORIAS_ACTIVAS",
-        "No se puede eliminar la unidad de negocio porque tiene auditorías activas asociadas.",
-      ),
-    );
+    vi.mocked(apiEstructura.crearNodo).mockResolvedValue({ id: 201, nombre: "SUBDIVISION-0002", padreId: 100 });
+    const division = UNIDAD.divisiones[0]!;
+    vi.mocked(apiEstructura.obtenerUnidadPorId).mockResolvedValue({
+      ...UNIDAD,
+      divisiones: [
+        {
+          ...division,
+          subdivisiones: [
+            ...division.subdivisiones,
+            { id: 201, nombre: "SUBDIVISION-0002", pais: "KFS RTR", divisionId: 100, areas: [], riesgos: [] },
+          ],
+        },
+      ],
+    });
 
     render(<HierarchyView />);
+    await usuario.click(await screen.findByTestId("btn-agregar-division-100"));
+
+    expect(screen.getByText("Agregar Subdivisión")).toBeInTheDocument();
+    await usuario.type(screen.getByLabelText(/^Nombre/i), "SUBDIVISION-0002");
+    await usuario.type(screen.getByLabelText(/País o región/i), "KFS RTR");
+    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("btn-eliminar-unidad-10")).toBeInTheDocument();
+      expect(apiEstructura.crearNodo).toHaveBeenCalledWith("subdivision", {
+        nombre: "SUBDIVISION-0002",
+        pais: "KFS RTR",
+        padreId: 100,
+      });
+      expect(apiEstructura.obtenerUnidadPorId).toHaveBeenCalledWith(10);
     });
+    expect(await screen.findByText("SUBDIVISION-0002")).toBeInTheDocument();
+  });
 
-    // Clic en botón eliminar de la tarjeta
-    await usuario.click(screen.getByTestId("btn-eliminar-unidad-10"));
+  it("CP-FE-05 (AC3): con auditorías activas muestra el bloqueo en el diálogo de eliminación", async () => {
+    const usuario = userEvent.setup();
+    const mensaje = "No se puede eliminar la unidad de negocio mientras existan auditorías activas asociadas.";
+    vi.mocked(apiEstructura.eliminarUnidadNegocio).mockRejectedValue(new ErrorApi(409, "AUDITORIAS_ACTIVAS", mensaje));
 
-    // Modal de confirmación
-    await waitFor(() => {
-      expect(screen.getByTestId("btn-confirmar-eliminar")).toBeInTheDocument();
-    });
-
+    render(<HierarchyView />);
+    await usuario.click(await screen.findByTestId("btn-eliminar-unidad-10"));
     await usuario.click(screen.getByTestId("btn-confirmar-eliminar"));
 
-    await waitFor(() => {
-      expect(apiEstructura.eliminarUnidadNegocio).toHaveBeenCalledWith(10);
-      expect(toast.error).toHaveBeenCalledWith(
-        "No se puede eliminar la unidad de negocio porque tiene auditorías activas asociadas.",
-      );
-    });
+    expect(await screen.findByTestId("error-eliminacion")).toHaveTextContent(mensaje);
+    expect(apiEstructura.eliminarUnidadNegocio).toHaveBeenCalledWith(10);
+    expect(toast.error).toHaveBeenCalledWith(mensaje);
+    // La unidad sigue en el catálogo.
+    expect(screen.getAllByText("UDN-0001").length).toBeGreaterThan(0);
   });
 
-  it("CP-FE-05 (Seguridad): Botones de gestión no se muestran a usuarios con rol Auditor", async () => {
-    sesion.usuario = {
-      id: 3,
-      nombre: "Carlos Morales",
-      correo: "c.morales@expedite.com",
-      rol: "Auditor Senior",
-      estado: "active",
-      ultimoAcceso: null,
-      permisos: ["Ver Dashboard"],
-    };
+  it("CP-FE-06 (AC3): elimina un área sin auditorías activas y la quita del árbol", async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(apiEstructura.eliminarNodo).mockResolvedValue(undefined);
+    const division = UNIDAD.divisiones[0]!;
+    vi.mocked(apiEstructura.obtenerUnidadPorId).mockResolvedValue({
+      ...UNIDAD,
+      divisiones: [{ ...division, subdivisiones: [{ ...division.subdivisiones[0]!, areas: [] }] }],
+    });
+
+    render(<HierarchyView />);
+    await usuario.click(await screen.findByTestId("btn-eliminar-area-300"));
+    await usuario.click(screen.getByTestId("btn-confirmar-eliminar"));
+
+    await waitFor(() => expect(apiEstructura.eliminarNodo).toHaveBeenCalledWith("area", 300));
+    await waitFor(() => expect(screen.queryByTestId("nodo-area-300")).not.toBeInTheDocument());
+  });
+
+  it("CP-FE-07 (SNF-05): un Auditor Senior consulta el árbol pero no ve acciones de gestión", async () => {
+    sesion.usuario = { ...ADMIN, id: 3, nombre: "Carlos Morales", rol: "Auditor Senior" };
     sesion.esAdministrador = false;
 
     render(<HierarchyView />);
+    await screen.findByText("UDN-0001");
 
-    await waitFor(() => {
-      expect(screen.getByText("Banca Minorista")).toBeInTheDocument();
-    });
-
-    // El botón "+ Nueva Unidad de Negocio" NO debe existir
+    expect(screen.getByText("Nómina")).toBeInTheDocument();
     expect(screen.queryByTestId("btn-nueva-unidad")).not.toBeInTheDocument();
-
-    // Los botones de eliminación NO deben existir
     expect(screen.queryByTestId("btn-eliminar-unidad-10")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-eliminar-area-300")).not.toBeInTheDocument();
+    expect(apiEstructura.listarResponsables).not.toHaveBeenCalled();
   });
 
-  it("permite a un Jefe de Auditoría gestionar unidades de negocio", async () => {
-    sesion.usuario = {
-      id: 2,
-      nombre: "María García",
-      correo: "m.garcia@expedite.com",
-      rol: "Jefe de Auditoría",
-      estado: "active",
-      ultimoAcceso: null,
-      permisos: ["Ver Dashboard"],
-    };
+  it("CP-FE-08: muestra los riesgos de cada subdivisión y el resumen por rama, sin pestaña de explorador", async () => {
+    render(<HierarchyView />);
+    await screen.findByText("UDN-0001");
+
+    expect(screen.queryByText(/Explorador de Riesgos/i)).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("riesgo-900")).getByText("Pagos de nómina sin doble aprobación")).toBeInTheDocument();
+    expect(within(screen.getByTestId("riesgo-900")).getByText("Control: Doble aprobación del layout")).toBeInTheDocument();
+    expect(within(screen.getByTestId("riesgo-901")).getByText("Bajo")).toBeInTheDocument();
+    // La división y la unidad suman los riesgos de su rama y se colorean con el peor nivel.
+    expect(screen.getByTestId("riesgos-division-100")).toHaveTextContent("2");
+    expect(screen.getByTestId("riesgos-division-100")).toHaveAttribute("title", expect.stringContaining("Alto"));
+    expect(screen.getByTestId("riesgos-unidad-10")).toHaveTextContent("2");
+    expect(screen.queryByTestId("riesgos-area-300")).not.toBeInTheDocument();
+  });
+
+  it("CP-FE-09: el filtro por nivel oculta las ramas sin riesgos de ese nivel y la búsqueda encuentra riesgos", async () => {
+    const usuario = userEvent.setup();
+    render(<HierarchyView />);
+    await screen.findByText("UDN-0001");
+
+    await usuario.selectOptions(screen.getByLabelText(/Filtrar por nivel de riesgo/i), "Crítico");
+    expect(screen.getByTestId("sin-coincidencias")).toBeInTheDocument();
+
+    await usuario.selectOptions(screen.getByLabelText(/Filtrar por nivel de riesgo/i), "Alto");
+    expect(screen.getByTestId("nodo-subdivision-200")).toBeInTheDocument();
+
+    await usuario.selectOptions(screen.getByLabelText(/Filtrar por nivel de riesgo/i), "");
+    await usuario.type(screen.getByLabelText(/Buscar en el catálogo/i), "proveedores");
+    expect(screen.getByTestId("riesgo-901")).toBeInTheDocument();
+    expect(screen.queryByTestId("riesgo-900")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nodo-area-300")).not.toBeInTheDocument();
+  });
+
+  it("permite a un Jefe de Auditoría gestionar la estructura", async () => {
+    sesion.usuario = { ...ADMIN, id: 2, nombre: "María García", rol: "Jefe de Auditoría" };
     sesion.esAdministrador = false;
 
     render(<HierarchyView />);
 
-    await waitFor(() => {
-      expect(screen.getByTestId("btn-nueva-unidad")).toBeInTheDocument();
-      expect(screen.getByTestId("btn-eliminar-unidad-10")).toBeInTheDocument();
-    });
+    expect(await screen.findByTestId("btn-nueva-unidad")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-eliminar-unidad-10")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-agregar-subdivision-200")).toBeInTheDocument();
   });
 });
