@@ -27,7 +27,7 @@ cd backend && corepack pnpm test
 SQL_TEST_SERVER=<servidor> SQL_TEST_DATABASE=<base> SQL_TEST_USER=<usuario> \
 SQL_TEST_PASSWORD=<contraseña> corepack pnpm test
 
-# Frontend (10 de la vista y 6 de la lógica de riesgos)
+# Frontend (13 de la vista, 6 de la lógica de riesgos y 4 de la navegación por tarjetas)
 npm test
 ```
 
@@ -37,8 +37,9 @@ npm test
 |---|---|---|
 | Backend: `test/estructura.test.ts` | 26 | 26 aprobadas |
 | Base de datos: `test/estructura.integracion.test.ts` | 9 | Omitidas (sin conexión) |
-| Frontend: `HierarchyView.test.tsx` | 10 | 10 aprobadas |
+| Frontend: `HierarchyView.test.tsx` | 13 | 13 aprobadas |
 | Frontend: `domain/estructura/riesgos.test.ts` | 6 | 6 aprobadas |
+| Frontend: `domain/estructura/navegacion.test.ts` | 4 | 4 aprobadas |
 
 ## Casos de prueba
 
@@ -60,6 +61,10 @@ npm test
 | CP-EST-07 | Catálogo | Riesgos registrados en una subdivisión | Aparecen bajo su subdivisión con nivel y control; la división y la unidad muestran el total y el color del peor nivel | API, BD, vista |
 | CP-EST-07 | Catálogo | Filtro por nivel y búsqueda | Solo quedan las ramas con un riesgo de ese nivel o peor; la búsqueda encuentra unidades, nodos y riesgos sin importar acentos | Vista |
 | CP-EST-07 | AC3 | Eliminar una subdivisión con riesgos registrados | `409 HIJOS_EXISTENTES` | API, BD |
+| CP-EST-08 | Catálogo | "Ver en tarjetas" de una unidad | Se recorre unidad › división › subdivisión con tarjetas (franja por peor nivel, conteos, riesgos); en la subdivisión, áreas y tabla de riesgos; las migas regresan al catálogo | Vista |
+| CP-EST-08 | AC1 | Alta de un nodo desde las tarjetas | Se crea en el nivel abierto y la tarjeta aparece sin salir de la vista | Vista |
+| CP-EST-08 | SNF-05 | Usuario sin rol de gestión en las tarjetas | Navega, pero no ve agregar, editar ni eliminar | Vista |
+| — | Navegación | Ruta con un nodo eliminado | Cae al ancestro más profundo que existe; si se elimina la unidad, vuelve al catálogo | Vista |
 | — | BD | Nivel de riesgo fuera de la escala | La base lo rechaza (`ck_risk_library_level`) | BD |
 | — | BD | Migraciones repetidas | 017 y 018 se aplican dos veces sin duplicar datos; cada nivel exige su padre | BD |
 

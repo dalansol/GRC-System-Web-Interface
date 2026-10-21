@@ -302,6 +302,90 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     expect(screen.queryByTestId("nodo-area-300")).not.toBeInTheDocument();
   });
 
+  describe("Vista de tarjetas de una unidad", () => {
+    it("CP-FE-10: recorre unidad › división › subdivisión y vuelve al catálogo por las migas", async () => {
+      const usuario = userEvent.setup();
+      render(<HierarchyView />);
+      await usuario.click(await screen.findByTestId("btn-ver-tarjetas-10"));
+
+      // Nivel unidad: encabezado con gerente y tarjeta de la división con conteos y riesgos.
+      const detalle = screen.getByTestId("detalle-tarjetas");
+      expect(within(detalle).getByRole("heading", { name: "UDN-0001" })).toBeInTheDocument();
+      expect(within(detalle).getByText("María García")).toBeInTheDocument();
+      const tarjetaDivision = screen.getByTestId("tarjeta-division-100");
+      expect(tarjetaDivision).toHaveTextContent("1 subdivisión · 1 área");
+      expect(tarjetaDivision).toHaveTextContent("2");
+      expect(screen.queryByLabelText(/Buscar en el catálogo/i)).not.toBeInTheDocument();
+
+      // Nivel división.
+      await usuario.click(within(tarjetaDivision).getByRole("button", { name: "Abrir DIVISION-0001" }));
+      expect(screen.getByTestId("tarjeta-subdivision-200")).toHaveTextContent("México");
+
+      // Nivel subdivisión: áreas como tarjetas y la tabla de riesgos.
+      await usuario.click(screen.getByRole("button", { name: "Abrir SUBDIVISION-0001" }));
+      expect(screen.getByTestId("tarjeta-area-300")).toHaveTextContent("Nómina");
+      const tabla = screen.getByTestId("tabla-riesgos");
+      expect(within(tabla).getByText("Pagos de nómina sin doble aprobación")).toBeInTheDocument();
+      expect(within(tabla).getByText("Doble aprobación del layout")).toBeInTheDocument();
+      expect(within(tabla).getByText("Sin procedimiento")).toBeInTheDocument();
+
+      // Migas: a la unidad y luego al catálogo (el árbol vuelve a verse).
+      const migas = screen.getByRole("navigation", { name: /Ruta en la jerarquía/i });
+      await usuario.click(within(migas).getByRole("button", { name: "UDN-0001" }));
+      expect(screen.getByTestId("tarjeta-division-100")).toBeInTheDocument();
+      await usuario.click(within(screen.getByRole("navigation", { name: /Ruta en la jerarquía/i })).getByRole("button", { name: /Catálogo/ }));
+      expect(screen.getByTestId("nodo-area-300")).toBeInTheDocument();
+      expect(screen.queryByTestId("detalle-tarjetas")).not.toBeInTheDocument();
+    });
+
+    it("CP-FE-11: agrega una subdivisión desde las tarjetas y la tarjeta nueva aparece", async () => {
+      const usuario = userEvent.setup();
+      vi.mocked(apiEstructura.crearNodo).mockResolvedValue({ id: 201, nombre: "SUBDIVISION-0002", padreId: 100 });
+      const division = UNIDAD.divisiones[0]!;
+      vi.mocked(apiEstructura.obtenerUnidadPorId).mockResolvedValue({
+        ...UNIDAD,
+        divisiones: [
+          {
+            ...division,
+            subdivisiones: [
+              ...division.subdivisiones,
+              { id: 201, nombre: "SUBDIVISION-0002", pais: null, divisionId: 100, areas: [], riesgos: [] },
+            ],
+          },
+        ],
+      });
+
+      render(<HierarchyView />);
+      await usuario.click(await screen.findByTestId("btn-ver-tarjetas-10"));
+      await usuario.click(screen.getByRole("button", { name: "Abrir DIVISION-0001" }));
+      await usuario.click(screen.getByTestId("btn-agregar-tarjetas"));
+      await usuario.type(screen.getByLabelText(/^Nombre/i), "SUBDIVISION-0002");
+      await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+
+      await waitFor(() =>
+        expect(apiEstructura.crearNodo).toHaveBeenCalledWith("subdivision", { nombre: "SUBDIVISION-0002", pais: null, padreId: 100 }),
+      );
+      expect(await screen.findByTestId("tarjeta-subdivision-201")).toBeInTheDocument();
+      // Sigue en la división, no regresa al catálogo.
+      expect(screen.getByTestId("detalle-tarjetas")).toBeInTheDocument();
+    });
+
+    it("CP-FE-12: un Auditor Senior navega las tarjetas sin acciones de gestión", async () => {
+      sesion.usuario = { ...ADMIN, id: 3, nombre: "Carlos Morales", rol: "Auditor Senior" };
+      sesion.esAdministrador = false;
+      const usuario = userEvent.setup();
+
+      render(<HierarchyView />);
+      await usuario.click(await screen.findByTestId("btn-ver-tarjetas-10"));
+
+      expect(screen.queryByTestId("btn-agregar-tarjetas")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("btn-eliminar-encabezado")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("btn-eliminar-tarjeta-division-100")).not.toBeInTheDocument();
+      await usuario.click(screen.getByRole("button", { name: "Abrir DIVISION-0001" }));
+      expect(screen.getByTestId("tarjeta-subdivision-200")).toBeInTheDocument();
+    });
+  });
+
   it("permite a un Jefe de Auditoría gestionar la estructura", async () => {
     sesion.usuario = { ...ADMIN, id: 2, nombre: "María García", rol: "Jefe de Auditoría" };
     sesion.esAdministrador = false;

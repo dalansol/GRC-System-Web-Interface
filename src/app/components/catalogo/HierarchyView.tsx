@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  LayoutGrid,
   Edit2,
   GitBranch,
   Landmark,
@@ -13,7 +14,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  ShieldAlert,
   Trash2,
   User,
 } from "lucide-react";
@@ -26,13 +26,12 @@ import {
   type Riesgo,
   type UnidadNegocio,
 } from "../../api/estructura";
-import { COLOR_NIVEL_RIESGO, filtrarUnidades, nivelMaximo, riesgosDeNodo } from "../../domain/estructura/riesgos";
-import {
-  useEstructuraViewModel,
-  type AltaNodoContexto,
-  type NodoSeleccionado,
-} from "../../domain/estructura/useEstructuraViewModel";
+import { resolverRuta, type RutaCatalogo } from "../../domain/estructura/navegacion";
+import { filtrarUnidades, riesgosDeNodo } from "../../domain/estructura/riesgos";
+import { useEstructuraViewModel, type NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
+import { DetalleUnidadTarjetas } from "./DetalleUnidadTarjetas";
+import { COLOR_NIVEL, FilaRiesgo, ResumenRiesgos, type AccionesGestion } from "./piezasCatalogo";
 import { ModalEditarEntidad } from "./ModalEditarEntidad";
 import { ModalRegistrarNodo } from "./ModalRegistrarNodo";
 import { ModalRegistrarUnidad } from "./ModalRegistrarUnidad";
@@ -41,53 +40,7 @@ import { ModalRegistrarUnidad } from "./ModalRegistrarUnidad";
 // con los riesgos registrados en cada subdivisión. Las divisiones y unidades muestran la
 // suma de su rama y se colorean con el peor nivel (lógica en domain/estructura/riesgos.ts).
 
-// ── Riesgos ────────────────────────────────────────────────────────────────────
-
-/** Punto de color y conteo de riesgos de una rama; no pinta nada si no hay riesgos. */
-function ResumenRiesgos({ riesgos, testId }: { riesgos: Riesgo[]; testId?: string }) {
-  if (riesgos.length === 0) return null;
-  const color = COLOR_NIVEL_RIESGO[nivelMaximo(riesgos) ?? "sin"];
-  return (
-    <span
-      data-testid={testId}
-      title={`${riesgos.length} ${riesgos.length === 1 ? "riesgo" : "riesgos"} · peor nivel: ${nivelMaximo(riesgos) ?? "sin nivel"}`}
-      className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded font-mono flex-shrink-0 ${color.insignia}`}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full ${color.punto}`} />
-      {riesgos.length}
-    </span>
-  );
-}
-
-function FilaRiesgo({ riesgo, profundidad }: { riesgo: Riesgo; profundidad: number }) {
-  const color = COLOR_NIVEL_RIESGO[riesgo.nivel ?? "sin"];
-  return (
-    <div
-      data-testid={`riesgo-${riesgo.id}`}
-      className="flex items-start gap-1.5 py-1 pr-1 text-xs"
-      style={{ paddingLeft: `${profundidad * 16 + 20}px` }}
-    >
-      <ShieldAlert size={12} className="text-slate-400 flex-shrink-0 mt-0.5" />
-      <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${color.insignia}`}>
-        {riesgo.nivel ?? "Sin nivel"}
-      </span>
-      <div className="min-w-0">
-        <p className="text-slate-800 truncate">{riesgo.nombre}</p>
-        {riesgo.procedimientoControl && (
-          <p className="text-[10px] text-muted-foreground truncate">Control: {riesgo.procedimientoControl}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Jerarquía organizacional de una unidad ─────────────────────────────────────
-
-const COLOR_NIVEL: Record<NivelNodo, string> = {
-  division: "bg-emerald-100 text-emerald-700",
-  subdivision: "bg-sky-100 text-sky-700",
-  area: "bg-amber-100 text-amber-700",
-};
+// ── Jerarquía organizacional de una unidad (vista de árbol) ────────────────────
 
 /** Nodo de la jerarquía con sus hijos y los riesgos de su rama, ya armados para pintarlo. */
 interface NodoVista {
@@ -117,14 +70,10 @@ function nodosDeUnidad(unidad: UnidadNegocio): NodoVista[] {
   }));
 }
 
-interface AccionesNodo {
-  puedeGestionar: boolean;
+interface AccionesNodo extends AccionesGestion {
   /** Con un filtro activo todo se muestra expandido para que se vean las coincidencias. */
   estaAbierto: (clave: string) => boolean;
   onAlternar: (clave: string) => void;
-  onAgregar: (contexto: AltaNodoContexto) => void;
-  onEditar: (nodo: NodoSeleccionado) => void;
-  onEliminar: (nodo: NodoSeleccionado) => void;
 }
 
 function NodoFila({
@@ -264,6 +213,11 @@ export function HierarchyView() {
     recargar,
   } = useEstructuraViewModel();
 
+  // Vista de tarjetas de una unidad: la ruta guarda ids y se resuelve contra los datos frescos.
+  // Si la unidad abierta se elimina, resolverRuta devuelve null y se vuelve al catálogo.
+  const [ruta, setRuta] = useState<RutaCatalogo | null>(null);
+  const resuelta = useMemo(() => resolverRuta(unidades, ruta), [unidades, ruta]);
+
   // Búsqueda y filtro por nivel de riesgo.
   const [texto, setTexto] = useState("");
   const [nivel, setNivel] = useState<NivelRiesgo | null>(null);
@@ -385,186 +339,217 @@ export function HierarchyView() {
 
       {/* ── Contenido Principal ── */}
       <div className="flex-1 overflow-auto p-6">
-        <div className="space-y-5 max-w-7xl mx-auto">
-          {/* Barra de búsqueda y filtro por nivel de riesgo */}
-          <div className="flex flex-col md:flex-row md:items-center gap-3">
-            <div className="relative flex-1 max-w-lg">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                placeholder="Buscar unidad, división, subdivisión, área o riesgo…"
-                aria-label="Buscar en el catálogo"
-                className="w-full bg-white border border-border rounded-lg pl-9 pr-4 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
-              />
-            </div>
-            <select
-              value={nivel ?? ""}
-              onChange={(e) => setNivel((e.target.value || null) as NivelRiesgo | null)}
-              aria-label="Filtrar por nivel de riesgo"
-              className="bg-white border border-border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
-            >
-              {OPCIONES_NIVEL.map((o) => (
-                <option key={o.valor} value={o.valor}>
-                  {o.etiqueta}
-                </option>
-              ))}
-            </select>
-            <span className="text-xs font-medium text-muted-foreground bg-white px-2.5 py-1.5 rounded-md border border-border md:ml-auto">
-              <span className="font-bold text-foreground">{unidades.length}</span> unidades ·{" "}
-              <span className="font-bold text-foreground">{totalRiesgos}</span> riesgos registrados
-            </span>
+        {resuelta ? (
+          <div className="max-w-7xl mx-auto">
+            <DetalleUnidadTarjetas
+              resuelta={resuelta}
+              onNavegar={setRuta}
+              acciones={accionesNodo}
+              onEditarUnidad={abrirEditarUnidad}
+              onEliminarUnidad={(u) => pedirEliminacion({ tipo: "unidad", item: u })}
+            />
           </div>
-
-          {cargando ? (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {[1, 2].map((i) => (
-                <div key={i} className="h-44 rounded-xl bg-white border border-border/70 p-5 animate-pulse shadow-sm" />
-              ))}
-            </div>
-          ) : unidades.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-xl border border-dashed border-border p-8 shadow-sm">
-              <Building2 size={40} className="mx-auto text-muted-foreground/40 mb-3" />
-              <h3 className="text-base font-bold text-foreground">No hay unidades de negocio registradas</h3>
-              <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1 mb-4">
-                Registra la primera unidad de negocio y su jerarquía para establecer el marco de referencia de
-                auditoría.
-              </p>
-              {puedeGestionar && (
-                <button
-                  onClick={abrirModalAlta}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-sm"
-                >
-                  <Plus size={14} />
-                  Registrar Unidad de Negocio
-                </button>
-              )}
-            </div>
-          ) : unidadesVisibles.length === 0 ? (
-            <div
-              data-testid="sin-coincidencias"
-              className="text-center py-12 bg-white rounded-xl border border-dashed border-border p-8 shadow-sm"
-            >
-              <Search size={32} className="mx-auto text-muted-foreground/40 mb-3" />
-              <h3 className="text-sm font-bold text-foreground">Ninguna rama coincide con el filtro</h3>
-              <button
-                onClick={() => {
-                  setTexto("");
-                  setNivel(null);
-                }}
-                className="text-xs font-semibold text-primary hover:underline mt-2"
+        ) : (
+          <div className="space-y-5 max-w-7xl mx-auto">
+            {/* Barra de búsqueda y filtro por nivel de riesgo */}
+            <div className="flex flex-col md:flex-row md:items-center gap-3">
+              <div className="relative flex-1 max-w-lg">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={texto}
+                  onChange={(e) => setTexto(e.target.value)}
+                  placeholder="Buscar unidad, división, subdivisión, área o riesgo…"
+                  aria-label="Buscar en el catálogo"
+                  className="w-full bg-white border border-border rounded-lg pl-9 pr-4 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
+                />
+              </div>
+              <select
+                value={nivel ?? ""}
+                onChange={(e) => setNivel((e.target.value || null) as NivelRiesgo | null)}
+                aria-label="Filtrar por nivel de riesgo"
+                className="bg-white border border-border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
               >
-                Limpiar filtros
-              </button>
+                {OPCIONES_NIVEL.map((o) => (
+                  <option key={o.valor} value={o.valor}>
+                    {o.etiqueta}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs font-medium text-muted-foreground bg-white px-2.5 py-1.5 rounded-md border border-border md:ml-auto">
+                <span className="font-bold text-foreground">{unidades.length}</span> unidades ·{" "}
+                <span className="font-bold text-foreground">{totalRiesgos}</span> riesgos registrados
+              </span>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5" data-testid="lista-unidades">
-              {unidadesVisibles.map((u) => (
-                <Card
-                  key={u.id}
-                  className="p-5 bg-white border border-border hover:border-primary/40 transition-all rounded-xl shadow-sm flex flex-col justify-between group"
+
+            {cargando ? (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {[1, 2].map((i) => (
+                  <div key={i} className="h-44 rounded-xl bg-white border border-border/70 p-5 animate-pulse shadow-sm" />
+                ))}
+              </div>
+            ) : unidades.length === 0 ? (
+              <div className="text-center py-16 bg-white rounded-xl border border-dashed border-border p-8 shadow-sm">
+                <Building2 size={40} className="mx-auto text-muted-foreground/40 mb-3" />
+                <h3 className="text-base font-bold text-foreground">No hay unidades de negocio registradas</h3>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1 mb-4">
+                  Registra la primera unidad de negocio y su jerarquía para establecer el marco de referencia de
+                  auditoría.
+                </p>
+                {puedeGestionar && (
+                  <button
+                    onClick={abrirModalAlta}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-sm"
+                  >
+                    <Plus size={14} />
+                    Registrar Unidad de Negocio
+                  </button>
+                )}
+              </div>
+            ) : unidadesVisibles.length === 0 ? (
+              <div
+                data-testid="sin-coincidencias"
+                className="text-center py-12 bg-white rounded-xl border border-dashed border-border p-8 shadow-sm"
+              >
+                <Search size={32} className="mx-auto text-muted-foreground/40 mb-3" />
+                <h3 className="text-sm font-bold text-foreground">Ninguna rama coincide con el filtro</h3>
+                <button
+                  onClick={() => {
+                    setTexto("");
+                    setNivel(null);
+                  }}
+                  className="text-xs font-semibold text-primary hover:underline mt-2"
                 >
-                  <div>
-                    {/* Cabecera de la tarjeta */}
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-700">
-                            Unidad de Negocio
-                          </span>
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            {u.periodoFiscalNombre}
-                          </span>
-                          <ResumenRiesgos riesgos={riesgosDeNodo(u)} testId={`riesgos-unidad-${u.id}`} />
-                        </div>
-                        <h3 className="text-base font-bold text-foreground truncate group-hover:text-primary transition-colors">
-                          {u.nombre}
-                        </h3>
-                      </div>
-
-                      {/* Acciones de gestión para la unidad */}
-                      {puedeGestionar && (
-                        <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => abrirEditarUnidad(u)}
-                            title="Editar unidad"
-                            className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            onClick={() => pedirEliminacion({ tipo: "unidad", item: u })}
-                            title="Eliminar unidad"
-                            data-testid={`btn-eliminar-unidad-${u.id}`}
-                            className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Responsable y departamento de auditoría */}
-                    <div className="flex flex-col gap-1.5 text-xs text-muted-foreground mb-4 pb-3 border-b border-border/60">
-                      <div className="flex items-center gap-2">
-                        <User size={13} className="text-slate-400 flex-shrink-0" />
-                        <span className="truncate">
-                          Gerente responsable: <span className="font-semibold text-foreground">{u.responsableNombre}</span>
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Landmark size={13} className="text-slate-400 flex-shrink-0" />
-                        <span className="truncate">
-                          Departamento de auditoría:{" "}
-                          <span className="font-semibold text-foreground">
-                            {u.departamentoAuditoriaNombre ?? "Sin asignar"}
-                          </span>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Jerarquía: división → subdivisión → área, con riesgos por subdivisión */}
+                  Limpiar filtros
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-5" data-testid="lista-unidades">
+                {unidadesVisibles.map((u) => (
+                  <Card
+                    key={u.id}
+                    className="p-5 bg-white border border-border hover:border-primary/40 transition-all rounded-xl shadow-sm flex flex-col justify-between group"
+                  >
                     <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5">
-                          <GitBranch size={13} className="text-muted-foreground" />
-                          Divisiones ({u.divisiones.length})
-                        </span>
+                      {/* Cabecera de la tarjeta */}
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-700">
+                              Unidad de Negocio
+                            </span>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              {u.periodoFiscalNombre}
+                            </span>
+                            <ResumenRiesgos riesgos={riesgosDeNodo(u)} testId={`riesgos-unidad-${u.id}`} />
+                          </div>
+                          <h3 className="text-base font-bold text-foreground truncate">
+                            <button
+                              type="button"
+                              onClick={() => setRuta({ unidadId: u.id })}
+                              title="Ver la jerarquía en tarjetas"
+                              className="hover:text-primary hover:underline transition-colors text-left"
+                            >
+                              {u.nombre}
+                            </button>
+                          </h3>
+                        </div>
+
+                        {/* Acciones de gestión para la unidad */}
                         {puedeGestionar && (
-                          <button
-                            onClick={() =>
-                              abrirAltaNodo({ nivel: "division", padreId: u.id, padreNombre: u.nombre, unidadId: u.id })
-                            }
-                            title="Agregar división a la unidad"
-                            data-testid={`btn-agregar-division-unidad-${u.id}`}
-                            className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
-                          >
-                            <Plus size={12} />
-                            Agregar
-                          </button>
+                          <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => abrirEditarUnidad(u)}
+                              title="Editar unidad"
+                              className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              onClick={() => pedirEliminacion({ tipo: "unidad", item: u })}
+                              title="Eliminar unidad"
+                              data-testid={`btn-eliminar-unidad-${u.id}`}
+                              className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         )}
                       </div>
 
-                      {u.divisiones.length === 0 ? (
-                        <p className="text-[11px] text-muted-foreground italic">Sin divisiones registradas.</p>
-                      ) : (
-                        <div className="rounded-lg border border-slate-100 bg-white p-1.5">
-                          {nodosDeUnidad(u).map((n) => (
-                            <NodoFila key={`${n.nivel}-${n.id}`} nodo={n} unidadId={u.id} profundidad={0} acciones={accionesNodo} />
-                          ))}
+                      {/* Responsable y departamento de auditoría */}
+                      <div className="flex flex-col gap-1.5 text-xs text-muted-foreground mb-4 pb-3 border-b border-border/60">
+                        <div className="flex items-center gap-2">
+                          <User size={13} className="text-slate-400 flex-shrink-0" />
+                          <span className="truncate">
+                            Gerente responsable: <span className="font-semibold text-foreground">{u.responsableNombre}</span>
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                        <div className="flex items-center gap-2">
+                          <Landmark size={13} className="text-slate-400 flex-shrink-0" />
+                          <span className="truncate">
+                            Departamento de auditoría:{" "}
+                            <span className="font-semibold text-foreground">
+                              {u.departamentoAuditoriaNombre ?? "Sin asignar"}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
 
-                  <div className="text-[11px] text-muted-foreground/70 mt-4 pt-2 border-t border-border/40">
-                    ID: #{u.id} • Creada en {new Date(u.creadoEn).toLocaleDateString()}
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
+                      {/* Jerarquía: división → subdivisión → área, con riesgos por subdivisión */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                            <GitBranch size={13} className="text-muted-foreground" />
+                            Divisiones ({u.divisiones.length})
+                          </span>
+                          {puedeGestionar && (
+                            <button
+                              onClick={() =>
+                                abrirAltaNodo({ nivel: "division", padreId: u.id, padreNombre: u.nombre, unidadId: u.id })
+                              }
+                              title="Agregar división a la unidad"
+                              data-testid={`btn-agregar-division-unidad-${u.id}`}
+                              className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1"
+                            >
+                              <Plus size={12} />
+                              Agregar
+                            </button>
+                          )}
+                        </div>
+
+                        {u.divisiones.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground italic">Sin divisiones registradas.</p>
+                        ) : (
+                          <div className="rounded-lg border border-slate-100 bg-white p-1.5">
+                            {nodosDeUnidad(u).map((n) => (
+                              <NodoFila key={`${n.nivel}-${n.id}`} nodo={n} unidadId={u.id} profundidad={0} acciones={accionesNodo} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground/70 mt-4 pt-2 border-t border-border/40">
+                      <span>
+                        ID: #{u.id} • Creada en {new Date(u.creadoEn).toLocaleDateString()}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setRuta({ unidadId: u.id })}
+                        data-testid={`btn-ver-tarjetas-${u.id}`}
+                        className="flex items-center gap-1 font-semibold text-primary hover:underline"
+                      >
+                        <LayoutGrid size={12} />
+                        Ver en tarjetas
+                        <ChevronRight size={12} />
+                      </button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Modal de Alta de Unidad de Negocio (AC1 & AC2) ── */}

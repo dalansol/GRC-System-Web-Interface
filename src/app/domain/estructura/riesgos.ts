@@ -16,13 +16,20 @@ export const ORDEN_NIVEL: Record<NivelRiesgo, number> = Object.fromEntries(
   NIVELES_RIESGO.map((nivel, i) => [nivel, i]),
 ) as Record<NivelRiesgo, number>;
 
-/** Clases de color por nivel; "sin" es para riesgos sin nivel asignado. */
-export const COLOR_NIVEL_RIESGO: Record<NivelRiesgo | "sin", { punto: string; insignia: string }> = {
-  Crítico: { punto: "bg-red-500", insignia: "text-red-700 bg-red-50 border border-red-200" },
-  Alto: { punto: "bg-orange-500", insignia: "text-orange-700 bg-orange-50 border border-orange-200" },
-  Medio: { punto: "bg-amber-400", insignia: "text-amber-700 bg-amber-50 border border-amber-200" },
-  Bajo: { punto: "bg-emerald-500", insignia: "text-emerald-700 bg-emerald-50 border border-emerald-200" },
-  sin: { punto: "bg-slate-300", insignia: "text-slate-500 bg-slate-50 border border-slate-200" },
+/**
+ * Clases de color por nivel: `punto` e `insignia` para el resumen, `franja` para el borde
+ * superior de las tarjetas. "sin" es para riesgos sin nivel o ramas sin riesgos.
+ */
+export const COLOR_NIVEL_RIESGO: Record<NivelRiesgo | "sin", { punto: string; insignia: string; franja: string }> = {
+  Crítico: { punto: "bg-red-500", insignia: "text-red-700 bg-red-50 border border-red-200", franja: "bg-red-500" },
+  Alto: { punto: "bg-orange-500", insignia: "text-orange-700 bg-orange-50 border border-orange-200", franja: "bg-orange-500" },
+  Medio: { punto: "bg-amber-400", insignia: "text-amber-700 bg-amber-50 border border-amber-200", franja: "bg-amber-400" },
+  Bajo: {
+    punto: "bg-emerald-500",
+    insignia: "text-emerald-700 bg-emerald-50 border border-emerald-200",
+    franja: "bg-emerald-500",
+  },
+  sin: { punto: "bg-slate-300", insignia: "text-slate-500 bg-slate-50 border border-slate-200", franja: "bg-slate-300" },
 };
 
 /** El peor nivel de una lista de riesgos, o null si ninguno tiene nivel. */
