@@ -5,6 +5,7 @@ import { resolverRuta, resumenHijos } from "./navegacion";
 const UNIDAD: UnidadNegocio = {
   id: 1,
   nombre: "UDN-0001",
+  nombreReal: null,
   responsableId: 2,
   responsableNombre: "María García",
   periodoFiscalId: 1,
@@ -17,11 +18,13 @@ const UNIDAD: UnidadNegocio = {
     {
       id: 10,
       nombre: "DIVISION-0001",
+      nombreReal: null,
       unidadNegocioId: 1,
       subdivisiones: [
         {
           id: 100,
           nombre: "SUBDIVISION-0001",
+          nombreReal: null,
           pais: "México",
           divisionId: 10,
           riesgos: [],
@@ -30,7 +33,7 @@ const UNIDAD: UnidadNegocio = {
             { id: 1001, nombre: "Compras", subdivisionId: 100 },
           ],
         },
-        { id: 101, nombre: "SUBDIVISION-0002", pais: null, divisionId: 10, riesgos: [], areas: [] },
+        { id: 101, nombre: "SUBDIVISION-0002", nombreReal: null, pais: null, divisionId: 10, riesgos: [], areas: [] },
       ],
     },
   ],

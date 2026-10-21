@@ -76,6 +76,7 @@ const RESPONSABLES: Responsable[] = [
 const UNIDAD: UnidadNegocio = {
   id: 10,
   nombre: "UDN-0001",
+  nombreReal: null,
   responsableId: 2,
   responsableNombre: "María García",
   periodoFiscalId: 2,
@@ -88,11 +89,13 @@ const UNIDAD: UnidadNegocio = {
     {
       id: 100,
       nombre: "DIVISION-0001",
+      nombreReal: null,
       unidadNegocioId: 10,
       subdivisiones: [
         {
           id: 200,
           nombre: "SUBDIVISION-0001",
+          nombreReal: null,
           pais: "México",
           divisionId: 100,
           areas: [{ id: 300, nombre: "Nómina", subdivisionId: 200 }],
@@ -189,7 +192,7 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
 
   it("CP-FE-04 (AC1): agrega una subdivisión con país dentro de una división y refresca la unidad", async () => {
     const usuario = userEvent.setup();
-    vi.mocked(apiEstructura.crearNodo).mockResolvedValue({ id: 201, nombre: "SUBDIVISION-0002", padreId: 100 });
+    vi.mocked(apiEstructura.crearNodo).mockResolvedValue({ id: 201, nombre: "SUBDIVISION-0002", nombreReal: null, padreId: 100 });
     const division = UNIDAD.divisiones[0]!;
     vi.mocked(apiEstructura.obtenerUnidadPorId).mockResolvedValue({
       ...UNIDAD,
@@ -198,7 +201,7 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
           ...division,
           subdivisiones: [
             ...division.subdivisiones,
-            { id: 201, nombre: "SUBDIVISION-0002", pais: "KFS RTR", divisionId: 100, areas: [], riesgos: [] },
+            { id: 201, nombre: "SUBDIVISION-0002", nombreReal: null, pais: "KFS RTR", divisionId: 100, areas: [], riesgos: [] },
           ],
         },
       ],
@@ -431,7 +434,7 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
 
     it("CP-FE-11: agrega una subdivisión desde las tarjetas y la tarjeta nueva aparece", async () => {
       const usuario = userEvent.setup();
-      vi.mocked(apiEstructura.crearNodo).mockResolvedValue({ id: 201, nombre: "SUBDIVISION-0002", padreId: 100 });
+      vi.mocked(apiEstructura.crearNodo).mockResolvedValue({ id: 201, nombre: "SUBDIVISION-0002", nombreReal: null, padreId: 100 });
       const division = UNIDAD.divisiones[0]!;
       vi.mocked(apiEstructura.obtenerUnidadPorId).mockResolvedValue({
         ...UNIDAD,
@@ -440,7 +443,7 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
             ...division,
             subdivisiones: [
               ...division.subdivisiones,
-              { id: 201, nombre: "SUBDIVISION-0002", pais: null, divisionId: 100, areas: [], riesgos: [] },
+              { id: 201, nombre: "SUBDIVISION-0002", nombreReal: null, pais: null, divisionId: 100, areas: [], riesgos: [] },
             ],
           },
         ],

@@ -12,6 +12,7 @@ const riesgo = (id: number, nombre: string, nivel: Riesgo["nivel"]): Riesgo => (
 const unidad = (id: number, nombre: string, subdivisiones: Array<[string, Riesgo[], string[]]>): UnidadNegocio => ({
   id,
   nombre,
+  nombreReal: null,
   responsableId: 1,
   responsableNombre: "María García",
   periodoFiscalId: 1,
@@ -24,10 +25,12 @@ const unidad = (id: number, nombre: string, subdivisiones: Array<[string, Riesgo
     {
       id: id * 10,
       nombre: `DIVISION-${id}`,
+      nombreReal: null,
       unidadNegocioId: id,
       subdivisiones: subdivisiones.map(([nombreSub, riesgos, areas], i) => ({
         id: id * 100 + i,
         nombre: nombreSub,
+        nombreReal: null,
         pais: null,
         divisionId: id * 10,
         riesgos,

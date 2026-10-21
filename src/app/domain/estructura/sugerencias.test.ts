@@ -7,6 +7,7 @@ const UNIDADES: UnidadNegocio[] = [
   {
     id: 1,
     nombre: "UDN-0004",
+    nombreReal: null,
     responsableId: 2,
     responsableNombre: "María García",
     periodoFiscalId: 1,
@@ -19,11 +20,13 @@ const UNIDADES: UnidadNegocio[] = [
       {
         id: 10,
         nombre: "DIVISION-0009",
+        nombreReal: null,
         unidadNegocioId: 1,
         subdivisiones: [
           {
             id: 100,
             nombre: "SUBDIVISION-0007",
+            nombreReal: null,
             pais: "Región Andina",
             divisionId: 10,
             riesgos: [],
@@ -32,7 +35,7 @@ const UNIDADES: UnidadNegocio[] = [
               { id: 1001, nombre: "Área inventada", subdivisionId: 100 },
             ],
           },
-          { id: 101, nombre: "SUBDIVISION-0032", pais: "México", divisionId: 10, riesgos: [], areas: [] },
+          { id: 101, nombre: "SUBDIVISION-0032", nombreReal: null, pais: "México", divisionId: 10, riesgos: [], areas: [] },
         ],
       },
     ],
