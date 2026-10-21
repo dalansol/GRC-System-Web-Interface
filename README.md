@@ -87,7 +87,9 @@ en cuyo caso usa sus datos de prueba. Las rutas reales de hallazgos solo existen
 con `DATA_MODE=sql`, porque necesitan la base de datos. Los planes de acción de los
 hallazgos (`/api/planes-accion`) sí funcionan en memoria: usan los hallazgos y
 auditorías de prueba, y el portal del auditado muestra los planes asignados al
-usuario con sesión (por ejemplo `c.morales@expedite.com` ya tiene uno).
+usuario con sesión (por ejemplo `c.morales@expedite.com` ya tiene uno). El Catálogo
+Organizacional también funciona en memoria y arranca con la estructura del Consolidado de
+FEMSA (6 unidades, 343 áreas y 251 riesgos, anonimizados) a cargo de `m.garcia@expedite.com`.
 
 ### Problemas comunes
 
@@ -106,7 +108,8 @@ cd backend && corepack pnpm test  # backend
 ```
 
 Las pruebas del backend contra una base de datos real se omiten si no hay conexión
-configurada; `docs/pruebas/usuarios-roles.md` explica cómo activarlas.
+configurada; `docs/pruebas/usuarios-roles.md` y `docs/pruebas/estructura-organizacional.md`
+explican cómo activarlas.
 
 ## Variables de entorno
 
@@ -145,7 +148,8 @@ Base de datos (detalle en `docs/diseno/base-de-datos.md`):
    (plantilla en `backend/.env.example`).
 2. Aplicar el esquema desde `backend/`: `corepack pnpm db:migrar`. Corre, en orden, los
    scripts de `backend/sql/` que le falten a la base. Con `--datos-prueba` agrega
-   hallazgos y controles de prueba (solo desarrollo), y con `--admin-nombre` y
+   hallazgos, controles y la estructura organizacional del Consolidado con sus riesgos
+   (solo desarrollo; necesita un Jefe de Auditoría activo), y con `--admin-nombre` y
    `--admin-correo` da de alta al primer Administrador.
 
 Inicio de sesión, cuando exista el registro de aplicación en Entra ID:

@@ -1,5 +1,9 @@
 // Tipos y validaciones de la estructura organizacional (SF-03).
-// Jerarquía: unidad de negocio → división → subdivisión → área. Solo el nombre de la
+// Jerarquía: unidad de negocio → división → subdivisión → área.
+// El `nombre` es el código del Consolidado (UDN-0003, DIVISION-0002…) y es el que se
+// valida y busca; `nombreReal` (KOF, Brasil…) es opcional y solo se muestra. No existe
+// en el área: su nombre ya es el real.
+// Solo el nombre de la
 // unidad es único; los demás niveles repiten nombres legítimamente (el id los distingue).
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -51,6 +55,7 @@ export interface Area {
 export interface Subdivision {
   id: number;
   nombre: string;
+  nombreReal: string | null;
   pais: string | null;
   divisionId: number;
   areas: Area[];
@@ -60,6 +65,7 @@ export interface Subdivision {
 export interface Division {
   id: number;
   nombre: string;
+  nombreReal: string | null;
   unidadNegocioId: number;
   subdivisiones: Subdivision[];
 }
@@ -67,6 +73,7 @@ export interface Division {
 export interface UnidadNegocio {
   id: number;
   nombre: string;
+  nombreReal: string | null;
   responsableId: number;
   responsableNombre: string;
   periodoFiscalId: number;
@@ -82,6 +89,8 @@ export interface UnidadNegocio {
 export interface NodoPlano {
   id: number;
   nombre: string;
+  /** Siempre null en el área. */
+  nombreReal: string | null;
   padreId: number;
 }
 
@@ -89,18 +98,22 @@ export interface NodoPlano {
 
 export interface AltaUnidadInput {
   nombre: string;
+  nombreReal: string | null;
   responsableId: number;
   departamentoAuditoriaId: number | null;
 }
 
 export interface EdicionUnidadInput {
   nombre?: string;
+  nombreReal?: string | null;
   responsableId?: number;
   departamentoAuditoriaId?: number | null;
 }
 
 export interface AltaNodoInput {
   nombre: string;
+  /** Solo para división y subdivisión. */
+  nombreReal: string | null;
   padreId: number;
   /** Solo para subdivisión. */
   pais: string | null;
@@ -108,6 +121,7 @@ export interface AltaNodoInput {
 
 export interface EdicionNodoInput {
   nombre?: string;
+  nombreReal?: string | null;
   pais?: string | null;
 }
 
@@ -152,6 +166,18 @@ function validarNombre(valor: unknown, nivel: NivelEstructura): string | null {
   return null;
 }
 
+/** El nombre real es opcional: vacío o null lo quita. */
+function validarNombreReal(valor: unknown): string | null {
+  if (valor === undefined || valor === null) return null;
+  if (typeof valor !== "string") return "El nombre real no es válido.";
+  if (valor.trim().length > MAX_NOMBRE) return `El nombre real no puede superar los ${MAX_NOMBRE} caracteres.`;
+  return null;
+}
+
+function textoOpcional(valor: unknown): string | null {
+  return typeof valor === "string" && valor.trim().length > 0 ? valor.trim() : null;
+}
+
 function validarDepartamento(valor: unknown): string | null {
   if (valor !== undefined && valor !== null && !idValido(valor)) return "El departamento de auditoría no es válido.";
   return null;
@@ -172,6 +198,7 @@ function paisNormalizado(valor: unknown): string | null {
 export function validarAltaUnidad(datos: Record<string, unknown>): string | null {
   return (
     validarNombre(datos.nombre, "unidad") ??
+    validarNombreReal(datos.nombreReal) ??
     (idValido(datos.responsableId) ? null : "El gerente responsable es obligatorio.") ??
     validarDepartamento(datos.departamentoAuditoriaId)
   );
@@ -179,13 +206,14 @@ export function validarAltaUnidad(datos: Record<string, unknown>): string | null
 
 /** Valida los campos de edición de unidad de negocio. */
 export function validarEdicionUnidad(datos: Record<string, unknown>): string | null {
-  if (datos.nombre === undefined && datos.responsableId === undefined && datos.departamentoAuditoriaId === undefined) {
-    return "Debes enviar al menos un campo a editar.";
-  }
+  const llaves = ["nombre", "nombreReal", "responsableId", "departamentoAuditoriaId"];
+  if (!llaves.some((llave) => datos[llave] !== undefined)) return "Debes enviar al menos un campo a editar.";
   if (datos.nombre !== undefined) {
     const error = validarNombre(datos.nombre, "unidad");
     if (error) return error;
   }
+  const errorNombreReal = validarNombreReal(datos.nombreReal);
+  if (errorNombreReal) return errorNombreReal;
   if (datos.responsableId !== undefined && !idValido(datos.responsableId)) {
     return "El gerente responsable no es válido.";
   }
@@ -196,6 +224,7 @@ export function validarEdicionUnidad(datos: Record<string, unknown>): string | n
 export function validarAltaNodo(nivel: NivelNodo, datos: Record<string, unknown>): string | null {
   return (
     validarNombre(datos.nombre, nivel) ??
+    (nivel !== "area" ? validarNombreReal(datos.nombreReal) : null) ??
     (idValido(datos.padreId) ? null : `Debes indicar ${ETIQUETA[NIVEL_PADRE[nivel]]} a la que pertenece.`) ??
     (nivel === "subdivision" ? validarPais(datos.pais) : null)
   );
@@ -204,9 +233,14 @@ export function validarAltaNodo(nivel: NivelNodo, datos: Record<string, unknown>
 /** Valida la edición de división, subdivisión o área. */
 export function validarEdicionNodo(nivel: NivelNodo, datos: Record<string, unknown>): string | null {
   const editaPais = nivel === "subdivision" && datos.pais !== undefined;
-  if (datos.nombre === undefined && !editaPais) return "Debes enviar al menos un campo a editar.";
+  const editaNombreReal = nivel !== "area" && datos.nombreReal !== undefined;
+  if (datos.nombre === undefined && !editaPais && !editaNombreReal) return "Debes enviar al menos un campo a editar.";
   if (datos.nombre !== undefined) {
     const error = validarNombre(datos.nombre, nivel);
+    if (error) return error;
+  }
+  if (editaNombreReal) {
+    const error = validarNombreReal(datos.nombreReal);
     if (error) return error;
   }
   return editaPais ? validarPais(datos.pais) : null;
@@ -241,6 +275,7 @@ export function validarEdicionPeriodo(datos: Record<string, unknown>, actual: Pe
 export function normalizarAltaUnidad(datos: Record<string, unknown>): AltaUnidadInput {
   return {
     nombre: (datos.nombre as string).trim(),
+    nombreReal: textoOpcional(datos.nombreReal),
     responsableId: datos.responsableId as number,
     departamentoAuditoriaId: (datos.departamentoAuditoriaId as number | null | undefined) ?? null,
   };
@@ -249,6 +284,7 @@ export function normalizarAltaUnidad(datos: Record<string, unknown>): AltaUnidad
 export function normalizarEdicionUnidad(datos: Record<string, unknown>): EdicionUnidadInput {
   const edicion: EdicionUnidadInput = {};
   if (datos.nombre !== undefined) edicion.nombre = (datos.nombre as string).trim();
+  if (datos.nombreReal !== undefined) edicion.nombreReal = textoOpcional(datos.nombreReal);
   if (datos.responsableId !== undefined) edicion.responsableId = datos.responsableId as number;
   if (datos.departamentoAuditoriaId !== undefined) {
     edicion.departamentoAuditoriaId = datos.departamentoAuditoriaId as number | null;
@@ -259,6 +295,7 @@ export function normalizarEdicionUnidad(datos: Record<string, unknown>): Edicion
 export function normalizarAltaNodo(nivel: NivelNodo, datos: Record<string, unknown>): AltaNodoInput {
   return {
     nombre: (datos.nombre as string).trim(),
+    nombreReal: nivel !== "area" ? textoOpcional(datos.nombreReal) : null,
     padreId: datos.padreId as number,
     pais: nivel === "subdivision" ? paisNormalizado(datos.pais) : null,
   };
@@ -267,6 +304,7 @@ export function normalizarAltaNodo(nivel: NivelNodo, datos: Record<string, unkno
 export function normalizarEdicionNodo(nivel: NivelNodo, datos: Record<string, unknown>): EdicionNodoInput {
   const edicion: EdicionNodoInput = {};
   if (datos.nombre !== undefined) edicion.nombre = (datos.nombre as string).trim();
+  if (nivel !== "area" && datos.nombreReal !== undefined) edicion.nombreReal = textoOpcional(datos.nombreReal);
   if (nivel === "subdivision" && datos.pais !== undefined) edicion.pais = paisNormalizado(datos.pais);
   return edicion;
 }

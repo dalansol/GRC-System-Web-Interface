@@ -1,6 +1,7 @@
 import { ShieldAlert } from "lucide-react";
 import type { NivelNodo, Riesgo } from "../../api/estructura";
 import type { AltaNodoContexto, NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
+import { nombreVisible, tieneNombreReal, type ConNombre } from "../../domain/estructura/nombres";
 import { COLOR_NIVEL_RIESGO, nivelMaximo } from "../../domain/estructura/riesgos";
 
 // Piezas compartidas por la vista de árbol (HierarchyView) y la de tarjetas
@@ -45,6 +46,31 @@ export function ChipNivelRiesgo({ riesgo }: { riesgo: Riesgo }) {
     <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${color.insignia}`}>
       {riesgo.nivel ?? "Sin nivel"}
     </span>
+  );
+}
+
+/** Nombre real (o el código si no hay) y, si hay nombre real, el código aparte en pequeño. */
+export function NombreConCodigo({ nodo }: { nodo: ConNombre }) {
+  return (
+    <>
+      {nombreVisible(nodo)}
+      {tieneNombreReal(nodo) && (
+        <span className="ml-1.5 font-mono text-[10px] font-normal text-muted-foreground" title="Código en el Consolidado">
+          {nodo.nombre}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** Lista de sugerencias para un input (el usuario puede escribir otro valor). */
+export function Sugerencias({ id, opciones }: { id: string; opciones: readonly string[] }) {
+  return (
+    <datalist id={id} data-testid={id}>
+      {opciones.map((o) => (
+        <option key={o} value={o} />
+      ))}
+    </datalist>
   );
 }
 

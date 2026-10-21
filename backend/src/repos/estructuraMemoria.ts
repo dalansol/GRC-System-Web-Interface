@@ -20,11 +20,14 @@ import {
   type UnidadNegocio,
 } from "../domain/estructura.js";
 import { ErrorNombreDuplicado, type RepositorioEstructura } from "./estructura.js";
+import type { SemillaUnidad } from "./semillaEstructura.js";
 import type { RepositorioUsuarios } from "./repositorio.js";
 
 interface FilaNodo extends NodoPlano {
   pais: string | null;
 }
+
+const plano = (n: FilaNodo): NodoPlano => ({ id: n.id, nombre: n.nombre, nombreReal: n.nombreReal, padreId: n.padreId });
 
 export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   private periodos: PeriodoFiscal[] = [
@@ -40,6 +43,7 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   private unidades: Array<{
     id: number;
     nombre: string;
+    nombreReal: string | null;
     responsableId: number;
     periodoFiscalId: number;
     departamentoAuditoriaId: number | null;
@@ -68,6 +72,46 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
     const registrado = { id: this.sigId.riesgo++, ...riesgo };
     this.riesgos.push({ ...registrado, subdivisionId });
     return registrado;
+  }
+
+  /**
+   * Carga una jerarquía completa (ver semillaEstructura.ts). La usa server.ts en
+   * DATA_MODE=memoria; las pruebas parten vacías.
+   */
+  sembrar(semilla: SemillaUnidad[], responsableId: number): void {
+    const periodo = this.periodos.find((p) => p.activo)?.id ?? this.periodos[0]?.id ?? 0;
+    for (const u of semilla) {
+      const unidadId = this.sigId.unidad++;
+      const departamento = this.departamentos.find((d) => d.nombre === u.departamento);
+      this.unidades.push({
+        id: unidadId,
+        nombre: u.nombre,
+        nombreReal: u.nombreReal,
+        responsableId,
+        periodoFiscalId: periodo,
+        departamentoAuditoriaId: departamento?.id ?? null,
+        creadoPor: responsableId,
+        creadoEn: new Date().toISOString(),
+      });
+      for (const d of u.divisiones) {
+        const divisionId = this.sigId.division++;
+        this.nodos.division.push({ id: divisionId, nombre: d.nombre, nombreReal: d.nombreReal, padreId: unidadId, pais: null });
+        for (const s of d.subdivisiones) {
+          const subdivisionId = this.sigId.subdivision++;
+          this.nodos.subdivision.push({
+            id: subdivisionId,
+            nombre: s.nombre,
+            nombreReal: s.nombreReal,
+            padreId: divisionId,
+            pais: s.pais,
+          });
+          for (const area of s.areas) {
+            this.nodos.area.push({ id: this.sigId.area++, nombre: area, nombreReal: null, padreId: subdivisionId, pais: null });
+          }
+          for (const riesgo of s.riesgos) this.registrarRiesgo(subdivisionId, riesgo);
+        }
+      }
+    }
   }
 
   limpiarPeriodos(): void {
@@ -129,12 +173,14 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
       .map((d) => ({
         id: d.id,
         nombre: d.nombre,
+        nombreReal: d.nombreReal,
         unidadNegocioId: unidadId,
         subdivisiones: this.nodos.subdivision
           .filter((s) => s.padreId === d.id)
           .map((s) => ({
             id: s.id,
             nombre: s.nombre,
+            nombreReal: s.nombreReal,
             pais: s.pais,
             divisionId: d.id,
             areas: this.nodos.area
@@ -160,6 +206,7 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
     return {
       id: u.id,
       nombre: u.nombre,
+      nombreReal: u.nombreReal,
       responsableId: u.responsableId,
       responsableNombre: await this.resolverNombreUsuario(u.responsableId),
       periodoFiscalId: u.periodoFiscalId,
@@ -201,20 +248,26 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
 
   async buscarNodo(nivel: NivelNodo, id: number): Promise<NodoPlano | null> {
     const nodo = this.nodos[nivel].find((n) => n.id === id);
-    return nodo ? { id: nodo.id, nombre: nodo.nombre, padreId: nodo.padreId } : null;
+    return nodo ? plano(nodo) : null;
   }
 
   async crearNodo(nivel: NivelNodo, datos: AltaNodoInput): Promise<NodoPlano> {
-    const nodo = { id: this.sigId[nivel]++, nombre: datos.nombre, padreId: datos.padreId, pais: datos.pais };
+    const nodo = {
+      id: this.sigId[nivel]++,
+      nombre: datos.nombre,
+      nombreReal: nivel === "area" ? null : datos.nombreReal,
+      padreId: datos.padreId,
+      pais: datos.pais,
+    };
     this.nodos[nivel].push(nodo);
-    return { id: nodo.id, nombre: nodo.nombre, padreId: nodo.padreId };
+    return plano(nodo);
   }
 
   async editarNodo(nivel: NivelNodo, id: number, campos: EdicionNodoInput): Promise<NodoPlano | null> {
     const nodo = this.nodos[nivel].find((n) => n.id === id);
     if (!nodo) return null;
     Object.assign(nodo, campos);
-    return { id: nodo.id, nombre: nodo.nombre, padreId: nodo.padreId };
+    return plano(nodo);
   }
 
   async eliminarNodo(nivel: NivelNodo, id: number): Promise<void> {

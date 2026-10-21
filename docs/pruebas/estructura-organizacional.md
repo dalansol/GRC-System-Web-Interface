@@ -2,7 +2,7 @@
 
 Requisitos: SF-03, SF-05 (parcial) · Módulo: Planeación · Historia: `ParametrizacionHU.md`
 Diseño: [`docs/diseno/base-de-datos.md`](../diseno/base-de-datos.md) (`017_jerarquia_organizacional.sql`)
-Fecha de ejecución: 2026-10-20
+Fecha de ejecución: 2026-10-21
 
 ## Alcance y ambiente
 
@@ -12,7 +12,7 @@ Fecha de ejecución: 2026-10-20
 | Base de datos | Vitest + `pg` | PostgreSQL con `SQL_TEST_*` (esquema propio `prueba_estructura`) |
 | Vista (frontend) | Vitest + Testing Library | API simulada |
 
-**No verificado todavía:** las 9 pruebas de base de datos (`estructura.integracion.test.ts`)
+**No verificado todavía:** las 10 pruebas de base de datos (`estructura.integracion.test.ts`)
 no se han corrido porque no había conexión `SQL_TEST_*` configurada; tampoco la
 migración 017 contra la base compartida de Supabase ni una prueba punta a punta en el
 navegador.
@@ -20,14 +20,14 @@ navegador.
 ## Cómo ejecutar
 
 ```bash
-# Backend (26 pruebas de estructura; las 9 de base de datos se omiten sin conexión)
+# Backend (30 pruebas de estructura; las 10 de base de datos se omiten sin conexión)
 cd backend && corepack pnpm test
 
 # Incluyendo la base de datos: aplica los scripts dos veces en el esquema prueba_estructura
 SQL_TEST_SERVER=<servidor> SQL_TEST_DATABASE=<base> SQL_TEST_USER=<usuario> \
 SQL_TEST_PASSWORD=<contraseña> corepack pnpm test
 
-# Frontend (13 de la vista, 6 de la lógica de riesgos y 4 de la navegación por tarjetas)
+# Frontend (14 de la vista, 6 de riesgos, 4 de navegación y 4 de sugerencias)
 npm test
 ```
 
@@ -35,11 +35,13 @@ npm test
 
 | Suite | Pruebas | Resultado |
 |---|---|---|
-| Backend: `test/estructura.test.ts` | 26 | 26 aprobadas |
-| Base de datos: `test/estructura.integracion.test.ts` | 9 | Omitidas (sin conexión) |
-| Frontend: `HierarchyView.test.tsx` | 13 | 13 aprobadas |
+| Backend: `test/estructura.test.ts` | 30 | 30 aprobadas |
+| Base de datos: `test/estructura.integracion.test.ts` | 10 | Omitidas (sin conexión) |
+| Frontend: `HierarchyView.test.tsx` | 17 | 17 aprobadas |
+| Frontend: `domain/estructura/nombres.test.ts` | 2 | 2 aprobadas |
 | Frontend: `domain/estructura/riesgos.test.ts` | 6 | 6 aprobadas |
 | Frontend: `domain/estructura/navegacion.test.ts` | 4 | 4 aprobadas |
+| Frontend: `domain/estructura/sugerencias.test.ts` | 4 | 4 aprobadas |
 
 ## Casos de prueba
 
@@ -65,6 +67,9 @@ npm test
 | CP-EST-08 | AC1 | Alta de un nodo desde las tarjetas | Se crea en el nivel abierto y la tarjeta aparece sin salir de la vista | Vista |
 | CP-EST-08 | SNF-05 | Usuario sin rol de gestión en las tarjetas | Navega, pero no ve agregar, editar ni eliminar | Vista |
 | — | Navegación | Ruta con un nodo eliminado | Cae al ancestro más profundo que existe; si se elimina la unidad, vuelve al catálogo | Vista |
+| CP-EST-09 | Catálogo | Alta de unidad, nodo o país | Los campos sugieren el siguiente código libre (UDN-, DIVISION-, SUBDIVISION-), las áreas y los países del Consolidado; se puede escribir otro valor | Vista |
+| CP-EST-10 | Catálogo | Nombre real opcional en unidad, división y subdivisión | Se muestra en lugar del código, con el código aparte; la búsqueda encuentra por ambos; vacío lo quita; no cuenta para el nombre único; el área no lo pide | API, BD, vista |
+| — | Datos de prueba | Semilla del Consolidado en memoria y en la base | 6 unidades, 40 subdivisiones, 343 áreas y 251 riesgos | API, BD |
 | — | BD | Nivel de riesgo fuera de la escala | La base lo rechaza (`ck_risk_library_level`) | BD |
 | — | BD | Migraciones repetidas | 017 y 018 se aplican dos veces sin duplicar datos; cada nivel exige su padre | BD |
 

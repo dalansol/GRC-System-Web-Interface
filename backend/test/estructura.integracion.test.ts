@@ -30,6 +30,8 @@ const SCRIPTS = [
   "018_seed_jerarquia.sql",
   "019_riesgos_jerarquia.sql",
   "020_seed_riesgos.sql",
+  "021_nombres_reales.sql",
+  "022_seed_nombres_reales.sql",
 ];
 
 const script = (nombre: string) => readFile(new URL(`../sql/${nombre}`, import.meta.url), "utf8");
@@ -80,25 +82,47 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
     expect((await repo.listarPeriodos()).filter((p) => p.activo)).toHaveLength(1);
   });
 
-  it("el seed deja dos unidades con su rama y departamento, sin duplicarse al repetirse", async () => {
+  it("el seed carga la jerarquía del Consolidado sin duplicarse al repetirse", async () => {
     const unidades = await repo.listarUnidades();
     expect(unidades.map((u) => [u.nombre, u.departamentoAuditoriaNombre])).toEqual([
       ["UDN-0001", "Retail & Spin"],
+      ["UDN-0002", "Retail & Spin"],
       ["UDN-0003", "Beverage"],
+      ["UDN-0004", "Retail & Spin"],
+      ["UDN-0005", "Retail & Spin"],
+      ["UDN-0006", "Beverage"],
     ]);
-    const areas = unidades[0]!.divisiones[0]!.subdivisiones[0]!.areas.map((a) => a.nombre);
-    expect(areas).toEqual(["Nómina", "Recursos Humanos"]);
+    const conteo = (await pool.query<{ divisiones: number; subdivisiones: number; areas: number; riesgos: number }>(
+      `SELECT (SELECT COUNT(*)::int FROM division) AS divisiones, (SELECT COUNT(*)::int FROM business) AS subdivisiones,
+              (SELECT COUNT(*)::int FROM area) AS areas, (SELECT COUNT(*)::int FROM risk_register) AS riesgos`,
+    )).rows[0];
+    expect(conteo).toEqual({ divisiones: 12, subdivisiones: 40, areas: 343, riesgos: 251 });
   });
 
-  it("los riesgos de prueba cuelgan de su subdivisión con su nivel", async () => {
-    const unidad = (await repo.listarUnidades()).find((u) => u.nombre === "UDN-0003")!;
-    const riesgos = unidad.divisiones[0]!.subdivisiones[0]!.riesgos;
-    expect(riesgos.map((r) => [r.nombre, r.nivel])).toEqual([
-      ["Diferencias de inventario en CEDIS", "Crítico"],
-      ["Ruptura de cadena de frío", "Medio"],
+  it("los nombres reales inferidos se muestran junto al código", async () => {
+    const unidades = await repo.listarUnidades();
+    expect(unidades.map((u) => [u.nombre, u.nombreReal])).toEqual([
+      ["UDN-0001", "Deportes"],
+      ["UDN-0002", "Spin"],
+      ["UDN-0003", "KOF"],
+      ["UDN-0004", "Proximidad y Salud"],
+      ["UDN-0005", "FEMSA Servicios"],
+      ["UDN-0006", "Tragetta"],
     ]);
-    expect(riesgos[0]!.procedimientoControl).toBe("Conteo cíclico mensual conciliado contra el sistema");
-    expect(await repo.tieneHijos("subdivision", unidad.divisiones[0]!.subdivisiones[0]!.id)).toBe(true);
+    const europa = unidades[3]!.divisiones.find((d) => d.nombre === "DIVISION-0005");
+    expect(europa?.nombreReal).toBe("Europa");
+    expect(unidades.flatMap((u) => u.divisiones).filter((d) => d.nombreReal === null).map((d) => d.nombre)).toEqual([
+      "DIVISION-0011",
+    ]);
+  });
+
+  it("los riesgos de prueba cuelgan de su subdivisión con nivel y procedimiento", async () => {
+    const unidad = (await repo.listarUnidades()).find((u) => u.nombre === "UDN-0001")!;
+    const subdivision = unidad.divisiones[0]!.subdivisiones[0]!;
+    expect(subdivision.nombre).toBe("SUBDIVISION-0012");
+    expect(subdivision.riesgos.length).toBeGreaterThan(0);
+    expect(subdivision.riesgos.every((r) => r.nivel !== null && r.procedimientoControl?.startsWith("CP-"))).toBe(true);
+    expect(await repo.tieneHijos("subdivision", subdivision.id)).toBe(true);
   });
 
   it("el nivel de riesgo solo acepta la escala definida", async () => {
@@ -113,14 +137,14 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
 
   it("el nombre de la unidad es único sin importar mayúsculas", async () => {
     const periodo = (await repo.obtenerPeriodoActivo())!.id;
-    await repo.crearUnidad({ nombre: "Proximidad y Salud", responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId);
+    await repo.crearUnidad({ nombre: "Proximidad y Salud", nombreReal: null, responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId);
     await expect(
-      repo.crearUnidad({ nombre: "PROXIMIDAD Y SALUD", responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId),
+      repo.crearUnidad({ nombre: "PROXIMIDAD Y SALUD", nombreReal: null, responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId),
     ).rejects.toBeInstanceOf(ErrorNombreDuplicado);
   });
 
   it("solo los planes Aprobado o En Ejecución bloquean cada nivel de la rama", async () => {
-    const unidad = (await repo.listarUnidades()).find((u) => u.nombre === "UDN-0003")!;
+    const unidad = (await repo.listarUnidades()).find((u) => u.nombre === "UDN-0006")!;
     const division = unidad.divisiones[0]!;
     const subdivision = division.subdivisiones[0]!;
     const area = subdivision.areas[0]!;
@@ -149,7 +173,7 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
 
   it("eliminar una subdivisión conserva su entidad auditable sin vínculo", async () => {
     const unidad = (await repo.listarUnidades()).find((u) => u.nombre === "UDN-0001")!;
-    const subdivision = await repo.crearNodo("subdivision", { nombre: "SUBDIVISION-0099", padreId: unidad.divisiones[0]!.id, pais: null });
+    const subdivision = await repo.crearNodo("subdivision", { nombre: "SUBDIVISION-0099", nombreReal: null, padreId: unidad.divisiones[0]!.id, pais: null });
     const entidad = await uno(`INSERT INTO audit_entity (name, business_id) VALUES ('Entidad', $1) RETURNING id`, [subdivision.id]);
 
     expect(await repo.tieneHijos("subdivision", subdivision.id)).toBe(false);

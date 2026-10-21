@@ -161,6 +161,7 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     await waitFor(() => {
       expect(apiEstructura.crearUnidadNegocio).toHaveBeenCalledWith({
         nombre: "UDN-0003",
+        nombreReal: null,
         responsableId: 2,
         departamentoAuditoriaId: 2,
       });
@@ -207,13 +208,14 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     await usuario.click(await screen.findByTestId("btn-agregar-division-100"));
 
     expect(screen.getByText("Agregar Subdivisión")).toBeInTheDocument();
-    await usuario.type(screen.getByLabelText(/^Nombre/i), "SUBDIVISION-0002");
+    await usuario.type(screen.getByLabelText(/^Nombre\s*\*/i), "SUBDIVISION-0002");
     await usuario.type(screen.getByLabelText(/País o región/i), "KFS RTR");
     await usuario.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => {
       expect(apiEstructura.crearNodo).toHaveBeenCalledWith("subdivision", {
         nombre: "SUBDIVISION-0002",
+        nombreReal: null,
         pais: "KFS RTR",
         padreId: 100,
       });
@@ -302,6 +304,95 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     expect(screen.queryByTestId("nodo-area-300")).not.toBeInTheDocument();
   });
 
+  it("CP-FE-13: los formularios sugieren áreas, países y el siguiente código del Consolidado", async () => {
+    const usuario = userEvent.setup();
+    const valores = (id: string) =>
+      Array.from(screen.getByTestId(id).querySelectorAll("option")).map((o) => o.getAttribute("value"));
+
+    render(<HierarchyView />);
+
+    // Área: catálogo de FEMSA sin las que ya tiene la subdivisión.
+    await usuario.click(await screen.findByTestId("btn-agregar-subdivision-200"));
+    expect(screen.getByLabelText(/^Nombre\s*\*/i)).toHaveAttribute("list", "nodo-nombre-sugerencias");
+    const areas = valores("nodo-nombre-sugerencias");
+    expect(areas[0]).toBe("Administración y Finanzas");
+    expect(areas).toContain("Fletes");
+    expect(areas).not.toContain("Nómina");
+    await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    // Subdivisión: siguiente código y países del Consolidado.
+    await usuario.click(screen.getByTestId("btn-agregar-division-100"));
+    expect(valores("nodo-nombre-sugerencias")).toEqual(["SUBDIVISION-0002"]);
+    expect(valores("nodo-pais-sugerencias")).toEqual(expect.arrayContaining(["México", "Brasil", "KFS RTR"]));
+    await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    // Unidad: siguiente UDN libre.
+    await usuario.click(screen.getByTestId("btn-nueva-unidad"));
+    expect(valores("unidad-nombre-sugerencias")).toEqual(["UDN-0002"]);
+  });
+
+  describe("Nombre real junto al código", () => {
+    const KOF: UnidadNegocio = {
+      ...UNIDAD,
+      nombre: "UDN-0003",
+      nombreReal: "KOF",
+      divisiones: [{ ...UNIDAD.divisiones[0]!, nombreReal: "Latam" }],
+    };
+
+    it("CP-FE-14: muestra el nombre real con el código aparte en el árbol, las tarjetas y las migas", async () => {
+      const usuario = userEvent.setup();
+      vi.mocked(apiEstructura.listarUnidades).mockResolvedValue([KOF]);
+      render(<HierarchyView />);
+
+      const titulo = await screen.findByRole("button", { name: /KOF/ });
+      expect(titulo).toHaveTextContent("KOFUDN-0003");
+      expect(within(screen.getByTestId("nodo-division-100")).getByText("Latam")).toBeInTheDocument();
+      expect(within(screen.getByTestId("nodo-division-100")).getByText("DIVISION-0001")).toBeInTheDocument();
+      // La subdivisión no tiene nombre real: se muestra solo su código.
+      expect(within(screen.getByTestId("nodo-subdivision-200")).getAllByText("SUBDIVISION-0001")).toHaveLength(1);
+
+      await usuario.click(screen.getByTestId("btn-ver-tarjetas-10"));
+      expect(screen.getByRole("button", { name: "Abrir Latam" })).toBeInTheDocument();
+      await usuario.click(screen.getByRole("button", { name: "Abrir Latam" }));
+      const migas = screen.getByRole("navigation", { name: /Ruta en la jerarquía/i });
+      expect(within(migas).getByRole("button", { name: "KOF" })).toBeInTheDocument();
+      expect(within(migas).getByRole("button", { name: "Latam" })).toBeInTheDocument();
+    });
+
+    it("CP-FE-15: la búsqueda encuentra por nombre real y por código", async () => {
+      const usuario = userEvent.setup();
+      vi.mocked(apiEstructura.listarUnidades).mockResolvedValue([KOF, UNIDAD]);
+      render(<HierarchyView />);
+      await screen.findByText("KOF");
+
+      await usuario.type(screen.getByLabelText(/Buscar en el catálogo/i), "kof");
+      expect(screen.getAllByTestId(/^btn-ver-tarjetas-/)).toHaveLength(1);
+      await usuario.clear(screen.getByLabelText(/Buscar en el catálogo/i));
+      await usuario.type(screen.getByLabelText(/Buscar en el catálogo/i), "UDN-0003");
+      expect(screen.getAllByTestId(/^btn-ver-tarjetas-/)).toHaveLength(1);
+    });
+
+    it("CP-FE-16: el alta de unidad y de división envía el nombre real; el área no lo pide", async () => {
+      const usuario = userEvent.setup();
+      vi.mocked(apiEstructura.crearUnidadNegocio).mockResolvedValue({ ...KOF, id: 30, divisiones: [] });
+      render(<HierarchyView />);
+
+      await usuario.click(await screen.findByTestId("btn-nueva-unidad"));
+      await usuario.type(screen.getByLabelText(/Nombre de la Unidad de Negocio/i), "UDN-0003");
+      await usuario.type(screen.getByLabelText(/Nombre real/i), " KOF ");
+      await usuario.selectOptions(screen.getByLabelText(/Gerente Responsable/i), "2");
+      await usuario.click(screen.getByRole("button", { name: /Guardar Unidad/i }));
+      await waitFor(() =>
+        expect(apiEstructura.crearUnidadNegocio).toHaveBeenCalledWith(
+          expect.objectContaining({ nombre: "UDN-0003", nombreReal: "KOF" }),
+        ),
+      );
+
+      await usuario.click(screen.getByTestId("btn-agregar-subdivision-200"));
+      expect(screen.queryByLabelText(/Nombre real/i)).not.toBeInTheDocument();
+    });
+  });
+
   describe("Vista de tarjetas de una unidad", () => {
     it("CP-FE-10: recorre unidad › división › subdivisión y vuelve al catálogo por las migas", async () => {
       const usuario = userEvent.setup();
@@ -359,11 +450,16 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
       await usuario.click(await screen.findByTestId("btn-ver-tarjetas-10"));
       await usuario.click(screen.getByRole("button", { name: "Abrir DIVISION-0001" }));
       await usuario.click(screen.getByTestId("btn-agregar-tarjetas"));
-      await usuario.type(screen.getByLabelText(/^Nombre/i), "SUBDIVISION-0002");
+      await usuario.type(screen.getByLabelText(/^Nombre\s*\*/i), "SUBDIVISION-0002");
       await usuario.click(screen.getByRole("button", { name: "Guardar" }));
 
       await waitFor(() =>
-        expect(apiEstructura.crearNodo).toHaveBeenCalledWith("subdivision", { nombre: "SUBDIVISION-0002", pais: null, padreId: 100 }),
+        expect(apiEstructura.crearNodo).toHaveBeenCalledWith("subdivision", {
+          nombre: "SUBDIVISION-0002",
+          nombreReal: null,
+          pais: null,
+          padreId: 100,
+        }),
       );
       expect(await screen.findByTestId("tarjeta-subdivision-201")).toBeInTheDocument();
       // Sigue en la división, no regresa al catálogo.

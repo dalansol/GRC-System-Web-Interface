@@ -35,8 +35,9 @@ const SCRIPTS = [
   "016_mantener_controles_al_eliminar_proceso.sql",
   "017_jerarquia_organizacional.sql",
   "019_riesgos_jerarquia.sql",
+  "021_nombres_reales.sql",
 ];
-const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql"];
+const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql", "022_seed_nombres_reales.sql"];
 
 const { values: opciones } = parseArgs({
   options: {

@@ -25,12 +25,14 @@ import {
   type UnidadNegocio,
 } from "../../api/estructura";
 import { useSesion } from "../../auth/SesionContext";
+import { nombreVisible } from "./nombres";
 
 /** Nodo de la jerarquía (división, subdivisión o área) junto con la unidad a la que pertenece. */
 export interface NodoSeleccionado {
   nivel: NivelNodo;
   id: number;
   nombre: string;
+  nombreReal?: string | null;
   pais?: string | null;
   unidadId: number;
 }
@@ -121,7 +123,7 @@ export function useEstructuraViewModel() {
     try {
       const nueva = await apiCrearUnidad(datos);
       setUnidades((prev) => [...prev, nueva].sort((a, b) => a.nombre.localeCompare(b.nombre)));
-      toast.success(`Unidad de negocio "${nueva.nombre}" creada exitosamente.`);
+      toast.success(`Unidad de negocio "${nombreVisible(nueva)}" creada exitosamente.`);
       cerrarModalAlta();
       return true;
     } catch (err) {
@@ -146,14 +148,18 @@ export function useEstructuraViewModel() {
     setErrorModalNodo(null);
   };
 
-  const guardarNuevoNodo = async (datos: { nombre: string; pais?: string | null }): Promise<boolean> => {
+  const guardarNuevoNodo = async (datos: {
+    nombre: string;
+    nombreReal?: string | null;
+    pais?: string | null;
+  }): Promise<boolean> => {
     if (!altaNodo) return false;
     setGuardando(true);
     setErrorModalNodo(null);
     try {
       const nodo = await apiCrearNodo(altaNodo.nivel, { ...datos, padreId: altaNodo.padreId });
       await refrescarUnidad(altaNodo.unidadId);
-      toast.success(`${ETIQUETA_NIVEL[altaNodo.nivel]} "${nodo.nombre}" agregada exitosamente.`);
+      toast.success(`${ETIQUETA_NIVEL[altaNodo.nivel]} "${nombreVisible(nodo)}" agregada exitosamente.`);
       cerrarAltaNodo();
       return true;
     } catch (err) {
@@ -229,7 +235,7 @@ export function useEstructuraViewModel() {
     try {
       await apiEliminarUnidad(unidad.id);
       setUnidades((prev) => prev.filter((u) => u.id !== unidad.id));
-      toast.success(`Unidad de negocio "${unidad.nombre}" eliminada exitosamente.`);
+      toast.success(`Unidad de negocio "${nombreVisible(unidad)}" eliminada exitosamente.`);
       return null;
     } catch (err) {
       const mensaje = mensajeDe(err, "Error al eliminar la unidad de negocio.");
@@ -242,7 +248,7 @@ export function useEstructuraViewModel() {
     try {
       await apiEliminarNodo(nodo.nivel, nodo.id);
       await refrescarUnidad(nodo.unidadId);
-      toast.success(`${ETIQUETA_NIVEL[nodo.nivel]} "${nodo.nombre}" eliminada exitosamente.`);
+      toast.success(`${ETIQUETA_NIVEL[nodo.nivel]} "${nombreVisible(nodo)}" eliminada exitosamente.`);
       return null;
     } catch (err) {
       const mensaje = mensajeDe(err, "Error al eliminar el elemento.");

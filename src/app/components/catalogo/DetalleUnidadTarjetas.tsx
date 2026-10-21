@@ -12,7 +12,8 @@ import { resumenHijos, type RutaCatalogo, type RutaResuelta } from "../../domain
 import { COLOR_NIVEL_RIESGO, nivelMaximo, riesgosDeNodo } from "../../domain/estructura/riesgos";
 import type { NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
-import { ChipNivelRiesgo, COLOR_NIVEL, ResumenRiesgos, type AccionesGestion } from "./piezasCatalogo";
+import { nombreVisible, type ConNombre } from "../../domain/estructura/nombres";
+import { ChipNivelRiesgo, COLOR_NIVEL, NombreConCodigo, ResumenRiesgos, type AccionesGestion } from "./piezasCatalogo";
 
 // Vista de tarjetas de una unidad de negocio (SF-03): se recorre la jerarquía un nivel a
 // la vez (unidad › división › subdivisión). En la subdivisión se muestran sus áreas y la
@@ -34,12 +35,12 @@ function Migas({ resuelta, onNavegar }: Pick<DetalleUnidadTarjetasProps, "resuel
   const { unidad, division, subdivision } = resuelta;
   const migas: Array<{ etiqueta: string; ruta: RutaCatalogo | null }> = [
     { etiqueta: "Catálogo", ruta: null },
-    { etiqueta: unidad.nombre, ruta: { unidadId: unidad.id } },
+    { etiqueta: nombreVisible(unidad), ruta: { unidadId: unidad.id } },
   ];
-  if (division) migas.push({ etiqueta: division.nombre, ruta: { unidadId: unidad.id, divisionId: division.id } });
+  if (division) migas.push({ etiqueta: nombreVisible(division), ruta: { unidadId: unidad.id, divisionId: division.id } });
   if (division && subdivision) {
     migas.push({
-      etiqueta: subdivision.nombre,
+      etiqueta: nombreVisible(subdivision),
       ruta: { unidadId: unidad.id, divisionId: division.id, subdivisionId: subdivision.id },
     });
   }
@@ -108,7 +109,7 @@ function BotonesGestion({
 function TarjetaNodo({
   nivel,
   id,
-  nombre,
+  nodo,
   pais,
   riesgos,
   resumen,
@@ -117,7 +118,7 @@ function TarjetaNodo({
 }: {
   nivel: NivelNodo;
   id: number;
-  nombre: string;
+  nodo: ConNombre;
   pais?: string | null;
   riesgos: Riesgo[];
   resumen?: string;
@@ -130,7 +131,9 @@ function TarjetaNodo({
       <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded inline-block mb-1.5 ${COLOR_NIVEL[nivel]}`}>
         {ETIQUETA_NIVEL[nivel]}
       </span>
-      <h4 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">{nombre}</h4>
+      <h4 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors truncate">
+        <NombreConCodigo nodo={nodo} />
+      </h4>
       {pais && (
         <p className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
           <MapPin size={11} />
@@ -148,7 +151,7 @@ function TarjetaNodo({
       <div className={`h-1.5 w-full ${franja}`} />
       <div className="p-4 flex-1 flex items-start gap-2">
         {onAbrir ? (
-          <button type="button" onClick={onAbrir} aria-label={`Abrir ${nombre}`} className="text-left flex-1 min-w-0">
+          <button type="button" onClick={onAbrir} aria-label={`Abrir ${nombreVisible(nodo)}`} className="text-left flex-1 min-w-0">
             {contenido}
           </button>
         ) : (
@@ -263,24 +266,26 @@ export function DetalleUnidadTarjetas({
   const { unidad, division, subdivision } = resuelta;
   const { puedeGestionar } = acciones;
 
-  const seleccion = (nivel: NivelNodo, nodo: { id: number; nombre: string; pais?: string | null }): NodoSeleccionado => ({
+  type NodoBase = { id: number; nombre: string; nombreReal?: string | null; pais?: string | null };
+  const seleccion = (nivel: NivelNodo, nodo: NodoBase): NodoSeleccionado => ({
     nivel,
     id: nodo.id,
     nombre: nodo.nombre,
+    nombreReal: nodo.nombreReal,
     pais: nodo.pais,
     unidadId: unidad.id,
   });
-  const gestionDe = (nivel: NivelNodo, nodo: { id: number; nombre: string; pais?: string | null }) =>
+  const gestionDe = (nivel: NivelNodo, nodo: NodoBase) =>
     puedeGestionar
       ? { onEditar: () => acciones.onEditar(seleccion(nivel, nodo)), onEliminar: () => acciones.onEliminar(seleccion(nivel, nodo)) }
       : undefined;
 
   // Nodo actual: el más profundo de la ruta.
-  const actual: { nivel: NivelNodo | "unidad"; nombre: string; riesgos: Riesgo[] } = subdivision
-    ? { nivel: "subdivision", nombre: subdivision.nombre, riesgos: subdivision.riesgos }
+  const actual: { nivel: NivelNodo | "unidad"; nodo: ConNombre; riesgos: Riesgo[] } = subdivision
+    ? { nivel: "subdivision", nodo: subdivision, riesgos: subdivision.riesgos }
     : division
-      ? { nivel: "division", nombre: division.nombre, riesgos: riesgosDeNodo(division) }
-      : { nivel: "unidad", nombre: unidad.nombre, riesgos: riesgosDeNodo(unidad) };
+      ? { nivel: "division", nodo: division, riesgos: riesgosDeNodo(division) }
+      : { nivel: "unidad", nodo: unidad, riesgos: riesgosDeNodo(unidad) };
 
   return (
     <div className="space-y-5" data-testid="detalle-tarjetas">
@@ -305,7 +310,9 @@ export function DetalleUnidadTarjetas({
               )}
               <ResumenRiesgos riesgos={actual.riesgos} testId="riesgos-encabezado" />
             </div>
-            <h2 className="text-lg font-bold text-foreground truncate">{actual.nombre}</h2>
+            <h2 className="text-lg font-bold text-foreground truncate">
+              <NombreConCodigo nodo={actual.nodo} />
+            </h2>
             {actual.nivel === "unidad" && (
               <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground mt-2">
                 <span className="flex items-center gap-1.5">
@@ -359,7 +366,12 @@ export function DetalleUnidadTarjetas({
                 etiqueta={ETIQUETA_NIVEL.subdivision}
                 testId="btn-agregar-tarjetas"
                 onClick={() =>
-                  acciones.onAgregar({ nivel: "subdivision", padreId: division.id, padreNombre: division.nombre, unidadId: unidad.id })
+                  acciones.onAgregar({
+                    nivel: "subdivision",
+                    padreId: division.id,
+                    padreNombre: nombreVisible(division),
+                    unidadId: unidad.id,
+                  })
                 }
               />
             )
@@ -371,7 +383,7 @@ export function DetalleUnidadTarjetas({
                 key={s.id}
                 nivel="subdivision"
                 id={s.id}
-                nombre={s.nombre}
+                nodo={s}
                 pais={s.pais}
                 riesgos={s.riesgos}
                 resumen={resumenHijos(s)}
@@ -391,7 +403,9 @@ export function DetalleUnidadTarjetas({
               <BotonAgregar
                 etiqueta={ETIQUETA_NIVEL.division}
                 testId="btn-agregar-tarjetas"
-                onClick={() => acciones.onAgregar({ nivel: "division", padreId: unidad.id, padreNombre: unidad.nombre, unidadId: unidad.id })}
+                onClick={() =>
+                  acciones.onAgregar({ nivel: "division", padreId: unidad.id, padreNombre: nombreVisible(unidad), unidadId: unidad.id })
+                }
               />
             )
           }
@@ -402,7 +416,7 @@ export function DetalleUnidadTarjetas({
                 key={d.id}
                 nivel="division"
                 id={d.id}
-                nombre={d.nombre}
+                nodo={d}
                 riesgos={riesgosDeNodo(d)}
                 resumen={resumenHijos(d)}
                 onAbrir={() => onNavegar({ unidadId: unidad.id, divisionId: d.id })}
@@ -426,7 +440,10 @@ function ContenidoSubdivision({
   subdivision: Subdivision;
   unidadId: number;
   acciones: AccionesGestion;
-  gestionDe: (nivel: NivelNodo, nodo: { id: number; nombre: string }) => { onEditar: () => void; onEliminar: () => void } | undefined;
+  gestionDe: (
+    nivel: NivelNodo,
+    nodo: { id: number; nombre: string },
+  ) => { onEditar: () => void; onEliminar: () => void } | undefined;
 }) {
   return (
     <>
@@ -440,7 +457,7 @@ function ContenidoSubdivision({
               etiqueta="Área"
               testId="btn-agregar-tarjetas"
               onClick={() =>
-                acciones.onAgregar({ nivel: "area", padreId: subdivision.id, padreNombre: subdivision.nombre, unidadId })
+                acciones.onAgregar({ nivel: "area", padreId: subdivision.id, padreNombre: nombreVisible(subdivision), unidadId })
               }
             />
           )
@@ -448,7 +465,7 @@ function ContenidoSubdivision({
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {subdivision.areas.map((a) => (
-            <TarjetaNodo key={a.id} nivel="area" id={a.id} nombre={a.nombre} riesgos={[]} gestion={gestionDe("area", a)} />
+            <TarjetaNodo key={a.id} nivel="area" id={a.id} nodo={a} riesgos={[]} gestion={gestionDe("area", a)} />
           ))}
         </div>
       </Seccion>

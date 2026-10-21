@@ -71,19 +71,20 @@ function normalizar(texto: string): string {
  */
 export function filtrarUnidades(unidades: UnidadNegocio[], { texto, nivel }: FiltroCatalogo): UnidadNegocio[] {
   const busqueda = normalizar(texto);
-  const coincide = (nombre: string) => busqueda === "" || normalizar(nombre).includes(busqueda);
+  const coincide = (nombre: string, nombreReal?: string | null) =>
+    busqueda === "" || normalizar(nombre).includes(busqueda) || (!!nombreReal && normalizar(nombreReal).includes(busqueda));
   if (busqueda === "" && nivel === null) return unidades;
 
   const filtrarSubdivision = (s: Subdivision, padreCoincide: boolean): Subdivision | null => {
     if (nivel && !alcanzaNivel(s.riesgos, nivel)) return null;
-    if (padreCoincide || coincide(s.nombre)) return s;
+    if (padreCoincide || coincide(s.nombre, s.nombreReal)) return s;
     const areas = s.areas.filter((a) => coincide(a.nombre));
     const riesgos = s.riesgos.filter((r) => coincide(r.nombre));
     return areas.length || riesgos.length ? { ...s, areas, riesgos } : null;
   };
 
   const filtrarDivision = (d: Division, padreCoincide: boolean): Division | null => {
-    const propia = padreCoincide || coincide(d.nombre);
+    const propia = padreCoincide || coincide(d.nombre, d.nombreReal);
     const subdivisiones = d.subdivisiones
       .map((s) => filtrarSubdivision(s, propia))
       .filter((s): s is Subdivision => s !== null);
@@ -93,7 +94,7 @@ export function filtrarUnidades(unidades: UnidadNegocio[], { texto, nivel }: Fil
   };
 
   return unidades.flatMap((u) => {
-    const propia = coincide(u.nombre);
+    const propia = coincide(u.nombre, u.nombreReal);
     const divisiones = u.divisiones
       .map((d) => filtrarDivision(d, propia))
       .filter((d): d is Division => d !== null);

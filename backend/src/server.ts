@@ -14,6 +14,7 @@ import { RepositorioPlanesSql } from "./repos/planesSql.js";
 import type { RepositorioUsuarios } from "./repos/repositorio.js";
 import type { RepositorioEstructura } from "./repos/estructura.js";
 import { RepositorioEstructuraMemoria } from "./repos/estructuraMemoria.js";
+import { SEMILLA_ESTRUCTURA } from "./repos/semillaEstructura.js";
 import { RepositorioEstructuraSql } from "./repos/estructuraSql.js";
 import { RepositorioSql } from "./repos/sql.js";
 
@@ -39,7 +40,12 @@ if (config.datos.modo === "sql") {
   repo = new RepositorioMemoria();
   repoPlanes = new RepositorioPlanesMemoria(repo);
   repoPlanesAccion = new RepositorioPlanesAccionMemoria(repo);
-  repoEstructura = new RepositorioEstructuraMemoria(repo);
+  // La estructura arranca con los datos del Consolidado (anonimizados), a cargo del primer
+  // Jefe de Auditoría activo, igual que 018_seed_jerarquia.sql en la base.
+  const estructuraMemoria = new RepositorioEstructuraMemoria(repo);
+  const jefe = (await repo.listarUsuarios()).find((u) => u.rol === "Jefe de Auditoría" && u.estado === "active");
+  if (jefe) estructuraMemoria.sembrar(SEMILLA_ESTRUCTURA, jefe.id);
+  repoEstructura = estructuraMemoria;
 }
 
 const verificador = config.auth.modo === "entra" ? crearVerificadorEntra(config.auth) : crearVerificadorDev();

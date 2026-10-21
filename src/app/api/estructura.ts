@@ -37,7 +37,9 @@ export interface Area {
 
 export interface Subdivision {
   id: number;
+  /** Código del Consolidado (SUBDIVISION-0002); ver nombreReal. */
   nombre: string;
+  nombreReal: string | null;
   pais: string | null;
   divisionId: number;
   areas: Area[];
@@ -46,14 +48,18 @@ export interface Subdivision {
 
 export interface Division {
   id: number;
+  /** Código del Consolidado (DIVISION-0002); ver nombreReal. */
   nombre: string;
+  nombreReal: string | null;
   unidadNegocioId: number;
   subdivisiones: Subdivision[];
 }
 
 export interface UnidadNegocio {
   id: number;
+  /** Código del Consolidado (UDN-0003), único; el nombre real (KOF) es opcional. */
   nombre: string;
+  nombreReal: string | null;
   responsableId: number;
   responsableNombre: string;
   periodoFiscalId: number;
@@ -78,29 +84,35 @@ export type NivelNodo = "division" | "subdivision" | "area";
 export interface NodoPlano {
   id: number;
   nombre: string;
+  nombreReal: string | null;
   padreId: number;
 }
 
 export interface AltaUnidadInput {
   nombre: string;
+  nombreReal?: string | null;
   responsableId: number;
   departamentoAuditoriaId: number | null;
 }
 
 export interface EdicionUnidadInput {
   nombre?: string;
+  nombreReal?: string | null;
   responsableId?: number;
   departamentoAuditoriaId?: number | null;
 }
 
 export interface AltaNodoInput {
   nombre: string;
+  /** Solo división y subdivisión. */
+  nombreReal?: string | null;
   padreId: number;
   pais?: string | null;
 }
 
 export interface EdicionNodoInput {
   nombre?: string;
+  nombreReal?: string | null;
   pais?: string | null;
 }
 

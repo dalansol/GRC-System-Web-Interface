@@ -10,6 +10,7 @@ import {
 } from "../../api/estructura";
 import type { NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
+import { Sugerencias } from "./piezasCatalogo";
 
 interface ModalEditarEntidadProps {
   unidad: UnidadNegocio | null;
@@ -21,6 +22,8 @@ interface ModalEditarEntidadProps {
   onGuardarUnidad: (id: number, cambios: EdicionUnidadInput) => Promise<boolean>;
   onGuardarNodo: (nodo: NodoSeleccionado, cambios: EdicionNodoInput) => Promise<boolean>;
   onCerrar: () => void;
+  /** Países o regiones sugeridos al editar una subdivisión. */
+  sugerenciasPais?: readonly string[];
 }
 
 export function ModalEditarEntidad({
@@ -33,10 +36,12 @@ export function ModalEditarEntidad({
   onGuardarUnidad,
   onGuardarNodo,
   onCerrar,
+  sugerenciasPais = [],
 }: ModalEditarEntidadProps) {
   const abierto = Boolean(unidad || nodo);
 
   const [nombre, setNombre] = useState("");
+  const [nombreReal, setNombreReal] = useState("");
   const [responsableId, setResponsableId] = useState<number | "">("");
   const [departamentoId, setDepartamentoId] = useState<number | "">("");
   const [pais, setPais] = useState("");
@@ -45,10 +50,12 @@ export function ModalEditarEntidad({
   useEffect(() => {
     if (unidad) {
       setNombre(unidad.nombre);
+      setNombreReal(unidad.nombreReal ?? "");
       setResponsableId(unidad.responsableId);
       setDepartamentoId(unidad.departamentoAuditoriaId ?? "");
     } else if (nodo) {
       setNombre(nodo.nombre);
+      setNombreReal(nodo.nombreReal ?? "");
       setPais(nodo.pais ?? "");
     }
     setErrorLocal("");
@@ -57,6 +64,7 @@ export function ModalEditarEntidad({
   if (!abierto) return null;
 
   const conPais = nodo?.nivel === "subdivision";
+  const conNombreReal = Boolean(unidad) || (nodo !== null && nodo.nivel !== "area");
   // El gerente actual puede ya no ser Jefe de Auditoría; se muestra para no perderlo.
   const opcionesResponsable =
     unidad && !responsables.some((r) => r.id === unidad.responsableId)
@@ -73,12 +81,16 @@ export function ModalEditarEntidad({
     if (unidad) {
       const cambios: EdicionUnidadInput = {
         nombre: nombre.trim(),
+        nombreReal: nombreReal.trim() || null,
         departamentoAuditoriaId: departamentoId ? Number(departamentoId) : null,
       };
       if (responsableId && responsableId !== unidad.responsableId) cambios.responsableId = Number(responsableId);
       await onGuardarUnidad(unidad.id, cambios);
     } else if (nodo) {
-      await onGuardarNodo(nodo, conPais ? { nombre: nombre.trim(), pais: pais.trim() || null } : { nombre: nombre.trim() });
+      const cambios: EdicionNodoInput = { nombre: nombre.trim() };
+      if (conNombreReal) cambios.nombreReal = nombreReal.trim() || null;
+      if (conPais) cambios.pais = pais.trim() || null;
+      await onGuardarNodo(nodo, cambios);
     }
   };
 
@@ -139,6 +151,23 @@ export function ModalEditarEntidad({
             {errorLocal && <p className="text-xs text-red-600 mt-1">{errorLocal}</p>}
           </div>
 
+          {conNombreReal && (
+            <div>
+              <label htmlFor="editar-nombre-real" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
+                Nombre real (opcional)
+              </label>
+              <input
+                id="editar-nombre-real"
+                type="text"
+                value={nombreReal}
+                onChange={(e) => setNombreReal(e.target.value)}
+                maxLength={150}
+                disabled={guardando}
+                className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              />
+            </div>
+          )}
+
           {unidad && (
             <>
               <div>
@@ -197,10 +226,13 @@ export function ModalEditarEntidad({
                 type="text"
                 value={pais}
                 onChange={(e) => setPais(e.target.value)}
+                list="editar-pais-sugerencias"
+                autoComplete="off"
                 maxLength={100}
                 disabled={guardando}
                 className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               />
+              <Sugerencias id="editar-pais-sugerencias" opciones={sugerenciasPais} />
             </div>
           )}
 

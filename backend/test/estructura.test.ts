@@ -8,6 +8,7 @@ import { RepositorioEstructuraMemoria } from "../src/repos/estructuraMemoria.js"
 import { RepositorioMemoria } from "../src/repos/memoria.js";
 import { RepositorioPlanesAccionMemoria } from "../src/repos/planesAccionMemoria.js";
 import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
+import { SEMILLA_ESTRUCTURA } from "../src/repos/semillaEstructura.js";
 import { escuchar } from "./servidor.js";
 
 const ADMIN = "s.ramirez@expedite.com";
@@ -282,6 +283,86 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
       const res = await como(JEFA).delete(`/api/subdivisiones/${rama.subdivisionId}`);
       expect(res.status).toBe(409);
       expect(res.body.error.codigo).toBe("HIJOS_EXISTENTES");
+    });
+  });
+
+  describe("Nombre real (opcional) junto al código", () => {
+    it("se guarda al dar de alta y editar una unidad, sin afectar la regla de nombre único", async () => {
+      const alta = await como(JEFA).post("/api/unidades-negocio").send({
+        nombre: "UDN-0003",
+        nombreReal: "  KOF ",
+        responsableId: await idDe(JEFA),
+      });
+      expect(alta.status).toBe(201);
+      expect(alta.body).toMatchObject({ nombre: "UDN-0003", nombreReal: "KOF" });
+
+      // El nombre real no es único ni cuenta para el duplicado: el código sí.
+      const otra = await como(JEFA).post("/api/unidades-negocio").send({
+        nombre: "UDN-0099",
+        nombreReal: "KOF",
+        responsableId: await idDe(JEFA),
+      });
+      expect(otra.status).toBe(201);
+
+      // Vacío lo quita.
+      const editada = await como(JEFA).patch(`/api/unidades-negocio/${alta.body.id}`).send({ nombreReal: "" });
+      expect(editada.status).toBe(200);
+      expect(editada.body.nombreReal).toBeNull();
+    });
+
+    it("división y subdivisión lo aceptan; el área lo ignora porque su nombre ya es el real", async () => {
+      const rama = await altaRama("UDN-0003");
+      const division = await como(JEFA).patch(`/api/divisiones/${rama.divisionId}`).send({ nombreReal: "Latam" });
+      expect(division.body).toMatchObject({ nombre: "DIVISION-0001", nombreReal: "Latam" });
+
+      const area = await como(JEFA).post("/api/areas").send({ nombre: "Fletes", nombreReal: "Ignorado", padreId: rama.subdivisionId });
+      expect(area.status).toBe(201);
+      expect(area.body.nombreReal).toBeNull();
+
+      const unidad = (await como(AUDITOR).get(`/api/unidades-negocio/${rama.unidadId}`)).body;
+      expect(unidad.divisiones[0].nombreReal).toBe("Latam");
+      expect(unidad.divisiones[0].subdivisiones[0].nombreReal).toBeNull();
+    });
+
+    it("rechaza un nombre real de más de 150 caracteres (400)", async () => {
+      const res = await como(JEFA).post("/api/unidades-negocio").send({
+        nombre: "UDN-0010",
+        nombreReal: "x".repeat(151),
+        responsableId: await idDe(JEFA),
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("Semilla del Consolidado (DATA_MODE=memoria)", () => {
+    it("carga las 6 unidades con toda su jerarquía y riesgos a cargo del Jefe de Auditoría", async () => {
+      estructura.sembrar(SEMILLA_ESTRUCTURA, await idDe(JEFA));
+
+      const unidades = (await como(AUDITOR).get("/api/unidades-negocio")).body as Array<{
+        nombre: string;
+        responsableNombre: string;
+        departamentoAuditoriaNombre: string;
+        divisiones: Array<{ subdivisiones: Array<{ areas: unknown[]; riesgos: unknown[] }> }>;
+      }>;
+      const subdivisiones = unidades.flatMap((u) => u.divisiones.flatMap((d) => d.subdivisiones));
+      expect(unidades.map((u) => u.nombre)).toEqual(["UDN-0001", "UDN-0002", "UDN-0003", "UDN-0004", "UDN-0005", "UDN-0006"]);
+      expect(unidades.every((u) => u.responsableNombre === "María García")).toBe(true);
+      expect(unidades.find((u) => u.nombre === "UDN-0003")?.departamentoAuditoriaNombre).toBe("Beverage");
+      expect(subdivisiones).toHaveLength(40);
+      expect(subdivisiones.flatMap((s) => s.areas)).toHaveLength(343);
+      expect(subdivisiones.flatMap((s) => s.riesgos)).toHaveLength(251);
+
+      // Nombres reales inferidos del deck (022): el código se conserva.
+      const kof = (await como(AUDITOR).get("/api/unidades-negocio")).body.find(
+        (u: { nombre: string }) => u.nombre === "UDN-0003",
+      );
+      expect(kof.nombreReal).toBe("KOF");
+      expect(kof.divisiones.map((d: { nombreReal: string }) => d.nombreReal).sort()).toEqual([
+        "Brasil",
+        "Corporativo",
+        "Latam",
+        "México",
+      ]);
     });
   });
 

@@ -28,10 +28,12 @@ import {
 } from "../../api/estructura";
 import { resolverRuta, type RutaCatalogo } from "../../domain/estructura/navegacion";
 import { filtrarUnidades, riesgosDeNodo } from "../../domain/estructura/riesgos";
+import { sugerenciasNodo, sugerenciasPais, sugerenciasUnidad } from "../../domain/estructura/sugerencias";
 import { useEstructuraViewModel, type NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
 import { DetalleUnidadTarjetas } from "./DetalleUnidadTarjetas";
-import { COLOR_NIVEL, FilaRiesgo, ResumenRiesgos, type AccionesGestion } from "./piezasCatalogo";
+import { nombreVisible } from "../../domain/estructura/nombres";
+import { COLOR_NIVEL, FilaRiesgo, NombreConCodigo, ResumenRiesgos, type AccionesGestion } from "./piezasCatalogo";
 import { ModalEditarEntidad } from "./ModalEditarEntidad";
 import { ModalRegistrarNodo } from "./ModalRegistrarNodo";
 import { ModalRegistrarUnidad } from "./ModalRegistrarUnidad";
@@ -47,6 +49,7 @@ interface NodoVista {
   nivel: NivelNodo;
   id: number;
   nombre: string;
+  nombreReal?: string | null;
   pais?: string | null;
   hijos: NodoVista[];
   /** Riesgos de toda la rama (en la subdivisión, los suyos; en el área, ninguno). */
@@ -58,11 +61,13 @@ function nodosDeUnidad(unidad: UnidadNegocio): NodoVista[] {
     nivel: "division",
     id: d.id,
     nombre: d.nombre,
+    nombreReal: d.nombreReal,
     riesgos: riesgosDeNodo(d),
     hijos: d.subdivisiones.map((s) => ({
       nivel: "subdivision",
       id: s.id,
       nombre: s.nombre,
+      nombreReal: s.nombreReal,
       pais: s.pais,
       riesgos: s.riesgos,
       hijos: s.areas.map((a) => ({ nivel: "area", id: a.id, nombre: a.nombre, hijos: [], riesgos: [] })),
@@ -90,7 +95,15 @@ function NodoFila({
   const clave = `${nodo.nivel}-${nodo.id}`;
   const abierto = acciones.estaAbierto(clave);
   const hijo = NIVEL_HIJO[nodo.nivel];
-  const seleccionado: NodoSeleccionado = { nivel: nodo.nivel, id: nodo.id, nombre: nodo.nombre, pais: nodo.pais, unidadId };
+  const seleccionado: NodoSeleccionado = {
+    nivel: nodo.nivel,
+    id: nodo.id,
+    nombre: nodo.nombre,
+    nombreReal: nodo.nombreReal,
+    pais: nodo.pais,
+    unidadId,
+  };
+  const visible = nombreVisible(nodo);
   // Solo la subdivisión lista sus riesgos; los niveles superiores muestran el resumen.
   const riesgosPropios = nodo.nivel === "subdivision" ? nodo.riesgos : [];
   const tieneContenido = nodo.hijos.length > 0 || riesgosPropios.length > 0;
@@ -105,7 +118,7 @@ function NodoFila({
           type="button"
           onClick={() => acciones.onAlternar(clave)}
           disabled={!tieneContenido}
-          aria-label={abierto ? `Contraer ${nodo.nombre}` : `Expandir ${nodo.nombre}`}
+          aria-label={abierto ? `Contraer ${visible}` : `Expandir ${visible}`}
           className="w-4 h-4 flex items-center justify-center flex-shrink-0 text-muted-foreground disabled:cursor-default"
         >
           {!tieneContenido ? (
@@ -119,7 +132,9 @@ function NodoFila({
         <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${COLOR_NIVEL[nodo.nivel]}`}>
           {ETIQUETA_NIVEL[nodo.nivel]}
         </span>
-        <span className="text-xs font-medium text-slate-800 truncate flex-1">{nodo.nombre}</span>
+        <span className="text-xs font-medium text-slate-800 truncate flex-1">
+          <NombreConCodigo nodo={nodo} />
+        </span>
         {nodo.pais && (
           <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground flex-shrink-0">
             <MapPin size={10} />
@@ -132,7 +147,7 @@ function NodoFila({
             {hijo && (
               <button
                 type="button"
-                onClick={() => acciones.onAgregar({ nivel: hijo, padreId: nodo.id, padreNombre: nodo.nombre, unidadId })}
+                onClick={() => acciones.onAgregar({ nivel: hijo, padreId: nodo.id, padreNombre: visible, unidadId })}
                 title={`Agregar ${ETIQUETA_NIVEL[hijo].toLowerCase()}`}
                 data-testid={`btn-agregar-${clave}`}
                 className="p-1 text-slate-400 hover:text-primary transition-colors"
@@ -217,6 +232,14 @@ export function HierarchyView() {
   // Si la unidad abierta se elimina, resolverRuta devuelve null y se vuelve al catálogo.
   const [ruta, setRuta] = useState<RutaCatalogo | null>(null);
   const resuelta = useMemo(() => resolverRuta(unidades, ruta), [unidades, ruta]);
+
+  // Sugerencias de los formularios (catálogo de FEMSA + lo ya registrado).
+  const paisesSugeridos = useMemo(() => sugerenciasPais(unidades), [unidades]);
+  const nombresUnidadSugeridos = useMemo(() => sugerenciasUnidad(unidades), [unidades]);
+  const nombresNodoSugeridos = useMemo(
+    () => (altaNodo ? sugerenciasNodo(altaNodo.nivel, unidades, altaNodo.padreId) : []),
+    [altaNodo, unidades],
+  );
 
   // Búsqueda y filtro por nivel de riesgo.
   const [texto, setTexto] = useState("");
@@ -449,7 +472,7 @@ export function HierarchyView() {
                               title="Ver la jerarquía en tarjetas"
                               className="hover:text-primary hover:underline transition-colors text-left"
                             >
-                              {u.nombre}
+                              <NombreConCodigo nodo={u} />
                             </button>
                           </h3>
                         </div>
@@ -505,7 +528,7 @@ export function HierarchyView() {
                           {puedeGestionar && (
                             <button
                               onClick={() =>
-                                abrirAltaNodo({ nivel: "division", padreId: u.id, padreNombre: u.nombre, unidadId: u.id })
+                                abrirAltaNodo({ nivel: "division", padreId: u.id, padreNombre: nombreVisible(u), unidadId: u.id })
                               }
                               title="Agregar división a la unidad"
                               data-testid={`btn-agregar-division-unidad-${u.id}`}
@@ -562,6 +585,7 @@ export function HierarchyView() {
         errorServidor={errorModalAlta}
         onGuardar={guardarNuevaUnidad}
         onCerrar={cerrarModalAlta}
+        sugerenciasNombre={nombresUnidadSugeridos}
       />
 
       {/* ── Modal de Alta de División, Subdivisión o Área ── */}
@@ -571,6 +595,8 @@ export function HierarchyView() {
         errorServidor={errorModalNodo}
         onGuardar={guardarNuevoNodo}
         onCerrar={cerrarAltaNodo}
+        sugerenciasNombre={nombresNodoSugeridos}
+        sugerenciasPais={paisesSugeridos}
       />
 
       {/* ── Modal de Edición de Entidad ── */}
@@ -584,6 +610,7 @@ export function HierarchyView() {
         onGuardarUnidad={guardarEdicionUnidad}
         onGuardarNodo={guardarEdicionNodo}
         onCerrar={cerrarEdicion}
+        sugerenciasPais={paisesSugeridos}
       />
 
       {/* ── Modal de Confirmación de Eliminación (AC3) ── */}
@@ -601,7 +628,7 @@ export function HierarchyView() {
               {entidadAEliminar.tipo === "unidad"
                 ? "la unidad de negocio"
                 : `${entidadAEliminar.item.nivel === "area" ? "el" : "la"} ${ETIQUETA_NIVEL[entidadAEliminar.item.nivel].toLowerCase()}`}{" "}
-              <span className="font-bold text-foreground">"{entidadAEliminar.item.nombre}"</span>?
+              <span className="font-bold text-foreground">"{nombreVisible(entidadAEliminar.item)}"</span>?
             </p>
             {errorEliminacion ? (
               <div

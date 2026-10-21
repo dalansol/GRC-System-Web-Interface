@@ -30,11 +30,17 @@ function esDuplicado(error: unknown): boolean {
 }
 
 // Tabla y columnas de cada nivel. Valores fijos: nunca vienen de la petición.
-const TABLAS: Record<NivelNodo, { tabla: string; id: string; nombre: string; padre: string }> = {
-  division: { tabla: "division", id: "division_id", nombre: "name", padre: "business_unit_id" },
-  subdivision: { tabla: "business", id: "business_id", nombre: "business_name", padre: "division_id" },
-  area: { tabla: "area", id: "area_id", nombre: "area_name", padre: "business_id" },
+// `real` es la columna del nombre real; el área no la tiene.
+const TABLAS: Record<NivelNodo, { tabla: string; id: string; nombre: string; real: string | null; padre: string }> = {
+  division: { tabla: "division", id: "division_id", nombre: "name", real: "display_name", padre: "business_unit_id" },
+  subdivision: { tabla: "business", id: "business_id", nombre: "business_name", real: "display_name", padre: "division_id" },
+  area: { tabla: "area", id: "area_id", nombre: "area_name", real: null, padre: "business_id" },
 };
+
+/** Columnas de un NodoPlano para SELECT / RETURNING. */
+function columnasNodo(t: (typeof TABLAS)[NivelNodo]): string {
+  return `${t.id} AS id, ${t.nombre} AS nombre, ${t.real ?? "NULL::varchar"} AS "nombreReal", ${t.padre} AS "padreId"`;
+}
 
 // Condición sobre la rama para la regla de auditoría activa (alias b = business, d = division).
 const RAMA: Record<NivelEstructura, string> = {
@@ -64,6 +70,7 @@ interface FilaPeriodo {
 interface FilaUnidad {
   id: number;
   name: string;
+  display_name: string | null;
   manager_id: number;
   manager_name: string;
   fiscal_period_id: number;
@@ -78,8 +85,10 @@ interface FilaRama {
   business_unit_id: number;
   division_id: number;
   division_name: string;
+  division_display_name: string | null;
   business_id: number | null;
   business_name: string | null;
+  business_display_name: string | null;
   country: string | null;
   area_id: number | null;
   area_name: string | null;
@@ -96,7 +105,7 @@ interface FilaRiesgo {
 const SELECT_PERIODO = "SELECT id, name, start_date::text, end_date::text, is_active FROM fiscal_periods";
 
 const SELECT_UNIDAD = `
-  SELECT bu.id, bu.name, bu.manager_id, u.name AS manager_name,
+  SELECT bu.id, bu.name, bu.display_name, bu.manager_id, u.name AS manager_name,
          bu.fiscal_period_id, fp.name AS fiscal_period_name,
          bu.audit_department_id, cd.name AS audit_department_name,
          bu.created_by, bu.created_at
@@ -107,8 +116,8 @@ const SELECT_UNIDAD = `
 
 // Una fila por área (o por división/subdivisión sin hijos); se arma el árbol en memoria.
 const SELECT_RAMA = `
-  SELECT d.business_unit_id, d.division_id, d.name AS division_name,
-         b.business_id, b.business_name, b.country,
+  SELECT d.business_unit_id, d.division_id, d.name AS division_name, d.display_name AS division_display_name,
+         b.business_id, b.business_name, b.display_name AS business_display_name, b.country,
          a.area_id, a.area_name
   FROM division d
   LEFT JOIN business b ON b.division_id = d.division_id
@@ -143,7 +152,13 @@ function armarDivisiones(filas: FilaRama[], riesgos: Map<number, Riesgo[]>): Map
   for (const fila of filas) {
     let division = divisiones.get(fila.division_id);
     if (!division) {
-      division = { id: fila.division_id, nombre: fila.division_name, unidadNegocioId: fila.business_unit_id, subdivisiones: [] };
+      division = {
+        id: fila.division_id,
+        nombre: fila.division_name,
+        nombreReal: fila.division_display_name,
+        unidadNegocioId: fila.business_unit_id,
+        subdivisiones: [],
+      };
       divisiones.set(division.id, division);
       const lista = porUnidad.get(fila.business_unit_id) ?? [];
       lista.push(division);
@@ -156,6 +171,7 @@ function armarDivisiones(filas: FilaRama[], riesgos: Map<number, Riesgo[]>): Map
       subdivision = {
         id: fila.business_id,
         nombre: fila.business_name ?? "",
+        nombreReal: fila.business_display_name,
         pais: fila.country,
         divisionId: division.id,
         areas: [],
@@ -259,6 +275,7 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
     return {
       id: u.id,
       nombre: u.name,
+      nombreReal: u.display_name,
       responsableId: u.manager_id,
       responsableNombre: u.manager_name,
       periodoFiscalId: u.fiscal_period_id,
@@ -305,9 +322,9 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
   async crearUnidad(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio> {
     try {
       const { rows } = await this.pool.query<{ id: number }>(
-        `INSERT INTO business_units (name, manager_id, fiscal_period_id, audit_department_id, created_by)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [datos.nombre, datos.responsableId, periodoFiscalId, datos.departamentoAuditoriaId, creadoPor],
+        `INSERT INTO business_units (name, display_name, manager_id, fiscal_period_id, audit_department_id, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [datos.nombre, datos.nombreReal, datos.responsableId, periodoFiscalId, datos.departamentoAuditoriaId, creadoPor],
       );
       return (await this.buscarUnidadPorId(rows[0]!.id))!;
     } catch (error) {
@@ -320,6 +337,7 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (campos.nombre !== undefined) { vals.push(campos.nombre); sets.push(`name = $${vals.length}`); }
+    if (campos.nombreReal !== undefined) { vals.push(campos.nombreReal); sets.push(`display_name = $${vals.length}`); }
     if (campos.responsableId !== undefined) { vals.push(campos.responsableId); sets.push(`manager_id = $${vals.length}`); }
     if (campos.departamentoAuditoriaId !== undefined) {
       vals.push(campos.departamentoAuditoriaId);
@@ -354,21 +372,20 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
 
   async buscarNodo(nivel: NivelNodo, id: number): Promise<NodoPlano | null> {
     const t = TABLAS[nivel];
-    const { rows } = await this.pool.query<NodoPlano>(
-      `SELECT ${t.id} AS id, ${t.nombre} AS nombre, ${t.padre} AS "padreId" FROM ${t.tabla} WHERE ${t.id} = $1`,
-      [id],
-    );
+    const { rows } = await this.pool.query<NodoPlano>(`SELECT ${columnasNodo(t)} FROM ${t.tabla} WHERE ${t.id} = $1`, [id]);
     return rows[0] ?? null;
   }
 
   async crearNodo(nivel: NivelNodo, datos: AltaNodoInput): Promise<NodoPlano> {
     const t = TABLAS[nivel];
-    const conPais = nivel === "subdivision";
+    const columnas = [t.nombre, t.padre];
+    const vals: unknown[] = [datos.nombre, datos.padreId];
+    if (t.real) { columnas.push(t.real); vals.push(datos.nombreReal); }
+    if (nivel === "subdivision") { columnas.push("country"); vals.push(datos.pais); }
     const { rows } = await this.pool.query<NodoPlano>(
-      `INSERT INTO ${t.tabla} (${t.nombre}, ${t.padre}${conPais ? ", country" : ""})
-       VALUES ($1, $2${conPais ? ", $3" : ""})
-       RETURNING ${t.id} AS id, ${t.nombre} AS nombre, ${t.padre} AS "padreId"`,
-      conPais ? [datos.nombre, datos.padreId, datos.pais] : [datos.nombre, datos.padreId],
+      `INSERT INTO ${t.tabla} (${columnas.join(", ")}) VALUES (${vals.map((_, i) => `$${i + 1}`).join(", ")})
+       RETURNING ${columnasNodo(t)}`,
+      vals,
     );
     return rows[0]!;
   }
@@ -378,13 +395,14 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (campos.nombre !== undefined) { vals.push(campos.nombre); sets.push(`${t.nombre} = $${vals.length}`); }
+    if (t.real && campos.nombreReal !== undefined) { vals.push(campos.nombreReal); sets.push(`${t.real} = $${vals.length}`); }
     if (nivel === "subdivision" && campos.pais !== undefined) { vals.push(campos.pais); sets.push(`country = $${vals.length}`); }
     if (sets.length === 0) return this.buscarNodo(nivel, id);
 
     vals.push(id);
     const { rows } = await this.pool.query<NodoPlano>(
       `UPDATE ${t.tabla} SET ${sets.join(", ")} WHERE ${t.id} = $${vals.length}
-       RETURNING ${t.id} AS id, ${t.nombre} AS nombre, ${t.padre} AS "padreId"`,
+       RETURNING ${columnasNodo(t)}`,
       vals,
     );
     return rows[0] ?? null;

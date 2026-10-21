@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AlertCircle, Building2, Calendar, Landmark, Loader2, User, X } from "lucide-react";
 import type { AltaUnidadInput, DepartamentoAuditoria, PeriodoFiscal, Responsable } from "../../api/estructura";
 import { Card } from "../SharedComponents";
+import { Sugerencias } from "./piezasCatalogo";
 
 interface ModalRegistrarUnidadProps {
   abierto: boolean;
@@ -12,6 +13,8 @@ interface ModalRegistrarUnidadProps {
   errorServidor: string | null;
   onGuardar: (datos: AltaUnidadInput) => Promise<boolean>;
   onCerrar: () => void;
+  /** Nombre sugerido: el siguiente código UDN libre. */
+  sugerenciasNombre?: readonly string[];
 }
 
 export function ModalRegistrarUnidad({
@@ -23,8 +26,10 @@ export function ModalRegistrarUnidad({
   errorServidor,
   onGuardar,
   onCerrar,
+  sugerenciasNombre = [],
 }: ModalRegistrarUnidadProps) {
   const [nombre, setNombre] = useState("");
+  const [nombreReal, setNombreReal] = useState("");
   const [responsableId, setResponsableId] = useState<number | "">("");
   const [departamentoId, setDepartamentoId] = useState<number | "">("");
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -49,12 +54,14 @@ export function ModalRegistrarUnidad({
 
     const exito = await onGuardar({
       nombre: nombre.trim(),
+      nombreReal: nombreReal.trim() || null,
       responsableId: Number(responsableId),
       departamentoAuditoriaId: departamentoId ? Number(departamentoId) : null,
     });
 
     if (exito) {
       setNombre("");
+      setNombreReal("");
       setResponsableId("");
       setDepartamentoId("");
       setErrores({});
@@ -119,6 +126,8 @@ export function ModalRegistrarUnidad({
                 setErrores((prev) => ({ ...prev, nombre: "" }));
               }}
               placeholder="Ej. UDN-0007, Proximidad y Salud…"
+              list="unidad-nombre-sugerencias"
+              autoComplete="off"
               maxLength={150}
               disabled={guardando}
               className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
@@ -126,6 +135,27 @@ export function ModalRegistrarUnidad({
               }`}
             />
             {errores.nombre && <p className="text-xs text-red-600 mt-1">{errores.nombre}</p>}
+            <Sugerencias id="unidad-nombre-sugerencias" opciones={sugerenciasNombre} />
+          </div>
+
+          {/* Nombre real (opcional): se muestra en lugar del código */}
+          <div>
+            <label htmlFor="unidad-nombre-real" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
+              Nombre real (opcional)
+            </label>
+            <input
+              id="unidad-nombre-real"
+              type="text"
+              value={nombreReal}
+              onChange={(e) => setNombreReal(e.target.value)}
+              placeholder="Ej. KOF, Proximidad y Salud…"
+              maxLength={150}
+              disabled={guardando}
+              className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              El nombre de arriba es el código del Consolidado y debe ser único; este solo se muestra.
+            </p>
           </div>
 
           {/* Gerente Responsable */}
