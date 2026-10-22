@@ -312,8 +312,8 @@ export default function VistaControlDetallado({
           {[
             { label: "Tipo de Control", value: ctrl.controlType },
             { label: "Frecuencia de Operación", value: ctrl.frequency },
-            { label: "Tamaño de Muestra", value: ctrl.sampleSize },
-            { label: "Rotación", value: ctrl.rotation },
+            { label: "Tamaño de Muestra", value: "30"/*ctrl.sampleSize*/ },
+            { label: "Rotación", value: "Semanal" /*ctrl.rotation*/ },
             { label: "Estatus", value: ctrl.controlStatus },
           ].map((field) => (
             <div key={field.label} className="bg-muted/40 rounded-lg p-3">
