@@ -6,19 +6,24 @@ import {
   FileText,
   Hash,
   Loader2,
+  Sparkles,
   Trash2,
   UploadCloud,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { URL_API } from "../api/cliente";
+import { ROLES_ASISTENTE } from "../api/asistente";
+import { useSesion } from "../auth/SesionContext";
+import PanelAsistenteEvidencia from "./PanelAsistenteEvidencia";
 import { Card } from "./SharedComponents";
 import SpreadsheetEditor from "./SpreadsheetEditor.tsx";
+import { pedir, pedirFormData } from "../api/cliente";
 
 // ─── Evidencias Section ───────────────────────────────────────────────────────
 const BLOCKED_EXTENSIONS = [".exe", ".bat", ".js", ".msi", ".sh", ".cmd", ".vbs", ".ps1"];
-
-const API_BASE = URL_API;
+const ALLOWED_EXTENSIONS = [".pdf", ".xlsx", ".eml", ".msg", ".zip", ".7z"];
+const ALLOWED_FORMATS_LABEL = ".pdf, .xlsx, .eml, .msg, .zip y .7z";
+const MAX_FILE_SIZE_MB = 100;
 
 interface EvidenceFile {
   id: string;
@@ -67,7 +72,8 @@ export default function EvidenciasSection({
   controlId,
   findingId,
   auditId,
-  businessEntityId
+  businessEntityId,
+  puedeSubir,
 }: { 
   entityId: string; 
   entityType?: "control" | "hallazgo";
@@ -75,28 +81,33 @@ export default function EvidenciasSection({
   findingId?: string;
   auditId?: string;
   businessEntityId?: string;
+  puedeSubir?: boolean;
 }) {
+  // Hallazgo: TBD quién sube evidencia (CLAUDE.md §7 #19); por ahora cualquier usuario en sesión.
+  const puedeSubirEvidencia =
+    entityType === "control" ? puedeSubir === true : true;
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [xlsxTarget, setXlsxTarget] = useState<EvidenceFile | null>(null);
+  const [iaTarget, setIaTarget] = useState<EvidenceFile | null>(null);
+  const { usuario } = useSesion();
+  const puedeUsarAsistente = !!usuario && ROLES_ASISTENTE.includes(usuario.rol);
   const [usingFallback, setUsingFallback] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // ─── Fetch evidences from API (or fall back to mock data) ─────────────────
   const fetchEvidences = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/evidencias?entityId=${encodeURIComponent(entityId)}&entityType=${encodeURIComponent(entityType)}`);
-      if (!res.ok) throw new Error("API error");
-      const data = await res.json();
+      const data = await pedir<any[]>(`/evidencias?entityId=${encodeURIComponent(entityId)}&entityType=${encodeURIComponent(entityType)}`);
       setFiles(data.map(mapApiRow));
       setUsingFallback(false);
-    } catch {
-      // API unavailable — fall back to local mock data
-      setFiles(FALLBACK_EVIDENCES.filter(e => e.entityId === entityId).map(e => ({ ...e, version: e.version ?? 3 })));
-      setUsingFallback(true);
+    } catch (reason: unknown) {
+      setFiles([]);
+      setUsingFallback(false);
+      setError(reason instanceof Error ? reason.message : "No se pudieron cargar las evidencias.");
     }
-  }, [entityId]);
+  }, [entityId, entityType]);
 
   useEffect(() => {
     fetchEvidences();
@@ -110,18 +121,18 @@ export default function EvidenciasSection({
 
     const ext = "." + file.name.split(".").pop()?.toLowerCase();
     if (BLOCKED_EXTENSIONS.includes(ext)) {
-      setError(`Tipo de archivo no permitido (${ext}). Solo se aceptan .pdf y .xlsx.`);
+      setError(`Tipo de archivo no permitido (${ext}). Solo se aceptan ${ALLOWED_FORMATS_LABEL}.`);
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
-    if (![".pdf", ".xlsx"].includes(ext)) {
-      setError(`Solo se aceptan archivos .pdf y .xlsx.`);
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      setError(`Solo se aceptan archivos ${ALLOWED_FORMATS_LABEL}.`);
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
     const sizeMB = file.size / (1024 * 1024);
-    if (sizeMB > 50) {
-      setError("El archivo supera el límite de 50 MB.");
+    if (sizeMB > MAX_FILE_SIZE_MB) {
+      setError(`El archivo supera el límite de ${MAX_FILE_SIZE_MB} MB.`);
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
@@ -149,23 +160,12 @@ export default function EvidenciasSection({
       formData.append("file", file);
       formData.append("entityId", entityId);
       formData.append("entityType", entityType);
-      formData.append("uploadedBy", "M. García");
-      
       if (controlId) formData.append("controlId", controlId);
       if (findingId) formData.append("findingId", findingId);
       if (auditId) formData.append("auditId", auditId);
       if (businessEntityId) formData.append("businessEntityId", businessEntityId);
 
-      const res = await fetch(`${API_BASE}/evidencias/upload`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Error al subir archivo." }));
-        setError(data.error || "Error al subir archivo.");
-        return;
-      }
+      await pedirFormData("/evidencias/upload", formData);
 
       toast.success(`Evidencia "${file.name}" cargada correctamente`);
       await fetchEvidences();
@@ -185,11 +185,7 @@ export default function EvidenciasSection({
     }
 
     try {
-      const res = await fetch(`${API_BASE}/evidencias/${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (!res.ok) {
-        toast.error("Error al eliminar evidencia.");
-        return;
-      }
+      await pedir(`/evidencias/${encodeURIComponent(id)}`, { metodo: "DELETE" });
       toast.success("Evidencia eliminada.");
       await fetchEvidences();
     } catch {
@@ -214,6 +210,13 @@ export default function EvidenciasSection({
           onHashUpdate={(hash, ver) => { handleHashUpdate(xlsxTarget.id, hash, ver); setXlsxTarget(null); }}
         />
       )}
+      {iaTarget && (
+        <PanelAsistenteEvidencia
+          key={iaTarget.id}
+          evidencia={{ id: String(iaTarget.id), nombre: iaTarget.name }}
+          onCerrar={() => setIaTarget(null)}
+        />
+      )}
       <Card className="p-5 mt-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -221,11 +224,13 @@ export default function EvidenciasSection({
             <div className="text-sm font-semibold text-foreground">Evidencias Documentales</div>
             <span className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-semibold">{files.length}</span>
           </div>
-          <label className={`inline-flex items-center gap-1.5 cursor-pointer px-3 py-1.5 bg-secondary text-secondary-foreground text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors ${uploading ? "opacity-60 pointer-events-none" : ""}`}>
-            {uploading ? <Loader2 size={12} className="animate-spin" /> : <UploadCloud size={12} />}
-            {uploading ? "Subiendo…" : "Adjuntar archivo"}
-            <input ref={inputRef} type="file" accept=".pdf,.xlsx" className="hidden" onChange={handleUpload} disabled={uploading} />
-          </label>
+          {puedeSubirEvidencia && (
+            <label className={`inline-flex items-center gap-1.5 cursor-pointer px-3 py-1.5 bg-secondary text-secondary-foreground text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors ${uploading ? "opacity-60 pointer-events-none" : ""}`}>
+              {uploading ? <Loader2 size={12} className="animate-spin" /> : <UploadCloud size={12} />}
+              {uploading ? "Subiendo…" : "Enviar evidencia"}
+              <input ref={inputRef} type="file" accept={ALLOWED_EXTENSIONS.join(",")} className="hidden" onChange={handleUpload} disabled={uploading} />
+            </label>
+          )}
         </div>
         {error && (
           <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-xs text-red-700">
@@ -235,7 +240,7 @@ export default function EvidenciasSection({
         {files.length === 0 ? (
           <div className="text-center py-8 text-xs text-muted-foreground bg-secondary/20 rounded-lg border-2 border-dashed border-border">
             <UploadCloud size={20} className="mx-auto mb-2 text-muted-foreground/40" />
-            Sin evidencias adjuntas. Sube archivos .pdf o .xlsx (máx. 50 MB).
+            {puedeSubirEvidencia ? `Sin evidencias adjuntas. Sube archivos ${ALLOWED_FORMATS_LABEL} (máx. ${MAX_FILE_SIZE_MB} MB).` : "Sin evidencias adjuntas."}
           </div>
         ) : (
           <div className="space-y-2">
@@ -256,6 +261,15 @@ export default function EvidenciasSection({
                   <div className="text-[10px] text-muted-foreground">{f.uploadedBy}</div>
                   <div className="text-[10px] text-muted-foreground font-mono">{f.uploadDate}</div>
                 </div>
+                {puedeUsarAsistente && (
+                  <button
+                    onClick={() => setIaTarget(f)}
+                    aria-label={`Analizar ${f.name} con IA`}
+                    className="flex-shrink-0 flex items-center gap-1 text-[10px] px-2 py-1 bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/15 font-semibold transition-colors whitespace-nowrap"
+                  >
+                    <Sparkles size={10} /> Analizar con IA
+                  </button>
+                )}
                 {f.mimeType === "xlsx" && (
                   <button
                     onClick={() => setXlsxTarget(f)}
@@ -264,15 +278,17 @@ export default function EvidenciasSection({
                     <FileSpreadsheet size={10} /> Editar en Expedite
                   </button>
                 )}
-                <button onClick={() => removeFile(f.id)} className="p-1 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0">
-                  <Trash2 size={12} />
-                </button>
+                {puedeSubirEvidencia && (
+                  <button onClick={() => removeFile(f.id)} className="p-1 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0">
+                    <Trash2 size={12} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
         )}
         <div className="mt-3 pt-3 border-t border-border text-[10px] text-muted-foreground">
-          Formatos aceptados: PDF, XLSX · Máx. 50 MB · Hash SHA-256 · Los archivos .xlsx se pueden editar directamente en Expedite
+          Formatos aceptados: PDF, XLSX, EML, MSG, ZIP, 7Z · Máx. {MAX_FILE_SIZE_MB} MB · Hash SHA-256 · Los archivos .xlsx se pueden editar directamente en Expedite
         </div>
       </Card>
     </>

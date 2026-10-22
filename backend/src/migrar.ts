@@ -5,7 +5,7 @@
 //   pnpm db:migrar --datos-prueba
 //   pnpm db:migrar --admin-nombre "Nombre Apellido" --admin-correo correo@dominio.com
 //
-// --datos-prueba agrega los hallazgos y controles de prueba (no usar en producción).
+// --datos-prueba agrega los usuarios, planes, hallazgos y controles de prueba (no usar en producción).
 // --admin-nombre y --admin-correo dan de alta al primer Administrador, igual que
 // 003_primer_administrador.sql, sin tener que editar ese archivo.
 //
@@ -27,8 +27,24 @@ const SCRIPTS = [
   "007_action_plans.sql",
   "008_estructura_y_controles.sql",
   "010_catalogos_riesgos_y_ejecucion.sql",
+  "011_audit_controls_plan.sql",
+  "012_seguimiento_controles.sql",
+  "013_seguimiento_asignaciones_control.sql",
+  "014_quitar_seguimiento_controles_catalogo.sql",
+  "015_seed_estructura.sql",
+  "016_mantener_controles_al_eliminar_proceso.sql",
+  "017_jerarquia_organizacional.sql",
+  "019_riesgos_jerarquia.sql",
+  "021_nombres_reales.sql",
+  "023_codigo_y_nombre.sql",
+  "025_nombres_unicos.sql",
+  "026_nombres_periodos.sql",
+  "027_formatos_evidencia.sql",
+  "028_estado_inicial_controles_progreso.sql",
+  "029_conflictos_por_plan.sql",
+  "031_rls_control_horas.sql",
 ];
-const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql"];
+const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql", "022_seed_nombres_reales.sql", "024_seed_quitar_sin_codigo.sql", "030_seed_demo.sql"];
 
 const { values: opciones } = parseArgs({
   options: {

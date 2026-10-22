@@ -8,10 +8,10 @@
  *   SF-06 — Evaluación de controles (columna Nivel de Riesgo + validez)
  *   SF-07 — Asignación dinámica (filtro por tipo y estado)
  *   SF-13 — Exportación CSV
- *   SF-18 — Trazabilidad (botón "Ver Detalles" abre ControlDetailView vía navigate)
+ *   SF-18 — Trazabilidad (botón "Ver Detalles" abre VistaControlDetallado vía navigate)
  */
 
-import React, { useState, Fragment } from "react";
+import React, { useEffect, useState, Fragment } from "react";
 import {
   Search,
   XCircle,
@@ -21,15 +21,23 @@ import {
   CheckCircle2,
   AlertTriangle,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Clock3,
+  Send,
 } from "lucide-react";
 
-import { CONTROLS, INITIAL_FINDINGS } from "../data/mock_data";
+import { INITIAL_FINDINGS } from "../data/mock_data";
 import type { Navigate } from "./SharedComponents";
 import { exportToCSV, ValidityBadge } from "./SharedComponents";
 import { useControlesViewModel } from "../domain/controles/useControlesViewModel";
 import type { ControlViewModel } from "../domain/controles/useControlesViewModel";
 import EvidenciasSection from "./EvidenciasSection";
+import { useSesion } from "../auth/SesionContext";
+import { listarControles } from "../api/controles";
+import type { ControlRecord } from "./SharedComponents";
+import { actualizarstatusControl, registrarHoras } from "../api/controles";
+import { consultarMiAsignacionControl } from "../api/auditControls";
+import { AvisoDeclaracionesPendientes, useDeclaracionesPendientes } from "./ConflictosPlan";
 
 // ─── Sub-componentes de presentación ─────────────────────────────────────────
 
@@ -70,6 +78,39 @@ interface Props {
 }
 
 export default function VistaControles({ navigate }: Props) {
+  const { usuario } = useSesion();
+  const [controles, setControles] = useState<ControlRecord[]>([]);
+  const [asignacionesPropias, setAsignacionesPropias] = useState<Record<string, boolean>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let activo = true;
+    setError(null);
+    listarControles()
+      .then(async (datos) => {
+        const resultados = await Promise.all(
+          datos.map(async (control) => {
+            try {
+              const resultado = await consultarMiAsignacionControl(control.id);
+              return [control.id, resultado.asignado] as const;
+            } catch {
+              return [control.id, false] as const;
+            }
+          }),
+        );
+        if (activo) {
+          setControles(datos);
+          setAsignacionesPropias(Object.fromEntries(resultados));
+        }
+      })
+      .catch((reason: unknown) => {
+        if (activo) setError(reason instanceof Error ? reason.message : "No se pudieron cargar los controles.");
+      });
+    return () => {
+      activo = false;
+    };
+  }, [usuario?.correo]);
+
   const {
     controlesFiltrados,
     filtros,
@@ -77,15 +118,24 @@ export default function VistaControles({ navigate }: Props) {
     kpis,
     limpiarFiltros,
     filtrosActivos,
-  } = useControlesViewModel(CONTROLS, INITIAL_FINDINGS);
+  } = useControlesViewModel(controles, INITIAL_FINDINGS);
 
   const [expandedControl, setExpandedControl] = useState<string | null>(null);
+  const [horas, setHoras] = useState<Record<string, string>>({});
+  const [feedback, setFeedback] = useState<Record<string, string>>({});
+  const [guardando, setGuardando] = useState<string | null>(null);
+  const esJefatura = usuario?.rol === "Jefe de Auditoría";
+  // Historia #96: sin declaración de conflictos no se evalúan los controles del plan.
+  const { pendientes } = useDeclaracionesPendientes();
+  const planesPendientes = new Set(pendientes.map((plan) => String(plan.id)));
+  const evaluacionBloqueada = (control: ControlRecord) =>
+    (control.auditIds ?? []).some((planId) => planesPendientes.has(String(planId)));
 
   // Construir filas de CSV para exportación (SF-13)
   const handleExportar = () => {
     exportToCSV(
       "controles.csv",
-      ["ID", "Nombre Procedimiento", "N° Control Negocio", "Tipo", "Frecuencia", "Vulnerabilidad", "Estado", "Nivel Riesgo"],
+      ["ID", "Nombre Procedimiento", "N° Control Negocio", "Tipo", "Frecuencia", "Vulnerabilidad", "status", "Nivel Riesgo"],
       controlesFiltrados.map((c) => [
         c.id,
         c.controlProcedureName,
@@ -93,10 +143,53 @@ export default function VistaControles({ navigate }: Props) {
         c.controlType,
         c.frequency,
         c.currentVulnerability,
-        c.controlStatus,
+        c.status ?? "En Progreso",
         c.nivelRiesgo,
       ])
     );
+  };
+
+  const enviarHoras = async (control: ControlRecord) => {
+    const valor = Number(horas[control.id]);
+    if (!Number.isFinite(valor) || valor <= 0 || valor >= 24) {
+      setError("Las horas deben ser mayores que 0 y menores que 24.");
+      return;
+    }
+    setGuardando(control.id);
+    try {
+      const resultado = await registrarHoras(control.id, {
+        horas: valor,
+      });
+      setControles((actuales) => actuales.map((item) => item.id === control.id
+        ? { ...item, horasInvertidas: Number(resultado.hours_spent) }
+        : item));
+      setHoras((actuales) => ({ ...actuales, [control.id]: "" }));
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "No se pudieron registrar las horas.");
+    } finally {
+      setGuardando(null);
+    }
+  };
+
+  const cambiarstatus = async (control: ControlRecord, status: "En Revision" | "Completado") => {
+    setGuardando(control.id);
+    try {
+      const actualizado = await actualizarstatusControl(control.id, {
+        status,
+        feedback: feedback[control.id],
+      });
+      setControles((actuales) => actuales.map((item) => item.id === control.id
+        ? {
+            ...item,
+            status: actualizado.status ?? status,
+            feedback: actualizado.feedback ?? feedback[control.id] ?? item.feedback,
+          }
+        : item));
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "No se pudo actualizar el status.");
+    } finally {
+      setGuardando(null);
+    }
   };
 
   return (
@@ -125,6 +218,8 @@ export default function VistaControles({ navigate }: Props) {
           </button>
         </div>
       </div>
+
+      <AvisoDeclaracionesPendientes pendientes={pendientes} />
 
       {/* Filters */}
       <div className="flex items-center gap-2 flex-wrap mb-5">
@@ -158,10 +253,10 @@ export default function VistaControles({ navigate }: Props) {
         <div className="w-px h-4 bg-border mx-1" />
 
         <span className="text-xs text-muted-foreground font-medium">Estado:</span>
-        {["Todos", "Activo", "Inactivo", "En Revisión"].map(f => (
-          <button key={f} onClick={() => setFiltros({ ...filtros, estado: f })}
-            className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${filtros.estado === f ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>
-            {f}
+        {(["Todos", "En Progreso", "En Revision", "Completado"] as const).map((estado) => (
+          <button key={estado} onClick={() => setFiltros({ ...filtros, status: estado })}
+            className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${filtros.status === estado ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}>
+            {estado}
           </button>
         ))}
 
@@ -188,7 +283,9 @@ export default function VistaControles({ navigate }: Props) {
 
       {/* Tabla de controles */}
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        {controlesFiltrados.length === 0 ? (
+        {error ? (
+          <div className="p-12 text-center text-sm text-destructive">{error}</div>
+        ) : controlesFiltrados.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 text-sm text-muted-foreground">
             <ShieldCheck size={28} className="mx-auto mb-3 opacity-30" />
             No se encontraron controles con los filtros aplicados.
@@ -280,10 +377,45 @@ export default function VistaControles({ navigate }: Props) {
                       <tr>
                         <td colSpan={7} className="px-4 pb-4 bg-secondary/20 border-b border-border">
                           <div className="pt-3 space-y-3" onClick={(e) => e.stopPropagation()}>
+                            <div className="rounded-md border border-border bg-card p-3">
+                              <div className="mb-2 flex items-center justify-between">
+                                <h4 className="text-xs font-semibold text-foreground">Seguimiento del control</h4>
+                                <span className="text-xs text-muted-foreground">
+                                  {control.horasInvertidas ?? 0} horas invertidas · {control.status ?? "En Progreso"}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap items-end gap-2">
+                                <label className="text-xs text-muted-foreground">
+                                  Horas del día
+                                  <input type="number" min="0.25" max="24" step="0.25" value={horas[control.id] ?? ""} onChange={(event) => setHoras((actuales) => ({ ...actuales, [control.id]: event.target.value }))} className="mt-1 block w-24 rounded-md border border-border bg-white px-2 py-1.5 text-xs" />
+                                </label>
+                                <button type="button" onClick={() => enviarHoras(control)} disabled={guardando === control.id || evaluacionBloqueada(control)} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50">
+                                  <Clock3 size={13} /> Registrar
+                                </button>
+                              </div>
+                              {evaluacionBloqueada(control) && (
+                                <p className="mt-2 text-xs text-amber-700">Declara tus conflictos de interés en el plan de este control para poder evaluarlo.</p>
+                              )}
+                              {control.status === "En Revision" && esJefatura && (
+                                <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-border pt-3">
+                                  <label className="min-w-64 flex-1 text-xs text-muted-foreground">
+                                    Retroalimentación
+                                    <input value={feedback[control.id] ?? control.feedback ?? ""} onChange={(event) => setFeedback((actuales) => ({ ...actuales, [control.id]: event.target.value }))} placeholder="Indica qué falta o confirma el cierre" className="mt-1 block w-full rounded-md border border-border bg-white px-2 py-1.5 text-xs" />
+                                  </label>
+                                  <button type="button" onClick={() => cambiarstatus(control, "En Revision")} disabled={guardando === control.id} className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold">Guardar feedback</button>
+                                  <button type="button" onClick={() => cambiarstatus(control, "Completado")} disabled={guardando === control.id} className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white"><Send size={13} /> Aprobar</button>
+                                </div>
+                              )}
+                              {control.status === "En Progreso" && !esJefatura && (
+                                <button type="button" onClick={() => cambiarstatus(control, "En Revision")} disabled={guardando === control.id || evaluacionBloqueada(control)} className="mt-3 rounded-md border border-primary disabled:opacity-50 px-3 py-1.5 text-xs font-semibold text-primary">Enviar a revisión</button>
+                              )}
+                              {control.feedback && <p className="mt-2 text-xs text-amber-700">Feedback: {control.feedback}</p>}
+                            </div>
                             <EvidenciasSection 
                               entityId={control.id} 
                               entityType="control" 
                               controlId={control.id}
+                              puedeSubir={asignacionesPropias[control.id] === true}
                             />
                           </div>
                         </td>
@@ -299,4 +431,3 @@ export default function VistaControles({ navigate }: Props) {
     </div>
   );
 }
-

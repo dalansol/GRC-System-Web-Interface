@@ -28,14 +28,14 @@ export interface ControlViewModel extends ControlRecord {
 export interface FiltrosControles {
   busqueda: string;
   tipo: string;       // "Todos" | "Preventivo" | "Detectivo"
-  estado: string;     // "Todos" | "Activo" | ...
+  status: string;      // "Todos" | "En Progreso" | ...
   nivelRiesgo: string; // "Todos" | "Fallido" | "Vulnerable" | "Activo"
 }
 
 const FILTROS_INICIALES: FiltrosControles = {
   busqueda: "",
   tipo: "Todos",
-  estado: "Todos",
+  status: "Todos",
   nivelRiesgo: "Todos",
 };
 
@@ -78,7 +78,7 @@ export function useControlesViewModel(
         filtros.tipo === "Todos" || c.controlType === filtros.tipo;
 
       const matchEstado =
-        filtros.estado === "Todos" || c.controlStatus === filtros.estado;
+        filtros.status === "Todos" || c.status === filtros.status;
 
       const matchNivelRiesgo =
         filtros.nivelRiesgo === "Todos" || c.nivelRiesgo === filtros.nivelRiesgo;
@@ -100,7 +100,7 @@ export function useControlesViewModel(
   const filtrosActivos =
     filtros.busqueda !== "" ||
     filtros.tipo !== "Todos" ||
-    filtros.estado !== "Todos" ||
+    filtros.status !== "Todos" ||
     filtros.nivelRiesgo !== "Todos";
 
   return {

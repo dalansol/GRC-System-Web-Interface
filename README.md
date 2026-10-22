@@ -39,7 +39,7 @@ DATA_MODE=memoria
 ```
 VITE_API_URL=http://localhost:3000/api
 VITE_AUTH_MODE=dev
-VITE_USE_REAL_BACKEND=false
+VITE_USE_REAL_BACKEND=true
 ```
 
 ### 2. Levantar el backend
@@ -81,12 +81,15 @@ En modo de desarrollo se entra escribiendo el correo de un usuario de prueba:
 | `p.sanchez@expedite.com` | Consultor (inactivo) | No puede entrar |
 
 En este modo los datos de usuarios viven en memoria: se reinician cada vez que se
-apaga el backend. La vista de hallazgos usa sus datos de prueba mientras
-`VITE_USE_REAL_BACKEND` sea `false`; sus rutas en el backend solo existen con
-`DATA_MODE=sql`, porque necesitan la base de datos. Los planes de acción de los
+apaga el backend. La vista de hallazgos usa la API por omisión; para trabajar sin
+la base de datos se puede establecer explícitamente `VITE_USE_REAL_BACKEND=false`,
+en cuyo caso usa sus datos de prueba. Las rutas reales de hallazgos solo existen
+con `DATA_MODE=sql`, porque necesitan la base de datos. Los planes de acción de los
 hallazgos (`/api/planes-accion`) sí funcionan en memoria: usan los hallazgos y
 auditorías de prueba, y el portal del auditado muestra los planes asignados al
-usuario con sesión (por ejemplo `c.morales@expedite.com` ya tiene uno).
+usuario con sesión (por ejemplo `c.morales@expedite.com` ya tiene uno). El Catálogo
+Organizacional también funciona en memoria y arranca con la estructura del Consolidado de
+FEMSA (6 unidades, 338 áreas y 249 riesgos, anonimizados) a cargo de `m.garcia@expedite.com`.
 
 ### Problemas comunes
 
@@ -105,7 +108,8 @@ cd backend && corepack pnpm test  # backend
 ```
 
 Las pruebas del backend contra una base de datos real se omiten si no hay conexión
-configurada; `docs/pruebas/usuarios-roles.md` explica cómo activarlas.
+configurada; `docs/pruebas/usuarios-roles.md` y `docs/pruebas/estructura-organizacional.md`
+explican cómo activarlas.
 
 ## Variables de entorno
 
@@ -124,13 +128,17 @@ Backend (`backend/.env`):
 | `DB_PORT` | Puerto de la base. Por omisión `5432`. |
 | `DB_CA_CERT` | Archivo con el certificado de la autoridad que firma el del servidor; con Supabase, el que se descarga del proyecto. También acepta el contenido del certificado (`-----BEGIN CERTIFICATE-----…`), como se usa en Vercel. |
 | `DB_TRUST_CERT` | `true` para un PostgreSQL local con certificado autofirmado; no arranca en producción. La conexión siempre va cifrada. |
+| `IA_PROVEEDOR` | Asistente de IA (SF-19): `gemini`, `azure` o `ninguno` (por omisión; la función queda desactivada y el resto de la plataforma funciona). Comprueba la conexión con `corepack pnpm ia:probar` y las reglas de contención con `corepack pnpm ia:evaluar`. |
+| `GEMINI_API_KEY`, `GEMINI_MODELO` | Obligatorias con `IA_PROVEEDOR=gemini` (clave de Google AI Studio y modelo, p. ej. `gemini-2.5-flash`). El plan gratuito solo es para documentos de prueba. |
+| `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION` | Obligatorias con `IA_PROVEEDOR=azure`. |
+| `IA_TIEMPO_ESPERA_MS` | Tiempo máximo de espera de la IA. Por omisión `30000`. |
 
 Frontend (`.env`):
 
 | Variable | Descripción |
 |---|---|
 | `VITE_API_URL` | URL de la API, con el prefijo `/api`. Por omisión `http://localhost:3000/api`. |
-| `VITE_USE_REAL_BACKEND` | `true` para que la vista de hallazgos use el backend; con `false` usa datos de prueba. |
+| `VITE_USE_REAL_BACKEND` | `true` (por omisión) para que la vista de hallazgos use el backend; con `false` usa datos de prueba. |
 | `VITE_AUTH_MODE` | `entra` (por omisión) o `dev` (requiere el backend con `AUTH_MODE=dev`). |
 | `VITE_PERMITIR_DEV_EN_PRODUCCION` | `true` permite `VITE_AUTH_MODE=dev` en la compilación de producción (p. ej. en Vercel), solo para una demostración. |
 | `VITE_ENTRA_TENANT_ID`, `VITE_ENTRA_CLIENT_ID` | Obligatorias con `VITE_AUTH_MODE=entra`. |
@@ -144,7 +152,8 @@ Base de datos (detalle en `docs/diseno/base-de-datos.md`):
    (plantilla en `backend/.env.example`).
 2. Aplicar el esquema desde `backend/`: `corepack pnpm db:migrar`. Corre, en orden, los
    scripts de `backend/sql/` que le falten a la base. Con `--datos-prueba` agrega
-   hallazgos y controles de prueba (solo desarrollo), y con `--admin-nombre` y
+   hallazgos, controles y la estructura organizacional del Consolidado con sus riesgos
+   (solo desarrollo; necesita un Jefe de Auditoría activo), y con `--admin-nombre` y
    `--admin-correo` da de alta al primer Administrador.
 
 Inicio de sesión, cuando exista el registro de aplicación en Entra ID:
