@@ -42,6 +42,7 @@ const SCRIPTS = [
   "028_estado_inicial_controles_progreso.sql",
   "029_conflictos_por_plan.sql",
   "030_seed_demo.sql",
+  "031_rls_control_horas.sql",
 ];
 
 // Las tablas del modelo entidad-relación de docs/diseno/base-de-datos.md.
@@ -115,7 +116,8 @@ describe.skipIf(!env.SQL_TEST_SERVER)("esquema completo sobre PostgreSQL", () =>
     expect(await contar("role_permissions")).toBe(24);
     expect(await contar("audits")).toBe(4);
     expect(await contar("evidence")).toBe(2);
-    expect(await contar("findings")).toBe(5);
+    // 5 de 005_seed_findings y 5 de 030_seed_demo.
+    expect(await contar("findings")).toBe(10);
     expect(await contar("controls")).toBe(4);
   });
 
@@ -129,7 +131,7 @@ describe.skipIf(!env.SQL_TEST_SERVER)("esquema completo sobre PostgreSQL", () =>
         `INSERT INTO users (name, email, role_id) SELECT 'Ana Pruebas', 'ana.pruebas@expedite.com', id FROM roles WHERE name = 'Auditor' RETURNING id`,
       );
       const periodo = await uno(
-        `INSERT INTO fiscal_periods (name, start_date, end_date, is_active) VALUES ('Fiscal 2026', '2026-01-01', '2026-12-31', TRUE) RETURNING id`,
+        `INSERT INTO fiscal_periods (name, start_date, end_date, is_active) VALUES ('Prueba 2027', '2027-01-01', '2027-12-31', FALSE) RETURNING id`,
       );
       const catalogo = await uno(`INSERT INTO catalogs (business, country) VALUES ('Proximidad', 'México') RETURNING catalog_id AS id`);
       const unidad = await uno(
@@ -138,20 +140,21 @@ describe.skipIf(!env.SQL_TEST_SERVER)("esquema completo sobre PostgreSQL", () =>
       );
       const proceso = await uno(`INSERT INTO processes (business_unit_id, name) VALUES ($1, 'Cierre contable') RETURNING id`, [unidad]);
       await cliente.query(`UPDATE controls SET process_id = $1, owner_id = $2 WHERE id = 'CTR-001'`, [proceso, usuario]);
-      await cliente.query(
-        `INSERT INTO audit_controls (audit_id, control_id, auditor_id, is_lead, assigned_by) VALUES ('AUD-001', 'CTR-001', $1, TRUE, $1)`,
-        [usuario],
-      );
-      await cliente.query(
-        `INSERT INTO conflict_declarations (audit_id, auditor_id, has_conflict) VALUES ('AUD-001', $1, FALSE)`,
-        [usuario],
-      );
-
       const plan = await uno(
         `INSERT INTO audit_plans (code, name, type, start_date, end_date, status, estimated_hours, responsible_id, created_by)
          VALUES ('PAI-P-1', 'Plan de prueba', 'Anual', '2026-01-01', '2026-12-31', 'Borrador', 10, $1, $1) RETURNING id`,
         [usuario],
       );
+      // Asignaciones y declaraciones son por plan de auditoría (011 y 029).
+      await cliente.query(
+        `INSERT INTO audit_controls (audit_id, control_id, auditor_id, is_lead, assigned_by) VALUES ($1, 'CTR-001', $2, TRUE, $2)`,
+        [plan, usuario],
+      );
+      await cliente.query(
+        `INSERT INTO conflict_declarations (audit_id, auditor_id, has_conflict) VALUES ($1, $2, FALSE)`,
+        [plan, usuario],
+      );
+
       const departamento = await uno(`INSERT INTO catalog_department (name) VALUES ('Auditoría Financiera') RETURNING id`);
       const dominio = await uno(`INSERT INTO catalog_domain (name) VALUES ('Finanzas') RETURNING id`);
       const estado = await uno(`INSERT INTO audit_status (name) VALUES ('En curso') RETURNING id`);
@@ -189,12 +192,12 @@ describe.skipIf(!env.SQL_TEST_SERVER)("esquema completo sobre PostgreSQL", () =>
         JOIN processes p ON p.business_unit_id = b.id
         JOIN controls c ON c.process_id = p.id
         JOIN audit_controls ac ON ac.control_id = c.id
-        JOIN audits a ON a.id = ac.audit_id
+        JOIN audit_plans a ON a.id = ac.audit_id
         JOIN users u ON u.id = ac.auditor_id`);
       expect(estructura.rows).toEqual([
         {
-          unidad: "Finanzas", periodo: "Fiscal 2026", proceso: "Cierre contable", control: "CTR-001",
-          auditoria: "Auditoría SOX — Cuentas por Pagar", auditor: "Ana Pruebas",
+          unidad: "Finanzas", periodo: "Prueba 2027", proceso: "Cierre contable", control: "CTR-001",
+          auditoria: "Plan de prueba", auditor: "Ana Pruebas",
         },
       ]);
 
@@ -235,7 +238,7 @@ describe.skipIf(!env.SQL_TEST_SERVER)("esquema completo sobre PostgreSQL", () =>
         /uq_fiscal_periods_active/,
       );
       await rechaza(
-        `INSERT INTO conflict_declarations (audit_id, auditor_id, has_conflict, justification) VALUES ('AUD-002', ${usuario}, TRUE, '  ')`,
+        `INSERT INTO conflict_declarations (audit_id, auditor_id, has_conflict, justification) VALUES (${plan}, ${usuario}, TRUE, '  ')`,
         /ck_conflict_declarations_justification/,
       );
     } finally {

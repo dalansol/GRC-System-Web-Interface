@@ -84,6 +84,7 @@ huella del contenido y fecha) y la siguiente vez solo corre los que faltan.
 | `028_estado_inicial_controles_progreso.sql` | Las asignaciones nuevas empiezan `En Progreso` |
 | `029_conflictos_por_plan.sql` | `conflict_declarations.audit_id` apunta a `audit_plans` (historia #96) |
 | `030_seed_demo.sql` | Usuarios de "Usar un rol de prueba", planes de auditoría, hallazgos y plan de acción del modo en memoria. Solo con `--datos-prueba` |
+| `031_rls_control_horas.sql` | Activa la seguridad por filas en `control_horas` (012 la creó sin ella y quedaba expuesta en la API de Supabase) |
 
 ### Cómo agregar un cambio al esquema
 
