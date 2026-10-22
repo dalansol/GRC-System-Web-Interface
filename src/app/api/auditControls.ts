@@ -54,12 +54,14 @@ export interface RevisionControl {
   feedback: string | null;
 }
 
-export const consultarRevisionControl = (controlId: string) =>
-  pedir<RevisionControl>(`/controles/${encodeURIComponent(controlId)}/revision`);
+export const consultarRevisionControl = (controlId: string, auditId?: string) =>
+  pedir<RevisionControl>(
+    `/controles/${encodeURIComponent(controlId)}/revision${auditId ? `?auditId=${encodeURIComponent(auditId)}` : ""}`,
+  );
 
-export const consultarMiAsignacionControl = (controlId: string) =>
+export const consultarMiAsignacionControl = (controlId: string, auditId?: string) =>
   pedir<MiAsignacionControl>(
-    `/controles/${encodeURIComponent(controlId)}/mi-asignacion`,
+    `/controles/${encodeURIComponent(controlId)}/mi-asignacion${auditId ? `?auditId=${encodeURIComponent(auditId)}` : ""}`,
   );
 
 export const listarControlesAsignables = () => pedir<ControlAsignable[]>("/controles/asignables");

@@ -125,6 +125,7 @@ export default function VistaControles({ navigate }: Props) {
   const [feedback, setFeedback] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState<string | null>(null);
   const esJefatura = usuario?.rol === "Jefe de Auditoría";
+  const esAuditorSenior = usuario?.rol === "Auditor Senior";
   // Historia #96: sin declaración de conflictos no se evalúan los controles del plan.
   const { pendientes } = useDeclaracionesPendientes();
   const planesPendientes = new Set(pendientes.map((plan) => String(plan.id)));
@@ -407,7 +408,7 @@ export default function VistaControles({ navigate }: Props) {
                                 </div>
                               )}
                               {control.status === "En Progreso" && !esJefatura && (
-                                <button type="button" onClick={() => cambiarstatus(control, "En Revision")} disabled={guardando === control.id || evaluacionBloqueada(control)} className="mt-3 rounded-md border border-primary disabled:opacity-50 px-3 py-1.5 text-xs font-semibold text-primary">Enviar a revisión</button>
+                                <button type="button" onClick={() => cambiarstatus(control, "En Revision")} disabled={guardando === control.id || evaluacionBloqueada(control) || esAuditorSenior} className="mt-3 rounded-md border border-primary disabled:opacity-50 px-3 py-1.5 text-xs font-semibold text-primary">Enviar a revisión</button>
                               )}
                               {control.feedback && <p className="mt-2 text-xs text-amber-700">Feedback: {control.feedback}</p>}
                             </div>
@@ -415,7 +416,14 @@ export default function VistaControles({ navigate }: Props) {
                               entityId={control.id} 
                               entityType="control" 
                               controlId={control.id}
-                              puedeSubir={asignacionesPropias[control.id] === true}
+                              puedeSubir={
+                                asignacionesPropias[control.id] === true &&
+                                control.status === "En Progreso" &&
+                                !esJefatura &&
+                              !esAuditorSenior &&
+                              !evaluacionBloqueada(control) &&
+                                guardando !== control.id
+                              }
                             />
                           </div>
                         </td>

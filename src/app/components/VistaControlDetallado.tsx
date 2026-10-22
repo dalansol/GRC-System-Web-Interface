@@ -17,9 +17,11 @@ import { AUDIT_ENTITIES, CONTROLS, PROCEDURE_TRACKING } from "../data/mock_data"
 
 export default function VistaControlDetallado({
   id,
+  auditId,
   crumbs,
 }: {
   id: string;
+  auditId?: string;
   crumbs: React.ReactNode;
 }) {
   const [backendControl, setBackendControl] = useState<ControlRecord | null>(null);
@@ -62,7 +64,7 @@ export default function VistaControlDetallado({
 
   useEffect(() => {
     let active = true;
-    consultarRevisionControl(id)
+    consultarRevisionControl(id, auditId)
       .then((resultado) => {
         if (active) {
           setRevision(resultado);
@@ -75,7 +77,7 @@ export default function VistaControlDetallado({
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, auditId]);
 
   const actualizarRevision = async (status: "Completado" | "En Progreso") => {
     if (!revision?.plan_id) return;
@@ -126,7 +128,11 @@ export default function VistaControlDetallado({
   const enviarARevision = async () => {
     setEnviandoRevision(true);
     try {
-      const resultado = await actualizarstatusControl(id, { status: "En Revision" });
+      if (!auditId) {
+        toast.error("No se puede enviar el control a revisión sin un plan de auditoría.");
+        return;
+      }
+      const resultado = await actualizarstatusControl(id, { status: "En Revision", auditId });
       setBackendControl((actual) =>
         actual
           ? { ...actual, status: resultado.status, horasInvertidas: Number(resultado.hours_spent), feedback: resultado.feedback }
@@ -154,7 +160,7 @@ export default function VistaControlDetallado({
     let active = true;
     setPuedeSubirEvidencia(false);
     setMiAsignacionStatus(null);
-    consultarMiAsignacionControl(id)
+    consultarMiAsignacionControl(id, auditId)
       .then((resultado) => {
         if (active) {
           setPuedeSubirEvidencia(resultado.asignado);
@@ -170,13 +176,19 @@ export default function VistaControlDetallado({
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, auditId]);
 
   const ctrl = backendControl ?? CONTROLS.find((control) => control.id === id);
   const pendientesDelControl = planesPendientes.filter((plan) =>
     (ctrl?.auditIds ?? []).some((planId) => String(planId) === String(plan.id)),
   );
   const evaluacionBloqueada = pendientesDelControl.length > 0;
+  const puedeEnviarARevision =
+    puedeSubirEvidencia &&
+    !evaluacionBloqueada &&
+    !enviandoRevision &&
+    !guardandoHoras &&
+    miAsignacionStatus === "En Progreso";
   if (loading) {
     return (
       <div className="flex-1 overflow-auto p-6">
@@ -274,8 +286,8 @@ export default function VistaControlDetallado({
         </div>
         <div className="grid grid-cols-3 gap-4 pt-3 border-t border-border mb-4">
           <DetailField label="ID Control" value={ctrl.id} />
-          <DetailField label="Entidad Auditora" value={auditEntity.name} />
-          <DetailField label="ID Entidad Auditora" value={auditEntity.id} />
+          <DetailField label="Entidad Auditora" value={"FEMSA Departamento de Auditorias"} />
+          {/*Este nombre es un placeholder! Se debe de modificar cuando se implemente lo de los departamentos.*/}
         </div>
         <div className="pt-3 border-t border-border">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
@@ -376,8 +388,9 @@ export default function VistaControlDetallado({
         entityId={ctrl.id}
         entityType="control"
         controlId={ctrl.id}
+        auditId={auditId}
         businessEntityId={ctrl.auditEntityId}
-        puedeSubir={puedeSubirEvidencia}
+        puedeSubir={Boolean(auditId) && puedeEnviarARevision}
       />
       {puedeSubirEvidencia && (
         <Card className="mb-5 p-5">
@@ -423,7 +436,7 @@ export default function VistaControlDetallado({
             <button
               type="button"
               onClick={enviarARevision}
-              disabled={enviandoRevision || guardandoHoras || evaluacionBloqueada || miAsignacionStatus !== "En Progreso"}
+              disabled={enviandoRevision || guardandoHoras || evaluacionBloqueada || !auditId || miAsignacionStatus !== "En Progreso"}
               className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-white disabled:bg-gray-400 disabled:opacity-100"
             >
               {enviandoRevision ? "Enviando..." : "Enviar a revisión"}

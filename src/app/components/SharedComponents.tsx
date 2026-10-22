@@ -60,7 +60,7 @@ export type {
 
 
 // ─── Shared Types ───────────────────────────────────────────────────────
-type Navigate = (type: DetailType, id: string) => void;
+type Navigate = (type: DetailType, id: string, auditId?: string) => void;
 
 type DetailType =
   "general_risk" | "specific_risk" | "audit_entity" | "control";

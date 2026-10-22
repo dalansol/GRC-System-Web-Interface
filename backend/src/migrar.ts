@@ -43,6 +43,8 @@ const SCRIPTS = [
   "028_estado_inicial_controles_progreso.sql",
   "029_conflictos_por_plan.sql",
   "031_rls_control_horas.sql",
+  "032_normalizar_entidad_evidencias_control.sql",
+  "033_campos_muestra_rotacion_controles.sql",
 ];
 const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql", "022_seed_nombres_reales.sql", "024_seed_quitar_sin_codigo.sql", "030_seed_demo.sql"];
 

@@ -22,7 +22,7 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 
 // ─── GET: Fetch evidences for an entity ──────────────────────────────────────
 router.get("/evidencias", async (req: Request, res: Response) => {
-  const { entityId, entityType } = req.query;
+  const { entityId, entityType, auditId } = req.query;
 
   if (!entityId) {
     return res.status(400).json({ error: "entityId query parameter is required." });
@@ -43,21 +43,29 @@ router.get("/evidencias", async (req: Request, res: Response) => {
     if (entityType === "control") {
       query = `
         SELECT e.* FROM evidence e
-        WHERE e.control_id = $1
+        WHERE e.entity_id = $1
+          AND e.entity_type = 'control'
+          AND e.audit_id::text = $2
           AND (
-            ($2 = 'Auditor' AND e.uploaded_by = $3)
-            OR ($2 = 'Auditor Senior' AND EXISTS (
+            ($3 = 'Auditor' AND e.uploaded_by = $4)
+            OR ($3 = 'Auditor Senior' AND EXISTS (
               SELECT 1 FROM audit_controls ac
-              WHERE ac.control_id = e.control_id AND ac.assigned_by = $3::integer
+              WHERE ac.control_id = e.entity_id
+                AND ac.audit_id::text = e.audit_id::text
+                AND ac.assigned_by = $4::integer
+                AND ac.auditor_id::text = e.uploaded_by
             ))
-            OR ($2 = 'Jefe de Auditoría' AND EXISTS (
+            OR ($3 = 'Jefe de Auditoría' AND EXISTS (
               SELECT 1 FROM audit_controls ac
               JOIN audit_plans ap ON ap.id::text = ac.audit_id::text
-              WHERE ac.control_id = e.control_id AND ap.created_by = $3::integer
+              WHERE ac.control_id = e.entity_id
+                AND ac.audit_id::text = e.audit_id::text
+                AND ap.created_by = $4::integer
+                AND ac.auditor_id::text = e.uploaded_by
             ))
           )
         ORDER BY e.created_at DESC`;
-      params = [entityId as string, usuario.rol, String(usuario.id)];
+      params = [entityId as string, String(auditId ?? ""), usuario.rol, String(usuario.id)];
     } else if (entityType === "hallazgo") {
       query = `
         SELECT e.* FROM evidence e
@@ -126,15 +134,21 @@ router.post(
       // Control: only the Auditor assigned to it.
       // Hallazgo: TBD who may upload (CLAUDE.md §7 #19); for now any signed-in user.
       if (entityType === "control") {
+        if (!auditId) {
+          return res.status(400).json({
+            error: "auditId es obligatorio para evidencias de controles.",
+          });
+        }
         const pool = await poolPromise;
         const asignacion = await pool.query(
           `SELECT 1
            FROM audit_controls ac
            JOIN controls c ON c.id = ac.control_id
            WHERE (c.id::text = $1 OR c.code = $1)
-             AND ac.auditor_id = $2
+             AND ac.audit_id::text = $2
+             AND ac.auditor_id = $3
            LIMIT 1`,
-          [controlId || entityId, usuario.id],
+          [controlId || entityId, String(auditId ?? ""), usuario.id],
         );
         if (asignacion.rowCount !== 1) {
           return res.status(403).json({
@@ -178,7 +192,7 @@ router.post(
           controlId || (entityType === "control" ? entityId : null),
           findingId || (entityType === "hallazgo" ? entityId : null),
           auditId || null,
-          businessEntityId || null,
+          entityType === "control" ? controlId || entityId : businessEntityId || null,
           entityType,
           mimeType,
           file.size,

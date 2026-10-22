@@ -257,7 +257,7 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                                     <div key={assignment.control_id} className="flex items-center justify-between gap-4 rounded-md border border-border bg-card px-3 py-2">
                                       <button
                                         type="button"
-                                        onClick={() => navigate("control", assignment.control_id)}
+                                        onClick={() => navigate("control", assignment.control_id, String(plan.id))}
                                         aria-label={`Abrir detalle del control ${assignment.control_code}`}
                                         title="Abrir detalle del control"
                                         className="group flex min-w-0 items-center gap-3 rounded-md px-2 py-1 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -276,7 +276,7 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                                           {puedeAprobar && (
                                             <button
                                               type="button"
-                                              onClick={() => navigate("control", assignment.control_id)}
+                                              onClick={() => navigate("control", assignment.control_id, String(plan.id))}
                                               className="rounded-md bg-primary px-2.5 py-1.5 text-xs font-semibold text-white"
                                             >
                                               Revisar

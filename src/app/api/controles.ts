@@ -8,6 +8,8 @@ interface ControlApi {
   description?: string | null;
   type?: string | null;
   frequency?: string | null;
+  size?: string | null;
+  rotation?: string | null;
   status?: "En Progreso" | "En Revision" | "Completado";
   hours_spent?: string | number;
   feedback?: string | null;
@@ -26,8 +28,8 @@ function convertirControl(control: ControlApi): ControlRecord {
     currentVulnerability: "Baja",
     controlType: control.type ?? "Preventivo",
     frequency: control.frequency ?? "No definida",
-    sampleSize: "",
-    rotation: "",
+    sampleSize: control.size ?? "",
+    rotation: control.rotation ?? "",
     controlStatus: "Activo",
     status: control.status ?? "En Progreso",
     horasInvertidas: Number(control.hours_spent ?? 0),
@@ -49,7 +51,7 @@ export const registrarHoras = (controlId: string, datos: { horas: number }) =>
 
 export const actualizarstatusControl = (
   controlId: string,
-  datos: { status: "En Revision" | "Completado"; feedback?: string },
+  datos: { status: "En Revision" | "Completado"; feedback?: string; auditId?: string },
 ) => pedir<{
   id: string;
   status: "En Progreso" | "En Revision" | "Completado";

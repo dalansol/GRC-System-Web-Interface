@@ -32,7 +32,7 @@ router.get("/controles", async (_req, res) => {
   const pool = await poolPromise;
   const usuario = usuarioEnSesion(res);
   const resultado = await pool.query(
-    `SELECT c.id, c.code, c.name, c.description, c.type, c.frequency,
+    `SELECT c.id, c.code, c.name, c.description, c.type, c.frequency, c.size, c.rotation,
             CASE
               WHEN COUNT(ac.id) = 0 THEN 'En Progreso'
               WHEN BOOL_AND(ac.status = 'Completado') THEN 'Completado'
@@ -73,6 +73,7 @@ router.get("/controles", async (_req, res) => {
 router.get("/controles/:controlId/mi-asignacion", async (req, res) => {
   const usuario = usuarioEnSesion(res);
   const controlId = req.params.controlId;
+  const auditId = req.query.auditId;
   if (!controlId) {
     throw new ErrorApi(400, "DATOS_INVALIDOS", "El control no es válido.");
   }
@@ -82,10 +83,11 @@ router.get("/controles/:controlId/mi-asignacion", async (req, res) => {
     FROM audit_controls ac
     JOIN controls c ON c.id = ac.control_id
     WHERE (c.id::text = $1 OR c.code = $1)
-     AND ac.auditor_id = $2
+    AND ($2::text IS NULL OR ac.audit_id::text = $2)
+    AND ac.auditor_id = $3
     ORDER BY ac.created_at DESC
      LIMIT 1`,
-    [controlId, usuario.id],
+    [controlId, auditId ? String(auditId) : null, usuario.id],
   );
   res.json({
     asignado: resultado.rowCount === 1,
@@ -95,6 +97,7 @@ router.get("/controles/:controlId/mi-asignacion", async (req, res) => {
 
 router.get("/controles/:controlId/revision", async (req, res) => {
   const usuario = usuarioEnSesion(res);
+  const auditId = req.query.auditId;
   const pool = await poolPromise;
   const resultado = await pool.query(
     `SELECT ac.audit_id AS plan_id,
@@ -118,12 +121,13 @@ router.get("/controles/:controlId/revision", async (req, res) => {
      JOIN roles r ON r.id = u.role_id
      JOIN audit_plans ap ON ap.id = ac.audit_id
      WHERE (c.id::text = $1 OR c.code = $1)
+       AND ($4::text IS NULL OR ac.audit_id::text = $4)
      GROUP BY ac.audit_id
      ORDER BY
        bool_or(ap.created_by = $2 AND $3 = 'Jefe de Auditoría') DESC,
        max(ac.created_at) DESC
      LIMIT 1`,
-    [req.params.controlId, usuario.id, usuario.rol],
+    [req.params.controlId, usuario.id, usuario.rol, auditId ? String(auditId) : null],
   );
   if (resultado.rowCount !== 1) {
     return res.json({ puede_revisar: false, plan_id: null, status: null, feedback: null });
@@ -182,12 +186,16 @@ router.post("/controles/:controlId/horas", async (req, res) => {
 router.patch("/controles/:controlId/status", async (req, res) => {
   const usuario = usuarioEnSesion(res);
   const { controlId } = req.params;
-  const { status, feedback } = req.body as {
+  const { status, feedback, auditId } = req.body as {
     status?: unknown;
     feedback?: unknown;
+    auditId?: unknown;
   };
   if (!["En Revision", "Completado"].includes(String(status))) {
     throw new ErrorApi(400, "DATOS_INVALIDOS", "El status no es válido.");
+  }
+  if (usuario.rol === "Auditor Senior" && typeof auditId !== "string") {
+    throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "El plan de auditoría es obligatorio para actualizar este control.");
   }
   const pool = await poolPromise;
   const actual = await pool.query(
@@ -199,13 +207,14 @@ router.patch("/controles/:controlId/status", async (req, res) => {
      JOIN roles r ON r.id = u.role_id
      JOIN audit_plans ap ON ap.id = ac.audit_id
      WHERE (c.id::text = $1 OR c.code = $1)
+       AND ($4::text IS NULL OR ac.audit_id::text = $4)
        AND (
          ac.auditor_id = $3
          OR ($2 = 'Jefe de Auditoría' AND (ap.responsible_id = $3 OR ap.created_by = $3))
        )
      ORDER BY ac.created_at DESC
      LIMIT 1`,
-    [controlId, usuario.rol, usuario.id],
+    [controlId, usuario.rol, usuario.id, typeof auditId === "string" ? auditId : null],
   );
   if (actual.rowCount !== 1) throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "No puedes actualizar este control.");
   // Historia #96: el auditor asignado no envía a revisión sin declarar sus conflictos de interés.

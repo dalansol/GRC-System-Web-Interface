@@ -99,7 +99,9 @@ export default function EvidenciasSection({
   // ─── Fetch evidences from API (or fall back to mock data) ─────────────────
   const fetchEvidences = useCallback(async () => {
     try {
-      const data = await pedir<any[]>(`/evidencias?entityId=${encodeURIComponent(entityId)}&entityType=${encodeURIComponent(entityType)}`);
+      const query = new URLSearchParams({ entityId, entityType });
+      if (auditId) query.set("auditId", auditId);
+      const data = await pedir<any[]>(`/evidencias?${query.toString()}`);
       setFiles(data.map(mapApiRow));
       setUsingFallback(false);
     } catch (reason: unknown) {
@@ -107,7 +109,7 @@ export default function EvidenciasSection({
       setUsingFallback(false);
       setError(reason instanceof Error ? reason.message : "No se pudieron cargar las evidencias.");
     }
-  }, [entityId, entityType]);
+  }, [entityId, entityType, auditId]);
 
   useEffect(() => {
     fetchEvidences();
@@ -160,9 +162,9 @@ export default function EvidenciasSection({
       formData.append("file", file);
       formData.append("entityId", entityId);
       formData.append("entityType", entityType);
+      if (auditId) formData.append("auditId", auditId);
       if (controlId) formData.append("controlId", controlId);
       if (findingId) formData.append("findingId", findingId);
-      if (auditId) formData.append("auditId", auditId);
       if (businessEntityId) formData.append("businessEntityId", businessEntityId);
 
       await pedirFormData("/evidencias/upload", formData);

@@ -3239,7 +3239,7 @@ const DETAIL_LABELS: Record<DetailType, string> = {
   control: "Procedimiento de Control",
 };
 
-type StackEntry = { type: DetailType; id: string };
+type StackEntry = { type: DetailType; id: string; auditId?: string };
 
 export default function App() {
   const { usuario } = useSesion();
@@ -3254,8 +3254,8 @@ export default function App() {
     setNavView(v);
     setStack([]);
   };
-  const navigate: Navigate = (type, id) =>
-    setStack((prev) => [...prev, { type, id }]);
+  const navigate: Navigate = (type, id, auditId) =>
+    setStack((prev) => [...prev, { type, id, auditId }]);
   const popTo = (index: number) =>
     setStack((prev) => prev.slice(0, index + 1));
   const clearStack = () => setStack([]);
@@ -3339,7 +3339,7 @@ export default function App() {
           );
         case "control":
           return (
-            <VistaControlDetallado id={top.id} crumbs={crumbs} />
+            <VistaControlDetallado id={top.id} auditId={top.auditId} crumbs={crumbs} />
           );
       }
     }

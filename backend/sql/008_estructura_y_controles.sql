@@ -50,6 +50,8 @@ CREATE TABLE IF NOT EXISTS controls (
     description VARCHAR(2000)  NULL,
     type        VARCHAR(30)    NULL,
     frequency   VARCHAR(30)    NULL,
+    size        VARCHAR(100)   NULL,
+    rotation    VARCHAR(100)   NULL,
     process_id  INT          NULL CONSTRAINT fk_controls_process REFERENCES processes (id) ON DELETE SET NULL,
     owner_id    INT            NULL CONSTRAINT fk_controls_owner REFERENCES users (id),
     created_at  TIMESTAMPTZ(0) NOT NULL DEFAULT now()
