@@ -134,6 +134,7 @@ import {
 import VistaHallazgo from "./components/VistaHallazgo";
 import VistaControles from "./components/VistaControles";
 import EvidenciasSection from "./components/EvidenciasSection";
+import CopilotPanel from "./components/CopilotPanel";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
 import UsuariosRolesView from "./components/UsuariosRolesView";
 import { useSesion } from "./auth/SesionContext";
@@ -4571,205 +4572,6 @@ function AuditadoPortalView() {
   );
 }
 
-// ─── Copilot Panel ────────────────────────────────────────────────────────────
-const COPILOT_SUGGESTIONS: Record<string, string[]> = {
-  dashboard: ["Resumir hallazgos del trimestre", "Redactar informe ejecutivo Q3 2025", "Analizar tendencias de riesgo LATAM"],
-  filter: ["Filtrar riesgos críticos pendientes", "Exportar selección actual a PDF", "Comparar riesgos por país"],
-  hierarchy: ["Explicar la estructura de riesgo actual", "Identificar nodos sin controles asignados", "Resumir estado de cumplimiento"],
-  plans: ["Revisar cronograma de auditorías", "Identificar solapamientos de alcance", "Estimar recursos necesarios Q4"],
-  findings: ["Resumir hallazgos abiertos críticos", "Priorizar hallazgos por riesgo residual", "Redactar plan de remediación global"],
-  auditado: ["Explicar mis planes de acción asignados", "¿Cuándo vencen mis compromisos?", "Genera resumen de mis pendientes"],
-  settings: ["Revisar actividad reciente en bitácora", "¿Quién modificó permisos esta semana?", "Generar reporte de accesos"],
-  users: ["Revisar permisos del rol Auditor", "Comparar roles Auditor vs. Consultor", "Lista usuarios activos con acceso completo"],
-  editor: ["Sugiere un layout óptimo para el dashboard", "¿Qué widget añadir para riesgo operacional?"],
-  general_risk: ["Resumir este riesgo general", "Redactar hallazgo basado en este riesgo", "Comparar con riesgos similares"],
-  specific_risk: ["Analizar controles de este riesgo específico", "Estimar exposición residual ajustada", "Redactar hallazgo preliminar"],
-  audit_entity: ["Resumir perfil de riesgo de esta entidad", "Listar hallazgos pendientes", "Comparar con entidades similares"],
-  control: ["Evaluar efectividad de este control", "Sugerir mejoras al control", "Redactar conclusión de prueba de controles"],
-};
-
-const AI_RESPONSES: Record<string, string> = {
-  "Resumir hallazgos del trimestre": "En Q3 2025 se registraron 4 hallazgos nuevos: 1 crítico (HAL-2025-001), 2 altos (HAL-2025-002, HAL-2025-004) y 1 medio (HAL-2025-003). El 75% está abierto o en revisión. El área de Finanzas concentra el mayor riesgo residual.",
-  "Redactar informe ejecutivo Q3 2025": "**Informe Ejecutivo Q3 2025**\n\nEl período Q3 2025 muestra un incremento del 15% en hallazgos respecto al Q2. Los controles de segregación de funciones y accesos privilegiados presentan vulnerabilidades activas que requieren atención directiva. Se recomienda priorizar la remediación de HAL-2025-001 antes del cierre del trimestre.",
-  "Analizar tendencias de riesgo LATAM": "Las tendencias regionales muestran que México concentra el mayor volumen de riesgos críticos (2 de 3), mientras Brasil presenta riesgo residual alto en TI. Colombia muestra mejora significativa tras la implementación de CTR-004. Se proyecta reducción del 20% en riesgos abiertos para Q4 si se cierran los hallazgos actuales.",
-};
-
-type ChatMsg = { role: "user" | "ai"; content: string };
-
-function CopilotPanel({ currentView, open, onToggle }: { currentView: string; open: boolean; onToggle: () => void }) {
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const suggestions = COPILOT_SUGGESTIONS[currentView] ?? COPILOT_SUGGESTIONS.dashboard;
-  const hasMessages = messages.length > 0;
-
-  useEffect(() => {
-    if (open) {
-      // Small delay so the panel is rendered before focusing
-      setTimeout(() => inputRef.current?.focus(), 80);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
-
-  const sendMessage = (text: string) => {
-    if (!text.trim() || loading) return;
-    setMessages(prev => [...prev, { role: "user", content: text }]);
-    setInput("");
-    setLoading(true);
-    setTimeout(() => {
-      const resp = AI_RESPONSES[text] ?? `Entendido. Analizando "${text}"...\n\nBasado en los datos del sistema, los registros relacionados muestran niveles de riesgo dentro del rango esperado. Se recomienda revisar los controles asociados y verificar el estado de los hallazgos pendientes antes de tomar acción.`;
-      setMessages(prev => [...prev, { role: "ai", content: resp }]);
-      setLoading(false);
-    }, 1400);
-  };
-
-  return (
-    <>
-      {/* Floating button — only visible when panel is closed */}
-      {!open && (
-        <button
-          id="tour-copilot-btn"
-          onClick={onToggle}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 rounded-full shadow-lg font-semibold text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
-        >
-          <Sparkles size={16} className="animate-pulse" />
-          Asistente IA
-        </button>
-      )}
-
-      {/* Panel — full-height, flex column, nothing overflows the input bar */}
-      {open && (
-        <div
-          className="fixed right-0 top-0 h-screen w-96 bg-card border-l border-border shadow-2xl z-30 flex flex-col overflow-hidden"
-          style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-        >
-          {/* ── Header (fixed height) ── */}
-          <div className="px-4 py-3.5 border-b border-border flex items-center gap-3 flex-shrink-0">
-            <div className="p-1.5 bg-primary/10 rounded-lg">
-              <Sparkles size={14} className="text-primary" />
-            </div>
-            <div>
-              <div className="text-sm font-bold text-foreground">Asistente Copilot IA</div>
-              <div className="text-[10px] text-muted-foreground">Expedite GRC · Datos simulados</div>
-            </div>
-            <button
-              onClick={onToggle}
-              className="ml-auto p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary transition-colors"
-            >
-              <X size={14} />
-            </button>
-          </div>
-
-          {/* ── Scrollable body — takes all remaining space ── */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {!hasMessages ? (
-              /* Empty state: suggestions centred in the chat area */
-              <div className="flex flex-col items-center justify-center h-full px-5 py-8 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-                  <Sparkles size={22} className="text-primary" />
-                </div>
-                <div className="text-sm font-bold text-foreground mb-1">¿En qué puedo ayudarte?</div>
-                <p className="text-xs text-muted-foreground leading-relaxed mb-6">
-                  Puedo analizar riesgos, redactar hallazgos y resumir información del sistema.
-                </p>
-                <div className="w-full space-y-2">
-                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-3">
-                    Acciones sugeridas
-                  </div>
-                  {suggestions.map(s => (
-                    <button
-                      key={s}
-                      onClick={() => sendMessage(s)}
-                      className="w-full text-left text-xs px-3 py-2.5 rounded-lg bg-primary/5 text-primary border border-primary/15 hover:bg-primary/10 transition-colors font-medium leading-snug"
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              /* Conversation messages */
-              <div className="px-4 pt-4 pb-2 space-y-3">
-                {/* Inline suggestions strip above messages */}
-                <div className="pb-1 border-b border-border mb-1">
-                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">
-                    Acciones sugeridas
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {suggestions.map(s => (
-                      <button
-                        key={s}
-                        onClick={() => sendMessage(s)}
-                        className="text-[10px] px-2 py-1 rounded-md bg-primary/5 text-primary border border-primary/15 hover:bg-primary/10 transition-colors font-medium leading-tight"
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {messages.map((m, i) => (
-                  <div key={i} className={`flex gap-2.5 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                    {m.role === "ai" && (
-                      <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <Sparkles size={12} className="text-white" />
-                      </div>
-                    )}
-                    <div className={`max-w-[85%] px-3 py-2.5 rounded-xl text-xs leading-relaxed whitespace-pre-wrap ${m.role === "user" ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-secondary/60 text-foreground rounded-bl-sm"}`}>
-                      {m.content}
-                    </div>
-                  </div>
-                ))}
-
-                {loading && (
-                  <div className="flex gap-2.5">
-                    <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                      <Sparkles size={12} className="text-white" />
-                    </div>
-                    <div className="bg-secondary/60 rounded-xl rounded-bl-sm px-3 py-2.5 flex items-center gap-1.5">
-                      {[0, 1, 2].map(j => (
-                        <div key={j} className="w-1.5 h-1.5 bg-muted-foreground/60 rounded-full animate-bounce" style={{ animationDelay: `${j * 0.15}s` }} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div ref={bottomRef} />
-              </div>
-            )}
-          </div>
-
-          {/* ── Input bar (fixed at bottom, never scrolls away) ── */}
-          <div className="flex-shrink-0 border-t border-border bg-card px-3 py-3">
-            <div className="flex items-center gap-2 bg-input-background border border-border rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary/50 transition-all">
-              <input
-                ref={inputRef}
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input); } }}
-                placeholder="Escribe una pregunta o instrucción…"
-                className="flex-1 min-w-0 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground"
-              />
-              <button
-                onClick={() => sendMessage(input)}
-                disabled={!input.trim() || loading}
-                className="flex-shrink-0 p-1.5 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Send size={12} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
 // ─── Guided Tour ──────────────────────────────────────────────────────────────
 const TOUR_STEPS = [
   {
@@ -5135,7 +4937,7 @@ export default function App() {
         {renderContent()}
       </div>
       <Toaster position="bottom-right" richColors />
-      <CopilotPanel currentView={top ? top.type : navView} open={copilotOpen} onToggle={() => setCopilotOpen(o => !o)} />
+      <CopilotPanel currentView={navView} detalle={top} open={copilotOpen} onToggle={() => setCopilotOpen(o => !o)} />
       {tourActive && <GuidedTour onClose={handleTourClose} />}
       {/* Tour relaunch button */}
       {!tourActive && !copilotOpen && (

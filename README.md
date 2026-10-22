@@ -124,6 +124,10 @@ Backend (`backend/.env`):
 | `DB_PORT` | Puerto de la base. Por omisión `5432`. |
 | `DB_CA_CERT` | Archivo con el certificado de la autoridad que firma el del servidor; con Supabase, el que se descarga del proyecto. También acepta el contenido del certificado (`-----BEGIN CERTIFICATE-----…`), como se usa en Vercel. |
 | `DB_TRUST_CERT` | `true` para un PostgreSQL local con certificado autofirmado; no arranca en producción. La conexión siempre va cifrada. |
+| `IA_PROVEEDOR` | Asistente de IA (SF-19): `gemini`, `azure` o `ninguno` (por omisión; la función queda desactivada y el resto de la plataforma funciona). Comprueba la conexión con `corepack pnpm ia:probar` y las reglas de contención con `corepack pnpm ia:evaluar`. |
+| `GEMINI_API_KEY`, `GEMINI_MODELO` | Obligatorias con `IA_PROVEEDOR=gemini` (clave de Google AI Studio y modelo, p. ej. `gemini-2.5-flash`). El plan gratuito solo es para documentos de prueba. |
+| `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION` | Obligatorias con `IA_PROVEEDOR=azure`. |
+| `IA_TIEMPO_ESPERA_MS` | Tiempo máximo de espera de la IA. Por omisión `30000`. |
 
 Frontend (`.env`):
 

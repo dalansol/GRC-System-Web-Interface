@@ -5,6 +5,7 @@ import { crearApp } from "../src/app.js";
 import { crearVerificadorDev } from "../src/auth/verificador.js";
 import type { EventoBitacora } from "../src/bitacora.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
+import { RepositorioEvidenciasMemoria } from "../src/repos/evidenciasMemoria.js";
 import { RepositorioPlanesAccionMemoria } from "../src/repos/planesAccionMemoria.js";
 import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
 import { escuchar } from "./servidor.js";
@@ -26,6 +27,8 @@ beforeEach(async () => {
       repo: usuarios,
       repoPlanes: new RepositorioPlanesMemoria(usuarios),
       repoPlanesAccion: new RepositorioPlanesAccionMemoria(usuarios),
+      repoEvidencias: new RepositorioEvidenciasMemoria(),
+      proveedorIA: null,
       verificador: crearVerificadorDev(),
       dominiosPermitidos: ["expedite.com"],
       corsOrigin: "http://localhost:5173",
