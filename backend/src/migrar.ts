@@ -46,6 +46,8 @@ const SCRIPTS = [
 ];
 const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql", "022_seed_nombres_reales.sql", "024_seed_quitar_sin_codigo.sql", "030_seed_demo.sql"];
 
+const huella = (texto: string) => createHash("sha256").update(texto).digest("hex");
+
 const { values: opciones } = parseArgs({
   options: {
     "datos-prueba": { type: "boolean", default: false },
@@ -87,9 +89,12 @@ try {
   const scripts = opciones["datos-prueba"] ? [...SCRIPTS, ...SCRIPTS_DATOS_PRUEBA].sort() : SCRIPTS;
   for (const nombre of scripts) {
     const contenido = await readFile(new URL(`../sql/${nombre}`, import.meta.url), "utf8");
-    const checksum = createHash("sha256").update(contenido).digest("hex");
+    // La huella no depende de los saltos de línea: el mismo script descargado en Windows (CRLF)
+    // y en macOS/Linux (LF) cuenta como aplicado. Se acepta también la huella con CRLF que
+    // guardaban las versiones anteriores de este programa.
+    const checksum = huella(contenido.replace(/\r\n/g, "\n"));
     const anterior = aplicados.get(nombre);
-    if (anterior === checksum) {
+    if (anterior === checksum || anterior === huella(contenido.replace(/\r?\n/g, "\r\n"))) {
       console.log(`  al día     ${nombre}`);
       continue;
     }

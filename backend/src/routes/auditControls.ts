@@ -4,11 +4,13 @@ import { ErrorApi } from "../errores.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import { autorizar } from "../middleware/autorizar.js";
 import { MENSAJE_DECLARACION_PENDIENTE } from "../domain/conflictos.js";
+import { ROL_ADMINISTRADOR } from "../domain/tipos.js";
 import { declaracionPendiente } from "../repos/conflictosSql.js";
 
 const router = Router();
 const ROL_SENIOR = "Auditor Senior";
-const ROLES_CONSULTA_ASIGNACIONES = [ROL_SENIOR, "Auditor", "Jefe de Auditoría", "Supervisor"];
+// El Administrador tiene "Ver Auditorías": consulta las asignaciones como la Jefatura, sin editarlas.
+const ROLES_CONSULTA_ASIGNACIONES = [ROL_SENIOR, "Auditor", "Jefe de Auditoría", "Supervisor", ROL_ADMINISTRADOR];
 
 function idNumerico(valor: string | string[] | undefined, nombre: string): number {
   const texto = typeof valor === "string" ? valor : "";
@@ -279,7 +281,7 @@ router.get("/planes/:planId/controles", autorizar(...ROLES_CONSULTA_ASIGNACIONES
      JOIN audit_plans ap ON ap.id = ac.audit_id
      WHERE ac.audit_id = $1
        AND (
-         $2 IN ('Jefe de Auditoría', 'Supervisor')
+         $2 IN ('Jefe de Auditoría', 'Supervisor', 'Administrador')
          OR ($2 = 'Auditor Senior' AND ac.assigned_by = $3)
          OR ($2 = 'Auditor' AND ac.auditor_id = $3)
        )
