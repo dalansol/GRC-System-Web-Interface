@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
-import { AlertTriangle, Building2, Calendar, ChevronRight, Plus, RefreshCw, Search } from "lucide-react";
-import { ETIQUETA_NIVEL, NIVELES_RIESGO, type NivelRiesgo, type UnidadNegocio } from "../../api/estructura";
-import { clavesAncestros, resolverRuta, type RutaCatalogo } from "../../domain/estructura/navegacion";
+import { useMemo, useState, type ReactNode } from "react";
+import { AlertTriangle, Building2, Calendar, ChevronRight, Pencil, Plus, RefreshCw, Search } from "lucide-react";
+import { ETIQUETA_NIVEL, NIVELES_RIESGO, type AltaUnidadInput, type NivelRiesgo, type UnidadNegocio } from "../../api/estructura";
+import { clavesAncestros, dependientesDe, resolverRuta, type RutaCatalogo } from "../../domain/estructura/navegacion";
 import { filtrarUnidades, riesgosDeNodo } from "../../domain/estructura/riesgos";
 import { codigoProximo, sugerenciasArea, sugerenciasPais } from "../../domain/estructura/sugerencias";
 import { useEstructuraViewModel, type NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
@@ -11,6 +11,7 @@ import { DetalleCatalogo, ResumenUnidades } from "./DetalleCatalogo";
 import { nombreVisible } from "../../domain/estructura/nombres";
 import type { AccionesGestion } from "./piezasCatalogo";
 import { ModalEditarEntidad } from "./ModalEditarEntidad";
+import { ModalPeriodos } from "./ModalPeriodos";
 import { ModalRegistrarNodo } from "./ModalRegistrarNodo";
 import { ModalRegistrarUnidad } from "./ModalRegistrarUnidad";
 
@@ -21,18 +22,26 @@ import { ModalRegistrarUnidad } from "./ModalRegistrarUnidad";
 
 const OPCIONES_NIVEL: Array<{ valor: NivelRiesgo | ""; etiqueta: string }> = [
   { valor: "", etiqueta: "Todos los niveles" },
-  ...NIVELES_RIESGO.map((nivel) => ({ valor: nivel, etiqueta: nivel === "Crítico" ? "Crítico" : `${nivel} o superior` })),
+  ...NIVELES_RIESGO.map((nivel) => ({ valor: nivel, etiqueta: nivel })),
 ];
 
 export function HierarchyView() {
   const {
     unidades,
     periodoActivo,
+    periodos,
     departamentos,
     responsables,
     cargando,
+    errorCarga,
     guardando,
     puedeGestionar,
+    modalPeriodosAbierto,
+    errorModalPeriodos,
+    abrirModalPeriodos,
+    cerrarModalPeriodos,
+    guardarPeriodo,
+    activarPeriodo,
     modalAltaAbierto,
     errorModalAlta,
     abrirModalAlta,
@@ -96,6 +105,17 @@ export function HierarchyView() {
       return next;
     });
 
+  // AC1: tras dar de alta una unidad se abre su detalle para seguir con su jerarquía (hasta el
+  // área, el "proceso"). Se limpian los filtros porque la unidad nueva podría no coincidir.
+  const registrarUnidad = async (datos: AltaUnidadInput) => {
+    const nueva = await guardarNuevaUnidad(datos);
+    if (nueva) {
+      limpiarFiltros();
+      navegar({ unidadId: nueva.id });
+    }
+    return nueva;
+  };
+
   // Estado de confirmación de eliminación; el error del servidor (AC3) se muestra en el diálogo.
   const [entidadAEliminar, setEntidadAEliminar] = useState<
     { tipo: "unidad"; item: UnidadNegocio } | { tipo: "nodo"; item: NodoSeleccionado } | null
@@ -119,6 +139,17 @@ export function HierarchyView() {
     onEditar: abrirEditarNodo,
     onEliminar: (item) => pedirEliminacion({ tipo: "nodo", item }),
   };
+
+  // Lo que impide borrar y ya se sabe en la vista (hijos o riesgos); las auditorías activas
+  // solo las conoce el servidor.
+  const dependientes = entidadAEliminar
+    ? dependientesDe(
+        unidades,
+        entidadAEliminar.tipo === "unidad"
+          ? { nivel: "unidad", id: entidadAEliminar.item.id, unidadId: entidadAEliminar.item.id }
+          : entidadAEliminar.item,
+      )
+    : null;
 
   const ejecutarEliminacion = async () => {
     if (!entidadAEliminar) return;
@@ -149,23 +180,32 @@ export function HierarchyView() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-foreground tracking-tight">Catálogo Organizacional</h1>
+              {/* Periodo activo; quien gestiona la estructura lo abre para registrar o activar periodos. */}
               {periodoActivo ? (
-                <div
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold"
-                  title="Periodo de Auditoría activo para la parametrización de nuevas entidades"
-                  data-testid="badge-periodo-activo"
+                <BadgePeriodo
+                  onClick={puedeGestionar ? abrirModalPeriodos : undefined}
+                  className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold"
+                  title={
+                    puedeGestionar
+                      ? "Gestionar periodos de auditoría"
+                      : "Periodo de Auditoría activo para la parametrización de nuevas entidades"
+                  }
+                  testId="badge-periodo-activo"
                 >
                   <Calendar size={13} className="text-emerald-600" />
                   <span>Periodo Activo: {periodoActivo.nombre}</span>
-                </div>
+                  {puedeGestionar && <Pencil size={12} className="text-emerald-600" aria-hidden />}
+                </BadgePeriodo>
               ) : (
-                <div
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium"
-                  data-testid="badge-sin-periodo"
+                <BadgePeriodo
+                  onClick={puedeGestionar ? abrirModalPeriodos : undefined}
+                  className="bg-amber-50 text-amber-700 border-amber-200 font-medium"
+                  title={puedeGestionar ? "Configurar un periodo de auditoría activo" : undefined}
+                  testId="badge-sin-periodo"
                 >
                   <AlertTriangle size={13} className="text-amber-600" />
-                  <span>Sin Periodo Activo</span>
-                </div>
+                  <span>Sin Periodo Activo{puedeGestionar && " · Configurar periodo"}</span>
+                </BadgePeriodo>
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -271,6 +311,23 @@ export function HierarchyView() {
                   <div key={i} className="h-44 rounded-xl bg-white border border-border/70 p-5 animate-pulse shadow-sm" />
                 ))}
               </div>
+            ) : errorCarga ? (
+              <div
+                role="alert"
+                data-testid="error-carga"
+                className="text-center py-16 bg-white rounded-xl border border-red-200 p-8 shadow-sm"
+              >
+                <AlertTriangle size={36} className="mx-auto text-red-500/70 mb-3" />
+                <h3 className="text-base font-bold text-foreground">No se pudo cargar el catálogo</h3>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto mt-1 mb-4">{errorCarga}</p>
+                <button
+                  onClick={() => recargar()}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-sm"
+                >
+                  <RefreshCw size={14} />
+                  Reintentar
+                </button>
+              </div>
             ) : unidades.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-xl border border-dashed border-border p-8 shadow-sm">
                 <Building2 size={40} className="mx-auto text-muted-foreground/40 mb-3" />
@@ -329,9 +386,21 @@ export function HierarchyView() {
         departamentos={departamentos}
         guardando={guardando}
         errorServidor={errorModalAlta}
-        onGuardar={guardarNuevaUnidad}
+        onGuardar={registrarUnidad}
         onCerrar={cerrarModalAlta}
         codigoProximo={codigoProximoUnidad}
+      />
+
+      {/* ── Modal de Periodos de Auditoría ── */}
+      <ModalPeriodos
+        abierto={modalPeriodosAbierto}
+        periodos={periodos}
+        periodoActivo={periodoActivo}
+        guardando={guardando}
+        errorServidor={errorModalPeriodos}
+        onGuardar={guardarPeriodo}
+        onActivar={activarPeriodo}
+        onCerrar={cerrarModalPeriodos}
       />
 
       {/* ── Modal de Alta de División, Subdivisión o Área ── */}
@@ -371,20 +440,24 @@ export function HierarchyView() {
               <h3 className="text-base font-bold text-foreground">Confirmar Eliminación</h3>
             </div>
             <p className="text-xs text-muted-foreground mb-4">
-              ¿Estás seguro de que deseas eliminar{" "}
+              {/* Si ya se sabe que no se puede borrar, no se pregunta si se está seguro. */}
+              {dependientes ? "Eliminar" : "¿Estás seguro de que deseas eliminar"}{" "}
               {entidadAEliminar.tipo === "unidad"
                 ? "la unidad de negocio"
                 : `${entidadAEliminar.item.nivel === "area" ? "el" : "la"} ${ETIQUETA_NIVEL[entidadAEliminar.item.nivel].toLowerCase()}`}{" "}
-              <span className="font-bold text-foreground">"{nombreVisible(entidadAEliminar.item)}"</span>?
+              <span className="font-bold text-foreground">"{nombreVisible(entidadAEliminar.item)}"</span>
+              {!dependientes && "?"}
             </p>
-            {errorEliminacion ? (
+            {errorEliminacion || dependientes ? (
               <div
                 role="alert"
                 data-testid="error-eliminacion"
                 className="text-[11px] text-red-700 bg-red-50 border border-red-200 p-2.5 rounded-lg mb-5 flex items-start gap-2"
               >
                 <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-                <span>{errorEliminacion}</span>
+                <span>
+                  {errorEliminacion ?? `No se puede eliminar porque tiene ${dependientes}. Elimínalos primero.`}
+                </span>
               </div>
             ) : (
               <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 p-2.5 rounded-lg mb-5">
@@ -398,9 +471,9 @@ export function HierarchyView() {
                 onClick={cancelarEliminacion}
                 className="px-4 py-2 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
               >
-                {errorEliminacion ? "Cerrar" : "Cancelar"}
+                {errorEliminacion || dependientes ? "Cerrar" : "Cancelar"}
               </button>
-              {!errorEliminacion && (
+              {!errorEliminacion && !dependientes && (
                 <button
                   type="button"
                   data-testid="btn-confirmar-eliminar"
@@ -415,6 +488,38 @@ export function HierarchyView() {
           </Card>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Insignia del periodo activo: botón si quien la ve puede gestionar periodos. */
+function BadgePeriodo({
+  onClick,
+  className,
+  title,
+  testId,
+  children,
+}: {
+  onClick?: () => void;
+  className: string;
+  title?: string;
+  testId: string;
+  children: ReactNode;
+}) {
+  const base = `flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs ${className}`;
+  return onClick ? (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      data-testid={testId}
+      className={`${base} hover:brightness-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40`}
+    >
+      {children}
+    </button>
+  ) : (
+    <div className={base} title={title} data-testid={testId}>
+      {children}
     </div>
   );
 }

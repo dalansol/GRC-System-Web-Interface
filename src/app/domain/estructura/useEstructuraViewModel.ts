@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   crearNodo as apiCrearNodo,
+  crearPeriodo as apiCrearPeriodo,
+  editarPeriodo as apiEditarPeriodo,
   crearUnidadNegocio as apiCrearUnidad,
   editarNodo as apiEditarNodo,
   editarUnidadNegocio as apiEditarUnidad,
@@ -15,6 +17,7 @@ import {
   obtenerPeriodoActivo as apiObtenerPeriodoActivo,
   obtenerUnidadPorId as apiObtenerUnidad,
   ROLES_GESTION_ESTRUCTURA,
+  type AltaPeriodoInput,
   type AltaUnidadInput,
   type DepartamentoAuditoria,
   type EdicionNodoInput,
@@ -65,6 +68,8 @@ export function useEstructuraViewModel() {
   const [departamentos, setDepartamentos] = useState<DepartamentoAuditoria[]>([]);
   const [responsables, setResponsables] = useState<Responsable[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
+  /** Mensaje si no se pudo leer el catálogo (para no confundirlo con un catálogo vacío). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [guardando, setGuardando] = useState<boolean>(false);
 
   // Estados de modales
@@ -77,6 +82,9 @@ export function useEstructuraViewModel() {
   const [unidadEditando, setUnidadEditando] = useState<UnidadNegocio | null>(null);
   const [nodoEditando, setNodoEditando] = useState<NodoSeleccionado | null>(null);
   const [errorModalEdicion, setErrorModalEdicion] = useState<string | null>(null);
+
+  const [modalPeriodosAbierto, setModalPeriodosAbierto] = useState<boolean>(false);
+  const [errorModalPeriodos, setErrorModalPeriodos] = useState<string | null>(null);
 
   const puedeGestionar = useMemo(() => {
     if (!usuario?.rol) return false;
@@ -97,6 +105,9 @@ export function useEstructuraViewModel() {
     setPeriodoActivo(periodoRes.status === "fulfilled" ? periodoRes.value : null);
     if (periodosRes.status === "fulfilled") setPeriodos(periodosRes.value);
     setUnidades(unidadesRes.status === "fulfilled" ? unidadesRes.value : []);
+    setErrorCarga(
+      unidadesRes.status === "rejected" ? mensajeDe(unidadesRes.reason, "No se pudo cargar el catálogo.") : null,
+    );
     if (departamentosRes.status === "fulfilled") setDepartamentos(departamentosRes.value);
     if (responsablesRes.status === "fulfilled") setResponsables(responsablesRes.value);
     setCargando(false);
@@ -124,7 +135,8 @@ export function useEstructuraViewModel() {
     setErrorModalAlta(null);
   };
 
-  const guardarNuevaUnidad = async (datos: AltaUnidadInput): Promise<boolean> => {
+  /** Devuelve la unidad creada (la vista la abre) o null si falló. */
+  const guardarNuevaUnidad = async (datos: AltaUnidadInput): Promise<UnidadNegocio | null> => {
     setGuardando(true);
     setErrorModalAlta(null);
     try {
@@ -132,12 +144,12 @@ export function useEstructuraViewModel() {
       setUnidades((prev) => [...prev, nueva].sort((a, b) => a.codigo.localeCompare(b.codigo)));
       toast.success(`Unidad de negocio ${conCodigo(nueva)} creada exitosamente.`);
       cerrarModalAlta();
-      return true;
+      return nueva;
     } catch (err) {
       const mensaje = mensajeDe(err, "Error al registrar la unidad de negocio.");
       setErrorModalAlta(mensaje);
       toast.error(mensaje);
-      return false;
+      return null;
     } finally {
       setGuardando(false);
     }
@@ -231,8 +243,60 @@ export function useEstructuraViewModel() {
     }
   };
 
+  // ── Periodos de auditoría ───────────────────────────────────────────────────
+
+  const abrirModalPeriodos = () => {
+    setErrorModalPeriodos(null);
+    setModalPeriodosAbierto(true);
+  };
+
+  const cerrarModalPeriodos = () => {
+    setModalPeriodosAbierto(false);
+    setErrorModalPeriodos(null);
+  };
+
+  /** Vuelve a leer los periodos y el activo (activar uno desactiva los demás en el backend). */
+  const refrescarPeriodos = async () => {
+    const lista = await apiListarPeriodos();
+    setPeriodos(lista);
+    setPeriodoActivo(lista.find((p) => p.activo) ?? null);
+  };
+
+  const guardarPeriodo = async (datos: AltaPeriodoInput): Promise<boolean> => {
+    setGuardando(true);
+    setErrorModalPeriodos(null);
+    try {
+      const periodo = await apiCrearPeriodo(datos);
+      await refrescarPeriodos();
+      toast.success(`Periodo "${periodo.nombre}" registrado${periodo.activo ? " y activado" : ""}.`);
+      return true;
+    } catch (err) {
+      setErrorModalPeriodos(mensajeDe(err, "Error al registrar el periodo."));
+      return false;
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const activarPeriodo = async (periodo: PeriodoFiscal): Promise<boolean> => {
+    setGuardando(true);
+    setErrorModalPeriodos(null);
+    try {
+      await apiEditarPeriodo(periodo.id, { activo: true });
+      await refrescarPeriodos();
+      toast.success(`Periodo "${periodo.nombre}" activado.`);
+      return true;
+    } catch (err) {
+      setErrorModalPeriodos(mensajeDe(err, "Error al activar el periodo."));
+      return false;
+    } finally {
+      setGuardando(false);
+    }
+  };
+
   // ── Eliminación (AC3) ───────────────────────────────────────────────────────
-  // Devuelven el mensaje de error (auditorías activas, elementos dependientes) o null.
+  // Devuelven el mensaje de error (auditorías activas, elementos dependientes) o null; la
+  // vista lo muestra en el diálogo de confirmación, así que no se repite en un aviso.
 
   const eliminarUnidad = async (unidad: UnidadNegocio): Promise<string | null> => {
     try {
@@ -241,9 +305,7 @@ export function useEstructuraViewModel() {
       toast.success(`Unidad de negocio "${nombreVisible(unidad)}" eliminada exitosamente.`);
       return null;
     } catch (err) {
-      const mensaje = mensajeDe(err, "Error al eliminar la unidad de negocio.");
-      toast.error(mensaje);
-      return mensaje;
+      return mensajeDe(err, "Error al eliminar la unidad de negocio.");
     }
   };
 
@@ -254,9 +316,7 @@ export function useEstructuraViewModel() {
       toast.success(`${ETIQUETA_NIVEL[nodo.nivel]} "${nombreVisible(nodo)}" eliminada exitosamente.`);
       return null;
     } catch (err) {
-      const mensaje = mensajeDe(err, "Error al eliminar el elemento.");
-      toast.error(mensaje);
-      return mensaje;
+      return mensajeDe(err, "Error al eliminar el elemento.");
     }
   };
 
@@ -267,8 +327,16 @@ export function useEstructuraViewModel() {
     departamentos,
     responsables,
     cargando,
+    errorCarga,
     guardando,
     puedeGestionar,
+    // Periodos
+    modalPeriodosAbierto,
+    errorModalPeriodos,
+    abrirModalPeriodos,
+    cerrarModalPeriodos,
+    guardarPeriodo,
+    activarPeriodo,
     // Alta de unidad
     modalAltaAbierto,
     errorModalAlta,

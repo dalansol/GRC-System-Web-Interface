@@ -32,6 +32,19 @@ function esDuplicado(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: string }).code === UNIQUE_VIOLATION;
 }
 
+/**
+ * AC2: traduce la violación de un índice único de nombre (025) a ErrorNombreDuplicado; cualquier
+ * otro error (incluida otra violación única) se relanza tal cual.
+ */
+function traducirDuplicado(error: unknown, nombre: string | null | undefined): never {
+  if (esDuplicado(error)) {
+    const indice = (error as { constraint?: string }).constraint;
+    if (indice === "uq_business_units_display_name") throw new ErrorNombreDuplicado("una unidad de negocio", nombre ?? "");
+    if (indice === "uq_area_business_name") throw new ErrorNombreDuplicado("un área en esta subdivisión", nombre ?? "");
+  }
+  throw error;
+}
+
 // Tabla y columnas de cada nivel. Valores fijos: nunca vienen de la petición.
 // `codigo` es la columna del código (el área no tiene); `nombre`, la del nombre (023).
 const TABLAS: Record<NivelNodo, { tabla: string; id: string; codigo: string | null; nombre: string; padre: string }> = {
@@ -364,7 +377,7 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
         [codigo, datos.nombre, datos.responsableId, periodoFiscalId, datos.departamentoAuditoriaId, creadoPor],
       );
       return rows[0]!.id;
-    });
+    }).catch((error: unknown) => traducirDuplicado(error, datos.nombre));
     return (await this.buscarUnidadPorId(id))!;
   }
 
@@ -380,7 +393,9 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
     if (sets.length === 0) return this.buscarUnidadPorId(id);
 
     vals.push(id);
-    const { rowCount } = await this.pool.query(`UPDATE business_units SET ${sets.join(", ")} WHERE id = $${vals.length}`, vals);
+    const { rowCount } = await this.pool
+      .query(`UPDATE business_units SET ${sets.join(", ")} WHERE id = $${vals.length}`, vals)
+      .catch((error: unknown) => traducirDuplicado(error, campos.nombre));
     if (rowCount === 0) return null;
     return this.buscarUnidadPorId(id);
   }
@@ -418,7 +433,7 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
         vals,
       );
       return rows[0]!;
-    });
+    }).catch((error: unknown) => traducirDuplicado(error, datos.nombre));
   }
 
   async editarNodo(nivel: NivelNodo, id: number, campos: EdicionNodoInput): Promise<NodoPlano | null> {
@@ -430,11 +445,13 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
     if (sets.length === 0) return this.buscarNodo(nivel, id);
 
     vals.push(id);
-    const { rows } = await this.pool.query<NodoPlano>(
-      `UPDATE ${t.tabla} SET ${sets.join(", ")} WHERE ${t.id} = $${vals.length}
-       RETURNING ${columnasNodo(t)}`,
-      vals,
-    );
+    const { rows } = await this.pool
+      .query<NodoPlano>(
+        `UPDATE ${t.tabla} SET ${sets.join(", ")} WHERE ${t.id} = $${vals.length}
+         RETURNING ${columnasNodo(t)}`,
+        vals,
+      )
+      .catch((error: unknown) => traducirDuplicado(error, campos.nombre));
     return rows[0] ?? null;
   }
 

@@ -57,15 +57,10 @@ export function riesgosDeNodo(nodo: UnidadNegocio | Division | Subdivision): Rie
   return nodo.divisiones.flatMap(riesgosDeNodo);
 }
 
-/** True si algún riesgo tiene ese nivel o uno peor. */
-function alcanzaNivel(riesgos: Riesgo[], nivel: NivelRiesgo): boolean {
-  return riesgos.some((r) => r.nivel !== null && ORDEN_NIVEL[r.nivel] <= ORDEN_NIVEL[nivel]);
-}
-
 export interface FiltroCatalogo {
   /** Texto a buscar en códigos y nombres de cualquier nivel (vacío = sin filtro). */
   texto: string;
-  /** Mostrar solo ramas con riesgos de este nivel o peor (null = sin filtro). */
+  /** Mostrar solo ramas con riesgos de este nivel exacto, y solo esos riesgos (null = sin filtro). */
   nivel: NivelRiesgo | null;
 }
 
@@ -85,7 +80,11 @@ export function filtrarUnidades(unidades: UnidadNegocio[], { texto, nivel }: Fil
   if (busqueda === "" && nivel === null) return unidades;
 
   const filtrarSubdivision = (s: Subdivision, padreCoincide: boolean): Subdivision | null => {
-    if (nivel && !alcanzaNivel(s.riesgos, nivel)) return null;
+    if (nivel) {
+      const delNivel = s.riesgos.filter((r) => r.nivel === nivel);
+      if (delNivel.length === 0) return null;
+      s = { ...s, riesgos: delNivel };
+    }
     if (padreCoincide || coincide(s.codigo, s.nombre)) return s;
     const areas = s.areas.filter((a) => coincide(a.nombre));
     const riesgos = s.riesgos.filter((r) => coincide(r.nombre));

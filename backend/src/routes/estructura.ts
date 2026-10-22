@@ -63,7 +63,7 @@ function noEncontrado(nivel: NivelEstructura): ErrorApi {
   return new ErrorApi(404, "NO_ENCONTRADO", `${articulo === "la" ? "La" : "El"} ${etiqueta} no existe.`);
 }
 
-/** Traduce el error de nombre duplicado (periodos) del repositorio a 409. */
+/** AC2: traduce el error de nombre duplicado del repositorio (periodo, unidad o área en su subdivisión) a 409. */
 async function sinDuplicados<T>(trabajo: () => Promise<T>): Promise<T> {
   try {
     return await trabajo();
@@ -231,7 +231,7 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
     if (datos.responsableId !== undefined) await validarGerente(datos.responsableId);
     await validarDepartamento(datos.departamentoAuditoriaId);
 
-    const unidad = await repo.editarUnidad(id, datos);
+    const unidad = await sinDuplicados(() => repo.editarUnidad(id, datos));
     if (!unidad) throw noEncontrado("unidad");
     registrarEvento({
       accion: "estructura.edicion",
@@ -257,8 +257,8 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
   });
 
   // ── División, subdivisión y área ────────────────────────────────────────────
-  // El repositorio asigna el código de división y subdivisión; los nombres se repiten
-  // legítimamente entre ramas.
+  // El repositorio asigna el código de división y subdivisión. Sus nombres se repiten
+  // legítimamente entre ramas; el del área solo no se repite dentro de su subdivisión.
 
   for (const nivel of ["division", "subdivision", "area"] as NivelNodo[]) {
     const { ruta, articulo, etiqueta } = NIVELES[nivel];
@@ -272,7 +272,7 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
       const datos = normalizarAltaNodo(nivel, cuerpo);
       if (!(await existe(NIVEL_PADRE[nivel], datos.padreId))) throw noEncontrado(NIVEL_PADRE[nivel]);
 
-      const nodo = await repo.crearNodo(nivel, datos);
+      const nodo = await sinDuplicados(() => repo.crearNodo(nivel, datos));
       registrarEvento({
         accion: "estructura.alta",
         actor: usuarioEnSesion(res).correo,
@@ -288,7 +288,7 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
       if (error) throw new ErrorApi(400, "DATOS_INVALIDOS", error);
 
       const datos = normalizarEdicionNodo(nivel, cuerpo);
-      const nodo = await repo.editarNodo(nivel, id, datos);
+      const nodo = await sinDuplicados(() => repo.editarNodo(nivel, id, datos));
       if (!nodo) throw noEncontrado(nivel);
       registrarEvento({
         accion: "estructura.edicion",

@@ -12,6 +12,16 @@ export interface PeriodoFiscal {
   activo: boolean;
 }
 
+/** Alta de un periodo de auditoría (trimestre o año fiscal). Activarlo desactiva el anterior. */
+export interface AltaPeriodoInput {
+  nombre: string;
+  fechaInicio: string;
+  fechaFin: string;
+  activo: boolean;
+}
+
+export type EdicionPeriodoInput = Partial<AltaPeriodoInput>;
+
 export interface DepartamentoAuditoria {
   id: number;
   nombre: string;
@@ -151,6 +161,12 @@ const RUTA_NIVEL: Record<NivelNodo, string> = {
 export const obtenerPeriodoActivo = () => pedir<PeriodoFiscal>("/periodos/activo");
 
 export const listarPeriodos = () => pedir<PeriodoFiscal[]>("/periodos");
+
+export const crearPeriodo = (datos: AltaPeriodoInput) =>
+  pedir<PeriodoFiscal>("/periodos", { metodo: "POST", cuerpo: datos });
+
+export const editarPeriodo = (id: number, cambios: EdicionPeriodoInput) =>
+  pedir<PeriodoFiscal>(`/periodos/${id}`, { metodo: "PATCH", cuerpo: cambios });
 
 export const listarDepartamentos = () => pedir<DepartamentoAuditoria[]>("/departamentos-auditoria");
 

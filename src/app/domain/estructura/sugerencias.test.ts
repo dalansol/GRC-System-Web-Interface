@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { UnidadNegocio } from "../../api/estructura";
 import { AREAS_FRECUENTES } from "../../data/catalogoEstructura";
-import { codigoProximo, siguienteCodigo, sugerenciasArea, sugerenciasPais } from "./sugerencias";
+import { codigoProximo, filtrarSugerencias, siguienteCodigo, sugerenciasArea, sugerenciasPais } from "./sugerencias";
 
 const UNIDADES: UnidadNegocio[] = [
   {
@@ -11,7 +11,7 @@ const UNIDADES: UnidadNegocio[] = [
     responsableId: 2,
     responsableNombre: "María García",
     periodoFiscalId: 1,
-    periodoFiscalNombre: "2026Q4",
+    periodoFiscalNombre: "2026 Q4",
     departamentoAuditoriaId: 1,
     departamentoAuditoriaNombre: "Retail & Spin",
     creadoPor: 1,
@@ -73,5 +73,20 @@ describe("sugerencias", () => {
     expect(paises).toContain("KFS RTR");
     expect(paises).toContain("Región Andina");
     expect(paises.filter((p) => p === "México")).toHaveLength(1);
+  });
+});
+
+describe("filtrarSugerencias", () => {
+  const opciones = ["México", "Brasil", "Centroamérica Sur", "KFS RTR"];
+
+  it("sin texto devuelve todas, en su orden", () => {
+    expect(filtrarSugerencias(opciones, "")).toEqual(opciones);
+    expect(filtrarSugerencias(opciones, "   ")).toEqual(opciones);
+  });
+
+  it("filtra por contenido sin distinguir mayúsculas ni acentos", () => {
+    expect(filtrarSugerencias(opciones, "mexi")).toEqual(["México"]);
+    expect(filtrarSugerencias(opciones, "AMERICA")).toEqual(["Centroamérica Sur"]);
+    expect(filtrarSugerencias(opciones, "zzz")).toEqual([]);
   });
 });

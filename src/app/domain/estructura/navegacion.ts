@@ -2,7 +2,7 @@
 // La ruta guarda solo ids: tras un alta, edición o baja la vista vuelve a resolverla contra
 // los datos frescos, y si el nodo ya no existe cae al ancestro más profundo que siga vivo.
 
-import type { Division, Subdivision, UnidadNegocio } from "../../api/estructura";
+import type { Division, NivelNodo, Subdivision, UnidadNegocio } from "../../api/estructura";
 
 /** Dónde está el usuario dentro de una unidad: unidad › división › subdivisión. */
 export interface RutaCatalogo {
@@ -60,4 +60,31 @@ export function resumenHijos(nodo: Division | Subdivision): string {
     return `${plural(nodo.subdivisiones.length, "subdivisión", "subdivisiones")} · ${plural(areas, "área", "áreas")}`;
   }
   return plural(nodo.areas.length, "área", "áreas");
+}
+
+/**
+ * Qué impide eliminar un elemento (AC3, regla HIJOS_EXISTENTES del backend): sus hijos directos
+ * y, en la subdivisión, también sus riesgos registrados. Null si no tiene dependientes (el área
+ * nunca los tiene). Las auditorías activas solo las conoce el servidor.
+ */
+export function dependientesDe(
+  unidades: UnidadNegocio[],
+  entidad: { nivel: NivelNodo | "unidad"; id: number; unidadId: number },
+): string | null {
+  const unidad = unidades.find((u) => u.id === entidad.unidadId);
+  if (!unidad) return null;
+  const partes: string[] = [];
+  if (entidad.nivel === "unidad") {
+    if (unidad.divisiones.length) partes.push(plural(unidad.divisiones.length, "división", "divisiones"));
+  } else if (entidad.nivel === "division") {
+    const division = unidad.divisiones.find((d) => d.id === entidad.id);
+    if (division?.subdivisiones.length) partes.push(plural(division.subdivisiones.length, "subdivisión", "subdivisiones"));
+  } else if (entidad.nivel === "subdivision") {
+    const subdivision = unidad.divisiones.flatMap((d) => d.subdivisiones).find((s) => s.id === entidad.id);
+    if (subdivision?.areas.length) partes.push(plural(subdivision.areas.length, "área", "áreas"));
+    if (subdivision?.riesgos.length) {
+      partes.push(plural(subdivision.riesgos.length, "riesgo registrado", "riesgos registrados"));
+    }
+  }
+  return partes.length ? partes.join(" y ") : null;
 }

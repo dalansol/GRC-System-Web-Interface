@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AlertCircle, Building2, Calendar, Landmark, Loader2, User, X } from "lucide-react";
-import type { AltaUnidadInput, DepartamentoAuditoria, PeriodoFiscal, Responsable } from "../../api/estructura";
+import type { AltaUnidadInput, DepartamentoAuditoria, PeriodoFiscal, Responsable, UnidadNegocio } from "../../api/estructura";
 import { Card } from "../SharedComponents";
 import { CampoCodigo } from "./piezasCatalogo";
 
@@ -11,7 +11,8 @@ interface ModalRegistrarUnidadProps {
   departamentos: DepartamentoAuditoria[];
   guardando: boolean;
   errorServidor: string | null;
-  onGuardar: (datos: AltaUnidadInput) => Promise<boolean>;
+  /** Devuelve la unidad creada, o null si el servidor la rechazó (el error llega en errorServidor). */
+  onGuardar: (datos: AltaUnidadInput) => Promise<UnidadNegocio | null>;
   onCerrar: () => void;
   /** Vista previa del código que asignará el sistema (domain/estructura/sugerencias.ts). */
   codigoProximo: string;
@@ -50,13 +51,13 @@ export function ModalRegistrarUnidad({
       return;
     }
 
-    const exito = await onGuardar({
+    const creada = await onGuardar({
       nombre: nombre.trim() || null,
       responsableId: Number(responsableId),
       departamentoAuditoriaId: departamentoId ? Number(departamentoId) : null,
     });
 
-    if (exito) {
+    if (creada) {
       setNombre("");
       setResponsableId("");
       setDepartamentoId("");
@@ -125,10 +126,6 @@ export function ModalRegistrarUnidad({
               />
             </div>
           </div>
-          <p className="text-[11px] text-muted-foreground -mt-2">
-            El sistema asigna el código al guardar: identifica a la unidad y no cambia. El nombre es opcional y se puede
-            editar cuando quieras; sin él se muestra el código.
-          </p>
 
           {/* Gerente Responsable */}
           <div>

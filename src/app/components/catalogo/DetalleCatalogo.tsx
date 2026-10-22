@@ -311,8 +311,12 @@ export function DetalleCatalogo({ resuelta, onNavegar, acciones, onEditarUnidad,
                 {ETIQUETA_NIVEL[nivel]}
               </span>
               {nivel === "unidad" && (
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {unidad.periodoFiscalNombre}
+                <span
+                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200"
+                  title="Periodo de auditoría activo al registrar la unidad"
+                  data-testid="periodo-alta"
+                >
+                  Periodo de alta: {unidad.periodoFiscalNombre}
                 </span>
               )}
             </div>
@@ -406,7 +410,21 @@ export function DetalleCatalogo({ resuelta, onNavegar, acciones, onEditarUnidad,
           accion={puedeGestionar && <BotonAgregar etiqueta={ETIQUETA_NIVEL.division} onClick={agregarHijo} />}
         >
           {unidad.divisiones.length === 0 ? (
-            <Vacio>Sin divisiones registradas.</Vacio>
+            // AC1: la unidad recién creada invita a seguir con su jerarquía hasta el área.
+            <div className="px-4 py-8 text-center">
+              <p className="text-xs text-muted-foreground">Sin divisiones registradas.</p>
+              {puedeGestionar && (
+                <button
+                  type="button"
+                  onClick={agregarHijo}
+                  data-testid="btn-agregar-primera-division"
+                  className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all shadow-sm"
+                >
+                  <Plus size={14} />
+                  Agregar la primera división
+                </button>
+              )}
+            </div>
           ) : (
             <ul className="divide-y divide-border/60">
               {unidad.divisiones.map((d) => (

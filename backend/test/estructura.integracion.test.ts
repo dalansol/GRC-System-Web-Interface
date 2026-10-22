@@ -5,6 +5,7 @@
 import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { ErrorNombreDuplicado } from "../src/repos/estructura.js";
 import { RepositorioEstructuraSql } from "../src/repos/estructuraSql.js";
 
 const env = process.env;
@@ -33,6 +34,8 @@ const SCRIPTS = [
   "022_seed_nombres_reales.sql",
   "023_codigo_y_nombre.sql",
   "024_seed_quitar_sin_codigo.sql",
+  "025_nombres_unicos.sql",
+  "026_nombres_periodos.sql",
 ];
 
 const script = (nombre: string) => readFile(new URL(`../sql/${nombre}`, import.meta.url), "utf8");
@@ -77,9 +80,37 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
     await pool?.end();
   });
 
-  it("los periodos son trimestrales, con 2026Q4 como único activo", async () => {
+  it("026 renombra los periodos al formato '2026 Q1' / '2026 Fiscal' y repetir 015 y 017 no los duplica", async () => {
+    await pool.query(
+      `INSERT INTO fiscal_periods (name, start_date, end_date, is_active)
+       VALUES ('2031Q2', '2031-04-01', '2031-06-30', FALSE), ('Fiscal 2031', '2031-01-01', '2031-12-31', FALSE)`,
+    );
+    await pool.query(await script("026_nombres_periodos.sql"));
+    for (const nombre of ["015_seed_estructura.sql", "017_jerarquia_organizacional.sql", "026_nombres_periodos.sql"]) {
+      await pool.query(await script(nombre));
+    }
+    const nombres = (await repo.listarPeriodos()).map((p) => p.nombre);
+    expect(nombres).toEqual(expect.arrayContaining(["2031 Q2", "2031 Fiscal", "2026 Fiscal", "2026 Q1", "2026 Q4"]));
+    expect(nombres.filter((n) => /^\d{4}Q|^Fiscal /.test(n))).toEqual([]);
+    const de2026 = await pool.query("SELECT count(*)::int AS n FROM fiscal_periods WHERE start_date >= '2026-01-01' AND end_date <= '2026-12-31'");
+    expect(de2026.rows[0].n).toBe(5); // cuatro trimestres y el año fiscal
+    await pool.query("DELETE FROM fiscal_periods WHERE name IN ('2031 Q2', '2031 Fiscal')");
+  });
+
+  it("repetir los scripts no cambia el periodo activo elegido en el Catálogo", async () => {
+    const fiscal = (await repo.listarPeriodos()).find((p) => p.nombre === "2026 Fiscal")!;
+    await repo.editarPeriodo(fiscal.id, { activo: true });
+    for (const nombre of ["015_seed_estructura.sql", "017_jerarquia_organizacional.sql", "026_nombres_periodos.sql"]) {
+      await pool.query(await script(nombre));
+    }
+    expect((await repo.obtenerPeriodoActivo())?.nombre).toBe("2026 Fiscal");
+    const q4 = (await repo.listarPeriodos()).find((p) => p.nombre === "2026 Q4")!;
+    await repo.editarPeriodo(q4.id, { activo: true });
+  });
+
+  it("los periodos son trimestrales, con 2026 Q4 como único activo", async () => {
     const activo = await repo.obtenerPeriodoActivo();
-    expect(activo?.nombre).toBe("2026Q4");
+    expect(activo?.nombre).toBe("2026 Q4");
     expect((await repo.listarPeriodos()).filter((p) => p.activo)).toHaveLength(1);
   });
 
@@ -174,6 +205,31 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
     expect(division.codigo).toBe("DIVISION-0013");
   });
 
+  it("AC2: el nombre de unidad (si lo tiene) y el del área en su subdivisión no se repiten", async () => {
+    const periodo = (await repo.obtenerPeriodoActivo())!.id;
+    const alta = (nombre: string | null) =>
+      repo.crearUnidad({ nombre, responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId);
+    const unidad = await alta("Unidad Única");
+    await expect(alta("unidad única")).rejects.toBeInstanceOf(ErrorNombreDuplicado);
+    const otra = await alta(null);
+    await alta(null); // varias sin nombre
+    await expect(repo.editarUnidad(otra.id, { nombre: "UNIDAD ÚNICA" })).rejects.toBeInstanceOf(ErrorNombreDuplicado);
+    expect((await repo.editarUnidad(unidad.id, { nombre: "unidad única" }))!.nombre).toBe("unidad única");
+
+    const division = await repo.crearNodo("division", { nombre: null, padreId: unidad.id, pais: null });
+    const [s1, s2] = [
+      await repo.crearNodo("subdivision", { nombre: null, padreId: division.id, pais: null }),
+      await repo.crearNodo("subdivision", { nombre: null, padreId: division.id, pais: null }),
+    ];
+    await repo.crearNodo("area", { nombre: "Nómina", padreId: s1.id, pais: null });
+    await expect(repo.crearNodo("area", { nombre: "NÓMINA", padreId: s1.id, pais: null })).rejects.toBeInstanceOf(
+      ErrorNombreDuplicado,
+    );
+    const compras = await repo.crearNodo("area", { nombre: "Compras", padreId: s1.id, pais: null });
+    await expect(repo.editarNodo("area", compras.id, { nombre: "nómina" })).rejects.toBeInstanceOf(ErrorNombreDuplicado);
+    expect((await repo.crearNodo("area", { nombre: "Nómina", padreId: s2.id, pais: null })).nombre).toBe("Nómina");
+  });
+
   it("dos altas simultáneas reciben códigos distintos", async () => {
     const periodo = (await repo.obtenerPeriodoActivo())!.id;
     const alta = () => repo.crearUnidad({ nombre: null, responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId);
@@ -222,10 +278,10 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
   });
 
   it("activar un periodo desactiva el anterior", async () => {
-    const nuevo = await repo.crearPeriodo({ nombre: "2027Q1", fechaInicio: "2027-01-01", fechaFin: "2027-03-31", activo: true });
+    const nuevo = await repo.crearPeriodo({ nombre: "2027 Q1", fechaInicio: "2027-01-01", fechaFin: "2027-03-31", activo: true });
     expect((await repo.obtenerPeriodoActivo())?.id).toBe(nuevo.id);
-    const q4 = (await repo.listarPeriodos()).find((p) => p.nombre === "2026Q4")!;
+    const q4 = (await repo.listarPeriodos()).find((p) => p.nombre === "2026 Q4")!;
     await repo.editarPeriodo(q4.id, { activo: true });
-    expect((await repo.obtenerPeriodoActivo())?.nombre).toBe("2026Q4");
+    expect((await repo.obtenerPeriodoActivo())?.nombre).toBe("2026 Q4");
   });
 });

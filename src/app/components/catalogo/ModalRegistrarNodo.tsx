@@ -3,7 +3,7 @@ import { AlertCircle, GitBranch, Loader2, X } from "lucide-react";
 import { ETIQUETA_NIVEL, type DatosNodo } from "../../api/estructura";
 import type { AltaNodoContexto } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
-import { CampoCodigo, Sugerencias } from "./piezasCatalogo";
+import { CampoCodigo, CampoSugerido } from "./piezasCatalogo";
 
 // Alta de división, subdivisión o área dentro de su nivel padre (SF-03).
 // División y subdivisión: el código lo asigna el sistema (aquí solo se muestra el próximo) y
@@ -116,26 +116,37 @@ export function ModalRegistrarNodo({
             <label htmlFor="nodo-nombre" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
               Nombre {!conCodigo && <span className="text-red-500">*</span>}
             </label>
-            <input
-              id="nodo-nombre"
-              type="text"
-              value={nombre}
-              onChange={(e) => {
-                setNombre(e.target.value);
-                if (!conCodigo) setErrorLocal("");
-              }}
-              placeholder={PLACEHOLDER_NOMBRE[contexto.nivel]}
-              list={conCodigo ? undefined : "nodo-nombre-sugerencias"}
-              autoComplete="off"
-              maxLength={150}
-              disabled={guardando}
-              className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${!conCodigo && errorLocal ? "border-red-400" : "border-border"}`}
-            />
-            {!conCodigo && errorLocal && <p className="text-xs text-red-600 mt-1">{errorLocal}</p>}
             {conCodigo ? (
-              <p className="text-[11px] text-muted-foreground mt-1">Opcional. Si lo dejas vacío se muestra el código.</p>
+              <input
+                id="nodo-nombre"
+                type="text"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                placeholder={PLACEHOLDER_NOMBRE[contexto.nivel]}
+                autoComplete="off"
+                maxLength={150}
+                disabled={guardando}
+                className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${!conCodigo && errorLocal ? "border-red-400" : "border-border"}`}
+              />
             ) : (
-              <Sugerencias id="nodo-nombre-sugerencias" opciones={sugerencias} />
+              // Área: sugiere las del catálogo de FEMSA y las registradas que aún no tiene.
+              <CampoSugerido
+                id="nodo-nombre"
+                value={nombre}
+                onChange={(valor) => {
+                  setNombre(valor);
+                  setErrorLocal("");
+                }}
+                opciones={sugerencias}
+                placeholder={PLACEHOLDER_NOMBRE[contexto.nivel]}
+                maxLength={150}
+                disabled={guardando}
+                className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${!conCodigo && errorLocal ? "border-red-400" : "border-border"}`}
+              />
+            )}
+            {!conCodigo && errorLocal && <p className="text-xs text-red-600 mt-1">{errorLocal}</p>}
+            {conCodigo && (
+              <p className="text-[11px] text-muted-foreground mt-1">Opcional. Si lo dejas vacío se muestra el código.</p>
             )}
           </div>
 
@@ -144,19 +155,16 @@ export function ModalRegistrarNodo({
               <label htmlFor="nodo-pais" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
                 País o región
               </label>
-              <input
+              <CampoSugerido
                 id="nodo-pais"
-                type="text"
                 value={pais}
-                onChange={(e) => setPais(e.target.value)}
+                onChange={setPais}
+                opciones={sugerenciasPais}
                 placeholder="Ej. México, Centroamérica Sur, Corporativo…"
-                list="nodo-pais-sugerencias"
-                autoComplete="off"
                 maxLength={100}
                 disabled={guardando}
                 className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               />
-              <Sugerencias id="nodo-pais-sugerencias" opciones={sugerenciasPais} />
             </div>
           )}
 

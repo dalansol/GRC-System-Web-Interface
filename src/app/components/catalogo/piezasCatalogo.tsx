@@ -1,8 +1,10 @@
+import { useId, useState, type InputHTMLAttributes } from "react";
 import { Edit2, Lock, Trash2 } from "lucide-react";
 import type { NivelNodo, Riesgo } from "../../api/estructura";
 import type { AltaNodoContexto, NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { nombreVisible, tieneNombre, type ConNombre } from "../../domain/estructura/nombres";
 import { COLOR_NIVEL_RIESGO, distribucionRiesgos, nivelMaximo } from "../../domain/estructura/riesgos";
+import { filtrarSugerencias } from "../../domain/estructura/sugerencias";
 
 // Piezas compartidas por el árbol de navegación (ArbolCatalogo) y el panel de detalle
 // (DetalleCatalogo), para que ambos se vean igual.
@@ -78,24 +80,117 @@ export function CampoCodigo({ codigo, proximo = false }: { codigo: string; proxi
         data-testid="campo-codigo"
         className="flex items-center justify-between gap-2 text-sm px-3.5 py-2.5 rounded-lg border border-border bg-slate-50 text-muted-foreground"
       >
-        <span className="font-mono text-foreground">{codigo}</span>
-        <span className="flex items-center gap-1 text-[11px] whitespace-nowrap">
-          <Lock size={12} aria-hidden />
-          {proximo ? "Se asigna al guardar" : "No se puede cambiar"}
-        </span>
+        <span className="font-mono text-foreground truncate">{codigo}</span>
+        {proximo ? (
+          // En el alta solo el candado: el código lo asigna el sistema al guardar.
+          <span role="img" aria-label="Se asigna al guardar" title="Se asigna al guardar" className="flex-shrink-0">
+            <Lock size={13} aria-hidden />
+          </span>
+        ) : (
+          <span className="flex items-center gap-1 text-[11px] whitespace-nowrap">
+            <Lock size={12} aria-hidden />
+            No se puede cambiar
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-/** Lista de sugerencias para un input (el usuario puede escribir otro valor). */
-export function Sugerencias({ id, opciones }: { id: string; opciones: readonly string[] }) {
+type PropsCampoSugerido = Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "list"> & {
+  value: string;
+  onChange: (valor: string) => void;
+  opciones: readonly string[];
+};
+
+/**
+ * Campo de texto con sugerencias (combobox). Al enfocarlo muestra todas; al escribir filtra
+ * sin distinguir mayúsculas ni acentos. Acepta cualquier otro valor. Flechas para recorrer,
+ * Enter para elegir, Escape para cerrar. Sustituye a `<datalist>`, que no muestra la lista
+ * completa con el campo vacío en todos los navegadores.
+ */
+export function CampoSugerido({ value, onChange, opciones, className, onBlur, onFocus, onKeyDown, ...props }: PropsCampoSugerido) {
+  const idLista = useId();
+  const [abierto, setAbierto] = useState(false);
+  const [activo, setActivo] = useState(-1);
+  const visibles = filtrarSugerencias(opciones, value);
+  const mostrar = abierto && visibles.length > 0 && !props.disabled;
+
+  const elegir = (opcion: string) => {
+    onChange(opcion);
+    setAbierto(false);
+    setActivo(-1);
+  };
+
   return (
-    <datalist id={id} data-testid={id}>
-      {opciones.map((o) => (
-        <option key={o} value={o} />
-      ))}
-    </datalist>
+    <div className="relative">
+      <input
+        {...props}
+        type="text"
+        role="combobox"
+        aria-expanded={mostrar}
+        aria-controls={idLista}
+        aria-autocomplete="list"
+        aria-activedescendant={mostrar && activo >= 0 ? `${idLista}-${activo}` : undefined}
+        autoComplete="off"
+        value={value}
+        className={className}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setAbierto(true);
+          setActivo(-1);
+        }}
+        onFocus={(e) => {
+          setAbierto(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setAbierto(false);
+          setActivo(-1);
+          onBlur?.(e);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            setAbierto(true);
+            const paso = e.key === "ArrowDown" ? 1 : -1;
+            setActivo((i) => (visibles.length ? (i + paso + visibles.length) % visibles.length : -1));
+          } else if (e.key === "Enter" && mostrar && activo >= 0) {
+            e.preventDefault(); // elige la sugerencia en lugar de enviar el formulario
+            elegir(visibles[activo]!);
+          } else if (e.key === "Escape" && mostrar) {
+            e.stopPropagation();
+            setAbierto(false);
+          }
+          onKeyDown?.(e);
+        }}
+      />
+      {mostrar && (
+        <ul
+          id={idLista}
+          role="listbox"
+          className="absolute z-20 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border border-border bg-white py-1 shadow-lg"
+        >
+          {visibles.map((opcion, i) => (
+            <li
+              key={opcion}
+              id={`${idLista}-${i}`}
+              role="option"
+              aria-selected={i === activo}
+              // mousedown para que el campo no pierda el foco antes de elegir.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                elegir(opcion);
+              }}
+              onMouseEnter={() => setActivo(i)}
+              className={`cursor-pointer px-3.5 py-1.5 text-sm ${i === activo ? "bg-primary/10 text-primary" : "text-foreground hover:bg-slate-50"}`}
+            >
+              {opcion}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

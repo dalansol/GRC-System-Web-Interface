@@ -34,8 +34,8 @@ const plano = (n: FilaNodo): NodoPlano => ({ id: n.id, codigo: n.codigo, nombre:
 
 export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   private periodos: PeriodoFiscal[] = [
-    { id: 1, nombre: "2026Q3", fechaInicio: "2026-07-01", fechaFin: "2026-09-30", activo: false },
-    { id: 2, nombre: "2026Q4", fechaInicio: "2026-10-01", fechaFin: "2026-12-31", activo: true },
+    { id: 1, nombre: "2026 Q3", fechaInicio: "2026-07-01", fechaFin: "2026-09-30", activo: false },
+    { id: 2, nombre: "2026 Q4", fechaInicio: "2026-10-01", fechaFin: "2026-12-31", activo: true },
   ];
 
   private departamentos: DepartamentoAuditoria[] = [
@@ -235,6 +235,7 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   }
 
   async crearUnidad(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio> {
+    this.validarNombreUnidad(datos.nombre);
     const id = this.sigId.unidad++;
     const codigo = this.siguienteCodigo("unidad");
     this.unidades.push({ id, codigo, ...datos, periodoFiscalId, creadoPor, creadoEn: new Date().toISOString() });
@@ -244,8 +245,17 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   async editarUnidad(id: number, campos: EdicionUnidadInput): Promise<UnidadNegocio | null> {
     const u = this.unidades.find((x) => x.id === id);
     if (!u) return null;
+    if (campos.nombre !== undefined) this.validarNombreUnidad(campos.nombre, id);
     Object.assign(u, campos);
     return this.buscarUnidadPorId(id);
+  }
+
+  /** AC2: el nombre de la unidad, si lo tiene, es único (sin distinguir mayúsculas). */
+  private validarNombreUnidad(nombre: string | null, exceptoId?: number): void {
+    if (nombre === null) return;
+    if (this.unidades.some((u) => u.id !== exceptoId && u.nombre !== null && claveNombre(u.nombre) === claveNombre(nombre))) {
+      throw new ErrorNombreDuplicado("una unidad de negocio", nombre);
+    }
   }
 
   async eliminarUnidad(id: number): Promise<void> {
@@ -260,6 +270,7 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   }
 
   async crearNodo(nivel: NivelNodo, datos: AltaNodoInput): Promise<NodoPlano> {
+    if (nivel === "area") this.validarNombreArea(datos.nombre!, datos.padreId);
     const nodo = {
       id: this.sigId[nivel]++,
       codigo: nivel === "area" ? null : this.siguienteCodigo(nivel),
@@ -274,8 +285,17 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   async editarNodo(nivel: NivelNodo, id: number, campos: EdicionNodoInput): Promise<NodoPlano | null> {
     const nodo = this.nodos[nivel].find((n) => n.id === id);
     if (!nodo) return null;
+    if (nivel === "area" && campos.nombre) this.validarNombreArea(campos.nombre, nodo.padreId, id);
     Object.assign(nodo, campos);
     return plano(nodo);
+  }
+
+  /** AC2: el nombre del área (el "proceso") es único dentro de su subdivisión. */
+  private validarNombreArea(nombre: string, subdivisionId: number, exceptoId?: number): void {
+    const repetida = this.nodos.area.some(
+      (a) => a.id !== exceptoId && a.padreId === subdivisionId && claveNombre(a.nombre ?? "") === claveNombre(nombre),
+    );
+    if (repetida) throw new ErrorNombreDuplicado("un área en esta subdivisión", nombre);
   }
 
   async eliminarNodo(nivel: NivelNodo, id: number): Promise<void> {

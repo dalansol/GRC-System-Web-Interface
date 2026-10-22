@@ -69,3 +69,13 @@ export function sugerenciasArea(unidades: UnidadNegocio[], subdivisionId: number
 export function sugerenciasPais(unidades: UnidadNegocio[]): string[] {
   return unir(PAISES_FRECUENTES, nombresPorNivel(unidades).pais);
 }
+
+function sinAcentos(texto: string): string {
+  return texto.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+}
+
+/** Sugerencias que contienen el texto escrito (sin distinguir mayúsculas ni acentos); sin texto, todas. */
+export function filtrarSugerencias(opciones: readonly string[], texto: string): string[] {
+  const busqueda = sinAcentos(texto);
+  return busqueda === "" ? [...opciones] : opciones.filter((o) => sinAcentos(o).includes(busqueda));
+}

@@ -39,14 +39,16 @@ export interface RepositorioEstructura {
   buscarUnidadPorId(id: number): Promise<UnidadNegocio | null>;
   /**
    * Asigna el código: el siguiente número del nivel, por encima del mayor que se haya
-   * asignado o exista (no reutiliza los de unidades borradas).
+   * asignado o exista (no reutiliza los de unidades borradas). El nombre, si lo tiene, es
+   * único sin distinguir mayúsculas: lanza ErrorNombreDuplicado.
    */
   crearUnidad(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio>;
-  /** El código no se edita; el nombre no es único. */
+  /** El código no se edita. Lanza ErrorNombreDuplicado si el nombre ya lo usa otra unidad. */
   editarUnidad(id: number, campos: EdicionUnidadInput): Promise<UnidadNegocio | null>;
   eliminarUnidad(id: number): Promise<void>;
 
-  // División, subdivisión y área. Sus nombres no son únicos.
+  // División, subdivisión y área. Sus nombres se repiten entre ramas, salvo el del área
+  // dentro de su subdivisión (crearNodo y editarNodo lanzan ErrorNombreDuplicado).
   buscarNodo(nivel: NivelNodo, id: number): Promise<NodoPlano | null>;
   /** A la división y la subdivisión les asigna el código igual que a la unidad. */
   crearNodo(nivel: NivelNodo, datos: AltaNodoInput): Promise<NodoPlano>;

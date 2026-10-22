@@ -10,7 +10,7 @@ import {
 } from "../../api/estructura";
 import type { NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
-import { CampoCodigo, Sugerencias } from "./piezasCatalogo";
+import { CampoCodigo, CampoSugerido } from "./piezasCatalogo";
 
 interface ModalEditarEntidadProps {
   unidad: UnidadNegocio | null;
@@ -204,18 +204,15 @@ export function ModalEditarEntidad({
               <label htmlFor="editar-pais" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
                 País o región
               </label>
-              <input
+              <CampoSugerido
                 id="editar-pais"
-                type="text"
                 value={pais}
-                onChange={(e) => setPais(e.target.value)}
-                list="editar-pais-sugerencias"
-                autoComplete="off"
+                onChange={setPais}
+                opciones={sugerenciasPais}
                 maxLength={100}
                 disabled={guardando}
                 className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               />
-              <Sugerencias id="editar-pais-sugerencias" opciones={sugerenciasPais} />
             </div>
           )}
 

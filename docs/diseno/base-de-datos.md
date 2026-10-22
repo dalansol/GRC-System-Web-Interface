@@ -72,6 +72,8 @@ huella del contenido y fecha) y la siguiente vez solo corre los que faltan.
 | `022_seed_nombres_reales.sql` | Nombres **inferidos** de `02_Estructura.pptx` para las 6 unidades y 11 de las 12 divisiones (confianza anotada en el script; Spin y FEMSA Servicios sin confirmar). Solo con `--datos-prueba` |
 | `023_codigo_y_nombre.sql` | Fija el significado: `name`/`business_name` = **código** (identificador que asigna el backend, fijo) y `display_name` = **nombre** opcional y editable. Crea `structure_code_counters` (último número asignado por nivel; su fila se bloquea en el alta y no baja al borrar) y, como respaldo, el índice `uq_division_unit_code` |
 | `024_seed_quitar_sin_codigo.sql` | Limpia bases que ya cargaron los datos de prueba anteriores: quita la subdivisión "SIN NOMBRE (B-923765)", que no sigue el formato de código, con sus áreas y riesgos. Solo con `--datos-prueba`; en una base nueva no hace nada |
+| `025_nombres_unicos.sql` | AC2 de la parametrización: `uq_business_units_display_name` (el nombre de la unidad, si lo tiene, no se repite) y `uq_area_business_name` (el nombre del área no se repite dentro de su subdivisión), ambos con la intercalación `sin_mayusculas`. El backend traduce su violación a `409 NOMBRE_DUPLICADO` |
+| `026_nombres_periodos.sql` | Formato de los periodos: "2026 Q1"…"2026 Q4" y "2026 Fiscal" (año completo). Renombra los de formato anterior ("2026Q1" de 017, "Fiscal 2026" de 015) si el nombre nuevo no existe. 015 y 017 ahora insertan por fechas, no por nombre |
 
 ### Cómo agregar un cambio al esquema
 

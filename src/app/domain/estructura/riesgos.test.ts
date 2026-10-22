@@ -16,7 +16,7 @@ const unidad = (id: number, codigo: string, subdivisiones: Array<[string, Riesgo
   responsableId: 1,
   responsableNombre: "María García",
   periodoFiscalId: 1,
-  periodoFiscalNombre: "2026Q4",
+  periodoFiscalNombre: "2026 Q4",
   departamentoAuditoriaId: null,
   departamentoAuditoriaNombre: null,
   creadoPor: 1,
@@ -69,13 +69,18 @@ describe("filtrarUnidades", () => {
     expect(filtrarUnidades(UNIDADES, { texto: "", nivel: null })).toBe(UNIDADES);
   });
 
-  it("por nivel conserva solo las subdivisiones con un riesgo de ese nivel o peor", () => {
+  it("por nivel conserva solo las subdivisiones con riesgos de ese nivel exacto, y solo esos riesgos", () => {
     const criticas = filtrarUnidades(UNIDADES, { texto: "", nivel: "Crítico" });
     expect(criticas.map((u) => u.codigo)).toEqual(["UDN-0003"]);
 
+    // "Alto" ya no incluye a los críticos.
     const altas = filtrarUnidades(UNIDADES, { texto: "", nivel: "Alto" });
-    expect(altas.map((u) => u.codigo)).toEqual(["UDN-0001", "UDN-0003"]);
-    expect(altas[0]!.divisiones[0]!.subdivisiones.map((s) => s.codigo)).toEqual(["SUBDIVISION-A"]);
+    expect(altas.map((u) => u.codigo)).toEqual(["UDN-0001"]);
+    const subdivision = altas[0]!.divisiones[0]!.subdivisiones;
+    expect(subdivision.map((s) => s.codigo)).toEqual(["SUBDIVISION-A"]);
+    expect(subdivision[0]!.riesgos.map((r) => r.nivel)).toEqual(["Alto"]);
+
+    expect(filtrarUnidades(UNIDADES, { texto: "", nivel: "Medio" })).toEqual([]);
   });
 
   it("por texto busca en áreas y riesgos sin importar acentos ni mayúsculas", () => {

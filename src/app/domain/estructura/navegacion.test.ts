@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UnidadNegocio } from "../../api/estructura";
-import { clavesAncestros, conteosRama, resolverRuta, resumenHijos } from "./navegacion";
+import { clavesAncestros, conteosRama, dependientesDe, resolverRuta, resumenHijos } from "./navegacion";
 
 const UNIDAD: UnidadNegocio = {
   id: 1,
@@ -9,7 +9,7 @@ const UNIDAD: UnidadNegocio = {
   responsableId: 2,
   responsableNombre: "María García",
   periodoFiscalId: 1,
-  periodoFiscalNombre: "2026Q4",
+  periodoFiscalNombre: "2026 Q4",
   departamentoAuditoriaId: null,
   departamentoAuditoriaNombre: null,
   creadoPor: 1,
@@ -83,5 +83,32 @@ describe("explorador del catálogo", () => {
     const areas = division.subdivisiones.reduce((t, s) => t + s.areas.length, 0);
     expect(conteosRama(UNIDAD).divisiones).toBe(UNIDAD.divisiones.length);
     expect(conteosRama(division)).toEqual({ divisiones: 1, subdivisiones: division.subdivisiones.length, areas });
+  });
+});
+
+describe("dependientesDe (aviso antes de eliminar)", () => {
+  const riesgo = { id: 1, nombre: "Riesgo", nivel: null, procedimientoControl: null };
+  const conRiesgos: UnidadNegocio = {
+    ...UNIDAD,
+    divisiones: [
+      {
+        ...UNIDAD.divisiones[0]!,
+        subdivisiones: [{ ...UNIDAD.divisiones[0]!.subdivisiones[0]!, riesgos: [riesgo, { ...riesgo, id: 2 }] }],
+      },
+    ],
+  };
+
+  it("describe los hijos directos de cada nivel (y los riesgos de la subdivisión)", () => {
+    expect(dependientesDe([UNIDAD], { nivel: "unidad", id: 1, unidadId: 1 })).toBe("1 división");
+    expect(dependientesDe([UNIDAD], { nivel: "division", id: 10, unidadId: 1 })).toBe("2 subdivisiones");
+    expect(dependientesDe([conRiesgos], { nivel: "subdivision", id: 100, unidadId: 1 })).toBe(
+      "2 áreas y 2 riesgos registrados",
+    );
+  });
+
+  it("es null sin dependientes, para un área o si el nodo no existe", () => {
+    expect(dependientesDe([UNIDAD], { nivel: "subdivision", id: 101, unidadId: 1 })).toBeNull();
+    expect(dependientesDe([UNIDAD], { nivel: "area", id: 1000, unidadId: 1 })).toBeNull();
+    expect(dependientesDe([UNIDAD], { nivel: "division", id: 99, unidadId: 1 })).toBeNull();
   });
 });

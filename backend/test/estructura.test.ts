@@ -74,32 +74,32 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
     it("consulta el periodo trimestral activo", async () => {
       const res = await como(AUDITOR).get("/api/periodos/activo");
       expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ nombre: "2026Q4", activo: true });
+      expect(res.body).toMatchObject({ nombre: "2026 Q4", activo: true });
     });
 
     it("al activar un periodo nuevo desactiva el anterior y lo registra en bitácora", async () => {
       const res = await como(ADMIN).post("/api/periodos").send({
-        nombre: "2027Q1",
+        nombre: "2027 Q1",
         fechaInicio: "2027-01-01",
         fechaFin: "2027-03-31",
         activo: true,
       });
       expect(res.status).toBe(201);
       const periodos = (await como(JEFA).get("/api/periodos")).body as Array<{ nombre: string; activo: boolean }>;
-      expect(periodos.filter((p) => p.activo).map((p) => p.nombre)).toEqual(["2027Q1"]);
+      expect(periodos.filter((p) => p.activo).map((p) => p.nombre)).toEqual(["2027 Q1"]);
       expect(eventos.some((e) => e.accion === "periodo.alta")).toBe(true);
     });
 
     it("rechaza fechas invertidas y nombres de periodo repetidos", async () => {
       const invertido = await como(JEFA).post("/api/periodos").send({
-        nombre: "2027Q2",
+        nombre: "2027 Q2",
         fechaInicio: "2027-06-30",
         fechaFin: "2027-04-01",
       });
       expect(invertido.status).toBe(400);
 
       const repetido = await como(JEFA).post("/api/periodos").send({
-        nombre: "2026q4",
+        nombre: "2026 q4",
         fechaInicio: "2026-10-01",
         fechaFin: "2026-12-31",
       });
@@ -121,7 +121,7 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
         codigo: "UDN-0001",
         nombre: null,
         responsableId: await idDe(JEFA),
-        periodoFiscalNombre: "2026Q4",
+        periodoFiscalNombre: "2026 Q4",
         departamentoAuditoriaNombre: "Retail & Spin",
         divisiones: [],
       });
@@ -251,6 +251,42 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
     });
   });
 
+  describe("CP-EST-05: Nombres duplicados (AC2)", () => {
+    it("rechaza una unidad con un nombre que ya existe, sin distinguir mayúsculas (alta y renombre)", async () => {
+      expect((await altaUnidad("KOF")).status).toBe(201);
+
+      const repetida = await altaUnidad("kof");
+      expect(repetida.status).toBe(409);
+      expect(repetida.body.error.codigo).toBe("NOMBRE_DUPLICADO");
+      expect(repetida.body.error.mensaje).toMatch(/Ya existe una unidad de negocio/);
+
+      const otra = (await altaUnidad("Tragetta")).body.id as number;
+      const renombre = await como(JEFA).patch(`/api/unidades-negocio/${otra}`).send({ nombre: "Kof" });
+      expect(renombre.status).toBe(409);
+      expect(renombre.body.error.codigo).toBe("NOMBRE_DUPLICADO");
+    });
+
+    it("permite varias unidades sin nombre y renombrar una unidad con su propio nombre", async () => {
+      expect((await altaUnidad(null)).status).toBe(201);
+      expect((await altaUnidad(null)).status).toBe(201);
+      const kof = (await altaUnidad("KOF")).body.id as number;
+      expect((await como(JEFA).patch(`/api/unidades-negocio/${kof}`).send({ nombre: "kof" })).status).toBe(200);
+    });
+
+    it("rechaza un área repetida en la misma subdivisión (alta y renombre)", async () => {
+      const rama = await altaRama(); // ya tiene el área "Nómina"
+      const repetida = await como(JEFA).post("/api/areas").send({ nombre: "NÓMINA", padreId: rama.subdivisionId });
+      expect(repetida.status).toBe(409);
+      expect(repetida.body.error.codigo).toBe("NOMBRE_DUPLICADO");
+
+      const compras = (await como(JEFA).post("/api/areas").send({ nombre: "Compras", padreId: rama.subdivisionId })).body
+        .id as number;
+      const renombre = await como(JEFA).patch(`/api/areas/${compras}`).send({ nombre: "nómina" });
+      expect(renombre.status).toBe(409);
+      expect((await como(JEFA).patch(`/api/areas/${rama.areaId}`).send({ nombre: "Nómina" })).status).toBe(200);
+    });
+  });
+
   describe("CP-EST-06: Bloqueo de eliminación con auditorías activas (AC3)", () => {
     it.each(["Aprobado", "En Ejecución"])("bloquea cada nivel de la rama con un plan %s", async (estado) => {
       const rama = await altaRama();
@@ -325,12 +361,12 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
       expect((await como(JEFA).post("/api/divisiones").send({ padreId: rama.unidadId })).status).toBe(201);
     });
 
-    it("el nombre es opcional, no es único y se edita; vacío lo quita", async () => {
+    it("el nombre es opcional y se edita; vacío lo quita", async () => {
       const alta = await altaUnidad("  KOF ");
       expect(alta.status).toBe(201);
       expect(alta.body).toMatchObject({ codigo: "UDN-0001", nombre: "KOF" });
 
-      const otra = await altaUnidad("KOF");
+      const otra = await altaUnidad(null);
       expect(otra.status).toBe(201);
       expect(otra.body.codigo).toBe("UDN-0002");
 
