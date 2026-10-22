@@ -1,8 +1,8 @@
 -- Datos de prueba de la jerarquía organizacional (SF-03), generados de la hoja `Catalogs`
--- de 00_Consolidado_2026Q1.xlsx: 6 unidades, 12 divisiones, 40 subdivisiones y 343 áreas,
--- con los nombres anonimizados del archivo. El país de la subdivisión es el más frecuente
--- entre sus áreas; si un área se repite en la subdivisión (una por país) lleva el país en
--- el nombre. La subdivisión B-923765 no tiene nombre en el archivo.
+-- de 00_Consolidado_2026Q1.xlsx: 6 unidades, 12 divisiones, 39 subdivisiones y 338 áreas,
+-- con los códigos anonimizados del archivo (sin nombres). El país de la subdivisión es el más
+-- frecuente entre sus áreas; si un área se repite en la subdivisión (una por país) lleva el
+-- país en el nombre. Se omite la subdivisión B-923765, que no tiene código en el archivo.
 -- Solo con --datos-prueba. Requiere 017 y un Jefe de Auditoría activo.
 -- Se puede ejecutar más de una vez sin efecto.
 
@@ -60,7 +60,6 @@ FROM (VALUES ('UDN-0004', 'DIVISION-0009', 'SUBDIVISION-0007', 'México'),
        ('UDN-0004', 'DIVISION-0001', 'SUBDIVISION-0036', 'Estados Unidos'),
        ('UDN-0004', 'DIVISION-0005', 'SUBDIVISION-0038', 'Suiza'),
        ('UDN-0004', 'DIVISION-0005', 'SUBDIVISION-0003', 'Alemania'),
-       ('UDN-0004', 'DIVISION-0005', 'SIN NOMBRE (B-923765)', 'Alemania'),
        ('UDN-0003', 'DIVISION-0002', 'SUBDIVISION-0002', 'Brasil'),
        ('UDN-0003', 'DIVISION-0003', 'SUBDIVISION-0016', 'Corporativo'),
        ('UDN-0003', 'DIVISION-0007', 'SUBDIVISION-0001', 'Argentina'),
@@ -175,11 +174,6 @@ FROM (VALUES ('UDN-0004', 'DIVISION-0009', 'SUBDIVISION-0007', 'Administración 
        ('UDN-0004', 'DIVISION-0005', 'SUBDIVISION-0003', 'Operaciones'),
        ('UDN-0004', 'DIVISION-0005', 'SUBDIVISION-0003', 'Recursos Humanos'),
        ('UDN-0004', 'DIVISION-0005', 'SUBDIVISION-0003', 'Tecnología de la Información'),
-       ('UDN-0004', 'DIVISION-0005', 'SIN NOMBRE (B-923765)', 'Administración y Finanzas'),
-       ('UDN-0004', 'DIVISION-0005', 'SIN NOMBRE (B-923765)', 'Cadena de Suministro'),
-       ('UDN-0004', 'DIVISION-0005', 'SIN NOMBRE (B-923765)', 'Expansión e Infraestructura'),
-       ('UDN-0004', 'DIVISION-0005', 'SIN NOMBRE (B-923765)', 'Recursos Humanos'),
-       ('UDN-0004', 'DIVISION-0005', 'SIN NOMBRE (B-923765)', 'Operaciones'),
        ('UDN-0003', 'DIVISION-0002', 'SUBDIVISION-0002', 'Finanzas'),
        ('UDN-0003', 'DIVISION-0002', 'SUBDIVISION-0002', 'Cumplimiento'),
        ('UDN-0003', 'DIVISION-0002', 'SUBDIVISION-0002', 'Sostenibilidad'),

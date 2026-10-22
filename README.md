@@ -89,7 +89,7 @@ hallazgos (`/api/planes-accion`) sí funcionan en memoria: usan los hallazgos y
 auditorías de prueba, y el portal del auditado muestra los planes asignados al
 usuario con sesión (por ejemplo `c.morales@expedite.com` ya tiene uno). El Catálogo
 Organizacional también funciona en memoria y arranca con la estructura del Consolidado de
-FEMSA (6 unidades, 343 áreas y 251 riesgos, anonimizados) a cargo de `m.garcia@expedite.com`.
+FEMSA (6 unidades, 338 áreas y 249 riesgos, anonimizados) a cargo de `m.garcia@expedite.com`.
 
 ### Problemas comunes
 

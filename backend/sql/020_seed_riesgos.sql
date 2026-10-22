@@ -1,6 +1,6 @@
 -- Riesgos de prueba (SF-03), generados de las hojas `Risk Library` y `Risk Register` de
--- 00_Consolidado_2026Q1.xlsx: 69 riesgos de la biblioteca y 251 registros sobre las subdivisiones
--- de 018 (se omite el único registro sin subdivisión). De cada registro se toma su primer
+-- 00_Consolidado_2026Q1.xlsx: 69 riesgos de la biblioteca y 249 registros sobre las subdivisiones
+-- de 018 (se omiten el único registro sin subdivisión y los de la subdivisión sin código). De cada registro se toma su primer
 -- procedimiento de control; el archivo solo trae su id (CP-…), que se usa como descripción.
 -- NIVELES FICTICIOS: el Consolidado no trae nivel de riesgo; se asignan por palabras clave
 -- del nombre solo para la demostración (escala pendiente de confirmar con FEMSA).
@@ -489,8 +489,6 @@ FROM (VALUES ('UDN-0003', 'DIVISION-0002', 'SUBDIVISION-0002', 'Errors or omissi
        ('UDN-0004', 'DIVISION-0009', 'SUBDIVISION-0007', 'Subvaluación Arrendamientos', 'CP-407458'),
        ('UDN-0004', 'DIVISION-0005', 'SUBDIVISION-0038', 'Sobrevaluación CxC', 'CP-365992'),
        ('UDN-0004', 'DIVISION-0005', 'SUBDIVISION-0038', 'Sobrevaluación Efectivo', 'CP-365999'),
-       ('UDN-0004', 'DIVISION-0005', 'SIN NOMBRE (B-923765)', 'Sobrevaluación CxC', 'CP-366104'),
-       ('UDN-0004', 'DIVISION-0005', 'SIN NOMBRE (B-923765)', 'Sobrevaluación Efectivo', 'CP-366112'),
        ('UDN-0003', 'DIVISION-0008', 'SUBDIVISION-0028', 'Incorrect allocation and recording of donations', 'CP-373440'),
        ('UDN-0003', 'DIVISION-0003', 'SUBDIVISION-0016', 'Incorrect allocation and recording of donations', 'CP-701234'),
        ('UDN-0003', 'DIVISION-0007', 'SUBDIVISION-0001', 'Incorrect allocation and recording of donations', 'CP-701235'),

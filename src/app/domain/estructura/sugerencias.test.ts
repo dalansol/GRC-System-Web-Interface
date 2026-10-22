@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { UnidadNegocio } from "../../api/estructura";
 import { AREAS_FRECUENTES } from "../../data/catalogoEstructura";
-import { siguienteCodigo, sugerenciasNodo, sugerenciasPais, sugerenciasUnidad } from "./sugerencias";
+import { codigoProximo, siguienteCodigo, sugerenciasArea, sugerenciasPais } from "./sugerencias";
 
 const UNIDADES: UnidadNegocio[] = [
   {
     id: 1,
-    nombre: "UDN-0004",
-    nombreReal: null,
+    codigo: "UDN-0004",
+    nombre: null,
     responsableId: 2,
     responsableNombre: "María García",
     periodoFiscalId: 1,
@@ -19,14 +19,14 @@ const UNIDADES: UnidadNegocio[] = [
     divisiones: [
       {
         id: 10,
-        nombre: "DIVISION-0009",
-        nombreReal: null,
+        codigo: "DIVISION-0009",
+        nombre: null,
         unidadNegocioId: 1,
         subdivisiones: [
           {
             id: 100,
-            nombre: "SUBDIVISION-0007",
-            nombreReal: null,
+            codigo: "SUBDIVISION-0007",
+            nombre: null,
             pais: "Región Andina",
             divisionId: 10,
             riesgos: [],
@@ -35,7 +35,7 @@ const UNIDADES: UnidadNegocio[] = [
               { id: 1001, nombre: "Área inventada", subdivisionId: 100 },
             ],
           },
-          { id: 101, nombre: "SUBDIVISION-0032", nombreReal: null, pais: "México", divisionId: 10, riesgos: [], areas: [] },
+          { id: 101, codigo: "SUBDIVISION-0032", nombre: null, pais: "México", divisionId: 10, riesgos: [], areas: [] },
         ],
       },
     ],
@@ -50,19 +50,19 @@ describe("siguienteCodigo", () => {
 });
 
 describe("sugerencias", () => {
-  it("sugiere el siguiente código libre para unidades, divisiones y subdivisiones", () => {
-    expect(sugerenciasUnidad(UNIDADES)).toEqual(["UDN-0005"]);
-    expect(sugerenciasNodo("division", UNIDADES, 1)).toEqual(["DIVISION-0010"]);
-    expect(sugerenciasNodo("subdivision", UNIDADES, 10)).toEqual(["SUBDIVISION-0033"]);
+  it("muestra como vista previa el siguiente código de unidades, divisiones y subdivisiones", () => {
+    expect(codigoProximo("unidad", UNIDADES)).toBe("UDN-0005");
+    expect(codigoProximo("division", UNIDADES)).toBe("DIVISION-0010");
+    expect(codigoProximo("subdivision", UNIDADES)).toBe("SUBDIVISION-0033");
   });
 
   it("para un área ofrece el catálogo de FEMSA y las ya registradas, sin las que ya tiene la subdivisión", () => {
-    const enLaMisma = sugerenciasNodo("area", UNIDADES, 100);
+    const enLaMisma = sugerenciasArea(UNIDADES, 100);
     expect(enLaMisma).not.toContain("Nómina");
     expect(enLaMisma).not.toContain("Área inventada");
     expect(enLaMisma[0]).toBe(AREAS_FRECUENTES[0]);
 
-    const enOtra = sugerenciasNodo("area", UNIDADES, 101);
+    const enOtra = sugerenciasArea(UNIDADES, 101);
     expect(enOtra).toContain("Nómina");
     expect(enOtra).toContain("Área inventada");
   });

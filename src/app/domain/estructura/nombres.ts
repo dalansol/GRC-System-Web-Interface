@@ -1,18 +1,19 @@
 // Nombres de la estructura organizacional (SF-03).
-// `nombre` es el código del Consolidado (UDN-0003, DIVISION-0002…) y sigue siendo el
-// identificador; `nombreReal` (KOF, Brasil…) es opcional. Mostrar siempre con nombreVisible.
+// Unidad, división y subdivisión tienen `codigo` (UDN-0003, DIVISION-0002…), que las
+// identifica y no cambia, y `nombre` (KOF, Brasil…), opcional. El área solo tiene nombre.
+// Mostrar siempre con nombreVisible.
 
 export interface ConNombre {
-  nombre: string;
-  nombreReal?: string | null;
+  codigo?: string | null;
+  nombre?: string | null;
 }
 
-/** El nombre real si lo hay; si no, el código. */
+/** El nombre si lo hay; si no, el código. */
 export function nombreVisible(nodo: ConNombre): string {
-  return nodo.nombreReal?.trim() || nodo.nombre;
+  return nodo.nombre?.trim() || nodo.codigo || "";
 }
 
-/** True si el nodo tiene un nombre real distinto de su código (para mostrar el código aparte). */
-export function tieneNombreReal(nodo: ConNombre): boolean {
-  return nombreVisible(nodo) !== nodo.nombre;
+/** True si el nodo tiene código y un nombre distinto de él (para mostrar el código aparte). */
+export function tieneNombre(nodo: ConNombre): boolean {
+  return Boolean(nodo.codigo) && nombreVisible(nodo) !== nodo.codigo;
 }

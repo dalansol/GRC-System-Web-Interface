@@ -5,6 +5,9 @@
 import type pg from "pg";
 import {
   ESTADOS_PLAN_ACTIVOS,
+  formatearCodigo,
+  PREFIJO_CODIGO,
+  type NivelCodigo,
   type AltaNodoInput,
   type AltaPeriodoInput,
   type AltaUnidadInput,
@@ -30,17 +33,24 @@ function esDuplicado(error: unknown): boolean {
 }
 
 // Tabla y columnas de cada nivel. Valores fijos: nunca vienen de la petición.
-// `real` es la columna del nombre real; el área no la tiene.
-const TABLAS: Record<NivelNodo, { tabla: string; id: string; nombre: string; real: string | null; padre: string }> = {
-  division: { tabla: "division", id: "division_id", nombre: "name", real: "display_name", padre: "business_unit_id" },
-  subdivision: { tabla: "business", id: "business_id", nombre: "business_name", real: "display_name", padre: "division_id" },
-  area: { tabla: "area", id: "area_id", nombre: "area_name", real: null, padre: "business_id" },
+// `codigo` es la columna del código (el área no tiene); `nombre`, la del nombre (023).
+const TABLAS: Record<NivelNodo, { tabla: string; id: string; codigo: string | null; nombre: string; padre: string }> = {
+  division: { tabla: "division", id: "division_id", codigo: "name", nombre: "display_name", padre: "business_unit_id" },
+  subdivision: { tabla: "business", id: "business_id", codigo: "business_name", nombre: "display_name", padre: "division_id" },
+  area: { tabla: "area", id: "area_id", codigo: null, nombre: "area_name", padre: "business_id" },
 };
 
 /** Columnas de un NodoPlano para SELECT / RETURNING. */
 function columnasNodo(t: (typeof TABLAS)[NivelNodo]): string {
-  return `${t.id} AS id, ${t.nombre} AS nombre, ${t.real ?? "NULL::varchar"} AS "nombreReal", ${t.padre} AS "padreId"`;
+  return `${t.id} AS id, ${t.codigo ?? "NULL::varchar"} AS codigo, ${t.nombre} AS nombre, ${t.padre} AS "padreId"`;
 }
+
+// Tabla y columna del código de cada nivel, para buscar el mayor número ya usado.
+const COLUMNA_CODIGO: Record<NivelCodigo, { tabla: string; columna: string }> = {
+  unidad: { tabla: "business_units", columna: "name" },
+  division: { tabla: "division", columna: "name" },
+  subdivision: { tabla: "business", columna: "business_name" },
+};
 
 // Condición sobre la rama para la regla de auditoría activa (alias b = business, d = division).
 const RAMA: Record<NivelEstructura, string> = {
@@ -154,8 +164,8 @@ function armarDivisiones(filas: FilaRama[], riesgos: Map<number, Riesgo[]>): Map
     if (!division) {
       division = {
         id: fila.division_id,
-        nombre: fila.division_name,
-        nombreReal: fila.division_display_name,
+        codigo: fila.division_name,
+        nombre: fila.division_display_name,
         unidadNegocioId: fila.business_unit_id,
         subdivisiones: [],
       };
@@ -170,8 +180,8 @@ function armarDivisiones(filas: FilaRama[], riesgos: Map<number, Riesgo[]>): Map
     if (!subdivision) {
       subdivision = {
         id: fila.business_id,
-        nombre: fila.business_name ?? "",
-        nombreReal: fila.business_display_name,
+        codigo: fila.business_name ?? "",
+        nombre: fila.business_display_name,
         pais: fila.country,
         divisionId: division.id,
         areas: [],
@@ -274,8 +284,8 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
   private aUnidad(u: FilaUnidad, divisiones: Division[]): UnidadNegocio {
     return {
       id: u.id,
-      nombre: u.name,
-      nombreReal: u.display_name,
+      codigo: u.name,
+      nombre: u.display_name,
       responsableId: u.manager_id,
       responsableNombre: u.manager_name,
       periodoFiscalId: u.fiscal_period_id,
@@ -319,25 +329,49 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
     return this.aUnidad(rows[0], armarDivisiones(rama, agruparRiesgos(riesgos)).get(id) ?? []);
   }
 
+  /**
+   * Siguiente código del nivel, dentro de la transacción del alta. El contador
+   * (`structure_code_counters`, 023) bloquea su fila para que dos altas simultáneas no
+   * tomen el mismo número y no baja al borrar; se compara con el mayor código existente
+   * porque los datos importados o de prueba no pasan por él.
+   */
+  private async siguienteCodigo(cliente: pg.PoolClient, nivel: NivelCodigo): Promise<string> {
+    const { tabla, columna } = COLUMNA_CODIGO[nivel];
+    await cliente.query(
+      "INSERT INTO structure_code_counters (level, last_value) VALUES ($1, 0) ON CONFLICT (level) DO NOTHING",
+      [nivel],
+    );
+    const contador = await cliente.query<{ last_value: number }>(
+      "SELECT last_value FROM structure_code_counters WHERE level = $1 FOR UPDATE",
+      [nivel],
+    );
+    // La columna usa una intercalación no determinista: las expresiones regulares van en "C".
+    const existente = await cliente.query<{ mayor: number }>(
+      `SELECT COALESCE(MAX(substring(upper(${columna} COLLATE "C") FROM $1)::int), 0) AS mayor FROM ${tabla}`,
+      [`^${PREFIJO_CODIGO[nivel]}-([0-9]+)$`],
+    );
+    const numero = Math.max(contador.rows[0]!.last_value, existente.rows[0]!.mayor) + 1;
+    await cliente.query("UPDATE structure_code_counters SET last_value = $2 WHERE level = $1", [nivel, numero]);
+    return formatearCodigo(nivel, numero);
+  }
+
   async crearUnidad(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio> {
-    try {
-      const { rows } = await this.pool.query<{ id: number }>(
+    const id = await this.enTransaccion(async (cliente) => {
+      const codigo = await this.siguienteCodigo(cliente, "unidad");
+      const { rows } = await cliente.query<{ id: number }>(
         `INSERT INTO business_units (name, display_name, manager_id, fiscal_period_id, audit_department_id, created_by)
          VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [datos.nombre, datos.nombreReal, datos.responsableId, periodoFiscalId, datos.departamentoAuditoriaId, creadoPor],
+        [codigo, datos.nombre, datos.responsableId, periodoFiscalId, datos.departamentoAuditoriaId, creadoPor],
       );
-      return (await this.buscarUnidadPorId(rows[0]!.id))!;
-    } catch (error) {
-      if (esDuplicado(error)) throw new ErrorNombreDuplicado("una unidad de negocio", datos.nombre);
-      throw error;
-    }
+      return rows[0]!.id;
+    });
+    return (await this.buscarUnidadPorId(id))!;
   }
 
   async editarUnidad(id: number, campos: EdicionUnidadInput): Promise<UnidadNegocio | null> {
     const sets: string[] = [];
     const vals: unknown[] = [];
-    if (campos.nombre !== undefined) { vals.push(campos.nombre); sets.push(`name = $${vals.length}`); }
-    if (campos.nombreReal !== undefined) { vals.push(campos.nombreReal); sets.push(`display_name = $${vals.length}`); }
+    if (campos.nombre !== undefined) { vals.push(campos.nombre); sets.push(`display_name = $${vals.length}`); }
     if (campos.responsableId !== undefined) { vals.push(campos.responsableId); sets.push(`manager_id = $${vals.length}`); }
     if (campos.departamentoAuditoriaId !== undefined) {
       vals.push(campos.departamentoAuditoriaId);
@@ -346,16 +380,8 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
     if (sets.length === 0) return this.buscarUnidadPorId(id);
 
     vals.push(id);
-    try {
-      const { rowCount } = await this.pool.query(
-        `UPDATE business_units SET ${sets.join(", ")} WHERE id = $${vals.length}`,
-        vals,
-      );
-      if (rowCount === 0) return null;
-    } catch (error) {
-      if (esDuplicado(error)) throw new ErrorNombreDuplicado("una unidad de negocio", campos.nombre ?? "");
-      throw error;
-    }
+    const { rowCount } = await this.pool.query(`UPDATE business_units SET ${sets.join(", ")} WHERE id = $${vals.length}`, vals);
+    if (rowCount === 0) return null;
     return this.buscarUnidadPorId(id);
   }
 
@@ -378,16 +404,21 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
 
   async crearNodo(nivel: NivelNodo, datos: AltaNodoInput): Promise<NodoPlano> {
     const t = TABLAS[nivel];
-    const columnas = [t.nombre, t.padre];
-    const vals: unknown[] = [datos.nombre, datos.padreId];
-    if (t.real) { columnas.push(t.real); vals.push(datos.nombreReal); }
-    if (nivel === "subdivision") { columnas.push("country"); vals.push(datos.pais); }
-    const { rows } = await this.pool.query<NodoPlano>(
-      `INSERT INTO ${t.tabla} (${columnas.join(", ")}) VALUES (${vals.map((_, i) => `$${i + 1}`).join(", ")})
-       RETURNING ${columnasNodo(t)}`,
-      vals,
-    );
-    return rows[0]!;
+    return this.enTransaccion(async (cliente) => {
+      const columnas = [t.nombre, t.padre];
+      const vals: unknown[] = [datos.nombre, datos.padreId];
+      if (nivel !== "area" && t.codigo) {
+        columnas.push(t.codigo);
+        vals.push(await this.siguienteCodigo(cliente, nivel));
+      }
+      if (nivel === "subdivision") { columnas.push("country"); vals.push(datos.pais); }
+      const { rows } = await cliente.query<NodoPlano>(
+        `INSERT INTO ${t.tabla} (${columnas.join(", ")}) VALUES (${vals.map((_, i) => `$${i + 1}`).join(", ")})
+         RETURNING ${columnasNodo(t)}`,
+        vals,
+      );
+      return rows[0]!;
+    });
   }
 
   async editarNodo(nivel: NivelNodo, id: number, campos: EdicionNodoInput): Promise<NodoPlano | null> {
@@ -395,7 +426,6 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
     const sets: string[] = [];
     const vals: unknown[] = [];
     if (campos.nombre !== undefined) { vals.push(campos.nombre); sets.push(`${t.nombre} = $${vals.length}`); }
-    if (t.real && campos.nombreReal !== undefined) { vals.push(campos.nombreReal); sets.push(`${t.real} = $${vals.length}`); }
     if (nivel === "subdivision" && campos.pais !== undefined) { vals.push(campos.pais); sets.push(`country = $${vals.length}`); }
     if (sets.length === 0) return this.buscarNodo(nivel, id);
 

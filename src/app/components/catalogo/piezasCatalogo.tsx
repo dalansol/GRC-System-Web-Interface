@@ -1,11 +1,11 @@
-import { ShieldAlert } from "lucide-react";
+import { Edit2, Lock, Trash2 } from "lucide-react";
 import type { NivelNodo, Riesgo } from "../../api/estructura";
 import type { AltaNodoContexto, NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
-import { nombreVisible, tieneNombreReal, type ConNombre } from "../../domain/estructura/nombres";
-import { COLOR_NIVEL_RIESGO, nivelMaximo } from "../../domain/estructura/riesgos";
+import { nombreVisible, tieneNombre, type ConNombre } from "../../domain/estructura/nombres";
+import { COLOR_NIVEL_RIESGO, distribucionRiesgos, nivelMaximo } from "../../domain/estructura/riesgos";
 
-// Piezas compartidas por la vista de árbol (HierarchyView) y la de tarjetas
-// (DetalleUnidadTarjetas), para que ambas se vean igual.
+// Piezas compartidas por el árbol de navegación (ArbolCatalogo) y el panel de detalle
+// (DetalleCatalogo), para que ambos se vean igual.
 
 /** Color del chip de tipo de cada nivel. */
 export const COLOR_NIVEL: Record<NivelNodo, string> = {
@@ -27,14 +27,17 @@ export function ResumenRiesgos({ riesgos, testId }: { riesgos: Riesgo[]; testId?
   if (riesgos.length === 0) return null;
   const peor = nivelMaximo(riesgos);
   const color = COLOR_NIVEL_RIESGO[peor ?? "sin"];
+  const descripcion = `${riesgos.length === 1 ? "riesgo" : "riesgos"} · peor nivel: ${peor ?? "sin nivel"}`;
   return (
     <span
       data-testid={testId}
-      title={`${riesgos.length} ${riesgos.length === 1 ? "riesgo" : "riesgos"} · peor nivel: ${peor ?? "sin nivel"}`}
-      className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded font-mono flex-shrink-0 ${color.insignia}`}
+      title={`${riesgos.length} ${descripcion}`}
+      className={`flex items-center gap-1 text-[11px] font-semibold px-1.5 py-0.5 rounded tabular-nums whitespace-nowrap flex-shrink-0 ${color.insignia}`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${color.punto}`} />
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${color.punto}`} aria-hidden />
       {riesgos.length}
+      {/* El color indica el peor nivel; el texto lo repite para lectores de pantalla. */}
+      <span className="sr-only"> {descripcion}</span>
     </span>
   );
 }
@@ -43,23 +46,45 @@ export function ResumenRiesgos({ riesgos, testId }: { riesgos: Riesgo[]; testId?
 export function ChipNivelRiesgo({ riesgo }: { riesgo: Riesgo }) {
   const color = COLOR_NIVEL_RIESGO[riesgo.nivel ?? "sin"];
   return (
-    <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${color.insignia}`}>
+    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold whitespace-nowrap flex-shrink-0 ${color.insignia}`}>
       {riesgo.nivel ?? "Sin nivel"}
     </span>
   );
 }
 
-/** Nombre real (o el código si no hay) y, si hay nombre real, el código aparte en pequeño. */
+/** El nombre (o el código si no hay) y, si hay nombre, el código aparte en pequeño. */
 export function NombreConCodigo({ nodo }: { nodo: ConNombre }) {
   return (
     <>
       {nombreVisible(nodo)}
-      {tieneNombreReal(nodo) && (
-        <span className="ml-1.5 font-mono text-[10px] font-normal text-muted-foreground" title="Código en el Consolidado">
-          {nodo.nombre}
+      {tieneNombre(nodo) && (
+        <span className="ml-1.5 font-mono text-[11px] font-normal text-muted-foreground" title="Código (identificador)">
+          {nodo.codigo}
         </span>
       )}
     </>
+  );
+}
+
+/**
+ * Código de solo lectura en los formularios: el que ya tiene (edición) o el próximo que
+ * asignará el sistema (alta). El usuario nunca lo escribe.
+ */
+export function CampoCodigo({ codigo, proximo = false }: { codigo: string; proximo?: boolean }) {
+  return (
+    <div>
+      <span className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">Código</span>
+      <div
+        data-testid="campo-codigo"
+        className="flex items-center justify-between gap-2 text-sm px-3.5 py-2.5 rounded-lg border border-border bg-slate-50 text-muted-foreground"
+      >
+        <span className="font-mono text-foreground">{codigo}</span>
+        <span className="flex items-center gap-1 text-[11px] whitespace-nowrap">
+          <Lock size={12} aria-hidden />
+          {proximo ? "Se asigna al guardar" : "No se puede cambiar"}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -74,22 +99,80 @@ export function Sugerencias({ id, opciones }: { id: string; opciones: readonly s
   );
 }
 
-/** Riesgo como fila del árbol, con sangría según la profundidad. */
-export function FilaRiesgo({ riesgo, profundidad }: { riesgo: Riesgo; profundidad: number }) {
+/**
+ * Barra con la proporción de riesgos por nivel (del peor al mejor). Con `leyenda` muestra
+ * debajo el conteo de cada nivel; sin riesgos pinta una barra gris.
+ */
+export function BarraRiesgos({ riesgos, leyenda = false, testId }: { riesgos: Riesgo[]; leyenda?: boolean; testId?: string }) {
+  const distribucion = distribucionRiesgos(riesgos);
+  const resumen = distribucion.map((d) => `${d.cantidad} ${d.nivel === "sin" ? "sin nivel" : d.nivel}`).join(" · ");
   return (
-    <div
-      data-testid={`riesgo-${riesgo.id}`}
-      className="flex items-start gap-1.5 py-1 pr-1 text-xs"
-      style={{ paddingLeft: `${profundidad * 16 + 20}px` }}
-    >
-      <ShieldAlert size={12} className="text-slate-400 flex-shrink-0 mt-0.5" />
-      <ChipNivelRiesgo riesgo={riesgo} />
-      <div className="min-w-0">
-        <p className="text-slate-800 truncate">{riesgo.nombre}</p>
-        {riesgo.procedimientoControl && (
-          <p className="text-[10px] text-muted-foreground truncate">Control: {riesgo.procedimientoControl}</p>
-        )}
+    <div data-testid={testId} className="min-w-0">
+      <div
+        className="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-100 gap-px"
+        role="img"
+        aria-label={riesgos.length ? `Riesgos por nivel: ${resumen}` : "Sin riesgos registrados"}
+        title={riesgos.length ? resumen : "Sin riesgos registrados"}
+      >
+        {distribucion.map((d) => (
+          <span
+            key={d.nivel}
+            className={COLOR_NIVEL_RIESGO[d.nivel].punto}
+            style={{ width: `${(d.cantidad / riesgos.length) * 100}%` }}
+          />
+        ))}
       </div>
+      {leyenda && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-muted-foreground">
+          {distribucion.length === 0 && <span>Sin riesgos registrados</span>}
+          {distribucion.map((d) => (
+            <span key={d.nivel} className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full ${COLOR_NIVEL_RIESGO[d.nivel].punto}`} aria-hidden />
+              <span className="font-semibold text-foreground tabular-nums">{d.cantidad}</span>
+              {d.nivel === "sin" ? "Sin nivel" : d.nivel}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Botones de editar y eliminar de un nodo (solo para quien puede gestionar). */
+export function BotonesGestion({
+  etiqueta,
+  onEditar,
+  onEliminar,
+  testId,
+  tamano = 13,
+}: {
+  etiqueta: string;
+  onEditar: () => void;
+  onEliminar: () => void;
+  testId: string;
+  tamano?: number;
+}) {
+  return (
+    <div className="flex items-center gap-0.5 flex-shrink-0">
+      <button
+        type="button"
+        onClick={onEditar}
+        title={`Editar ${etiqueta}`}
+        aria-label={`Editar ${etiqueta}`}
+        className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <Edit2 size={tamano} />
+      </button>
+      <button
+        type="button"
+        onClick={onEliminar}
+        title={`Eliminar ${etiqueta}`}
+        aria-label={`Eliminar ${etiqueta}`}
+        data-testid={`btn-eliminar-${testId}`}
+        className="p-1.5 rounded-md hover:bg-red-50 text-muted-foreground hover:text-red-600 transition-colors"
+      >
+        <Trash2 size={tamano} />
+      </button>
     </div>
   );
 }

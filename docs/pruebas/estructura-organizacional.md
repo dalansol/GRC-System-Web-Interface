@@ -63,13 +63,13 @@ npm test
 | CP-EST-07 | Catálogo | Riesgos registrados en una subdivisión | Aparecen bajo su subdivisión con nivel y control; la división y la unidad muestran el total y el color del peor nivel | API, BD, vista |
 | CP-EST-07 | Catálogo | Filtro por nivel y búsqueda | Solo quedan las ramas con un riesgo de ese nivel o peor; la búsqueda encuentra unidades, nodos y riesgos sin importar acentos | Vista |
 | CP-EST-07 | AC3 | Eliminar una subdivisión con riesgos registrados | `409 HIJOS_EXISTENTES` | API, BD |
-| CP-EST-08 | Catálogo | "Ver en tarjetas" de una unidad | Se recorre unidad › división › subdivisión con tarjetas (franja por peor nivel, conteos, riesgos); en la subdivisión, áreas y tabla de riesgos; las migas regresan al catálogo | Vista |
+| CP-EST-08 | Catálogo | Navegar el explorador desde el resumen y desde el árbol | El árbol empieza contraído y solo lista unidad › división › subdivisión; el detalle muestra indicadores, barra de riesgos por nivel y lista de hijos; en la subdivisión, pestañas de riesgos y áreas; las migas regresan al resumen | Vista |
 | CP-EST-08 | AC1 | Alta de un nodo desde las tarjetas | Se crea en el nivel abierto y la tarjeta aparece sin salir de la vista | Vista |
 | CP-EST-08 | SNF-05 | Usuario sin rol de gestión en las tarjetas | Navega, pero no ve agregar, editar ni eliminar | Vista |
 | — | Navegación | Ruta con un nodo eliminado | Cae al ancestro más profundo que existe; si se elimina la unidad, vuelve al catálogo | Vista |
 | CP-EST-09 | Catálogo | Alta de unidad, nodo o país | Los campos sugieren el siguiente código libre (UDN-, DIVISION-, SUBDIVISION-), las áreas y los países del Consolidado; se puede escribir otro valor | Vista |
-| CP-EST-10 | Catálogo | Nombre real opcional en unidad, división y subdivisión | Se muestra en lugar del código, con el código aparte; la búsqueda encuentra por ambos; vacío lo quita; no cuenta para el nombre único; el área no lo pide | API, BD, vista |
-| — | Datos de prueba | Semilla del Consolidado en memoria y en la base | 6 unidades, 40 subdivisiones, 343 áreas y 251 riesgos | API, BD |
+| CP-EST-10 | Catálogo | Código asignado por el sistema y nombre editable en unidad, división y subdivisión | El backend asigna el siguiente código del nivel (después del mayor del Consolidado), no reutiliza el de un elemento borrado y dos altas simultáneas reciben códigos distintos; enviar o editar el código responde 400. El formulario de alta muestra el próximo código bloqueado ("Se asigna al guardar") y el de edición el actual ("No se puede cambiar"); el aviso de alta confirma el código. El nombre es opcional, se edita, vacío lo quita y se muestra en lugar del código con el código aparte; la búsqueda encuentra por ambos. El área solo pide nombre | API, BD, vista |
+| — | Datos de prueba | Semilla del Consolidado en memoria y en la base | 6 unidades, 39 subdivisiones, 338 áreas y 249 riesgos; todos los códigos con el formato del nivel y los nombres inferidos de 022; 024 quita la subdivisión sin código de una base con los datos anteriores sin tocar los nombres | API, BD |
 | — | BD | Nivel de riesgo fuera de la escala | La base lo rechaza (`ck_risk_library_level`) | BD |
 | — | BD | Migraciones repetidas | 017 y 018 se aplican dos veces sin duplicar datos; cada nivel exige su padre | BD |
 

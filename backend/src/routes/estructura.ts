@@ -63,7 +63,7 @@ function noEncontrado(nivel: NivelEstructura): ErrorApi {
   return new ErrorApi(404, "NO_ENCONTRADO", `${articulo === "la" ? "La" : "El"} ${etiqueta} no existe.`);
 }
 
-/** Traduce el error de nombre duplicado del repositorio a 409. */
+/** Traduce el error de nombre duplicado (periodos) del repositorio a 409. */
 async function sinDuplicados<T>(trabajo: () => Promise<T>): Promise<T> {
   try {
     return await trabajo();
@@ -212,6 +212,7 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
       detalle: {
         nivel: "unidad",
         id: unidad.id,
+        codigo: unidad.codigo,
         nombre: unidad.nombre,
         periodoId: periodoActivo.id,
         responsableId: unidad.responsableId,
@@ -230,7 +231,7 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
     if (datos.responsableId !== undefined) await validarGerente(datos.responsableId);
     await validarDepartamento(datos.departamentoAuditoriaId);
 
-    const unidad = await sinDuplicados(() => repo.editarUnidad(id, datos));
+    const unidad = await repo.editarUnidad(id, datos);
     if (!unidad) throw noEncontrado("unidad");
     registrarEvento({
       accion: "estructura.edicion",
@@ -250,13 +251,14 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
     registrarEvento({
       accion: "estructura.baja",
       actor: usuarioEnSesion(res).correo,
-      detalle: { nivel: "unidad", id, nombre: unidad.nombre },
+      detalle: { nivel: "unidad", id, codigo: unidad.codigo, nombre: unidad.nombre },
     });
     res.status(204).end();
   });
 
   // ── División, subdivisión y área ────────────────────────────────────────────
-  // Los nombres se repiten legítimamente entre ramas: no se validan duplicados.
+  // El repositorio asigna el código de división y subdivisión; los nombres se repiten
+  // legítimamente entre ramas.
 
   for (const nivel of ["division", "subdivision", "area"] as NivelNodo[]) {
     const { ruta, articulo, etiqueta } = NIVELES[nivel];
@@ -274,7 +276,7 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
       registrarEvento({
         accion: "estructura.alta",
         actor: usuarioEnSesion(res).correo,
-        detalle: { nivel, id: nodo.id, nombre: nodo.nombre, padreId: nodo.padreId },
+        detalle: { nivel, id: nodo.id, codigo: nodo.codigo, nombre: nodo.nombre, padreId: nodo.padreId },
       });
       res.status(201).json(nodo);
     });
@@ -306,7 +308,7 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
       registrarEvento({
         accion: "estructura.baja",
         actor: usuarioEnSesion(res).correo,
-        detalle: { nivel, id, nombre: nodo.nombre },
+        detalle: { nivel, id, codigo: nodo.codigo, nombre: nodo.nombre },
       });
       res.status(204).end();
     });

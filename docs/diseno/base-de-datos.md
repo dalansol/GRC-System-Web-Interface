@@ -65,11 +65,13 @@ huella del contenido y fecha) y la siguiente vez solo corre los que faltan.
 | `009_seed_controles.sql` | Controles de prueba. Solo con `--datos-prueba` |
 | `010_catalogos_riesgos_y_ejecucion.sql` | Catálogos (`catalogs`, `catalog_department`, `catalog_domain`, `audit_status`, `audit_procedure_type`), estructura (`division`, `business`, `area`, `audit_entity`), riesgos (`risk_library`, `control_procedure`, `risk_register`) y ejecución (`audit_engagement`, `audit_engagement_team`, `audit_procedures`); agrega `business_units.catalog_id` |
 | `017_jerarquia_organizacional.sql` | Jerarquía organizacional (SF-03): `division.business_unit_id`, `business.division_id` y `business.country` (`business` = subdivisión), `area.business_id`, `business_units.audit_department_id`, `audit_entity.business_id`; departamentos `Retail & Spin` y `Beverage`; periodos trimestrales `2026Q1…Q4` con `2026Q4` activo |
-| `018_seed_jerarquia.sql` | Jerarquía del Consolidado (hoja Catalogs, nombres anonimizados): 6 unidades, 12 divisiones, 40 subdivisiones y 343 áreas. Solo con `--datos-prueba`; requiere un Jefe de Auditoría activo. Generado, no editar a mano |
+| `018_seed_jerarquia.sql` | Jerarquía del Consolidado (hoja Catalogs, nombres anonimizados): 6 unidades, 12 divisiones, 39 subdivisiones y 338 áreas (sin la subdivisión B-923765, que no tiene código). Solo con `--datos-prueba`; requiere un Jefe de Auditoría activo. Generado, no editar a mano |
 | `019_riesgos_jerarquia.sql` | Riesgos en la jerarquía: `risk_register.business_id` (el riesgo cuelga de la subdivisión) y `risk_library.level` (Crítico, Alto, Medio o Bajo; opcional) |
-| `020_seed_riesgos.sql` | Biblioteca (69 riesgos) y registro (251) del Consolidado sobre las subdivisiones de 018; el procedimiento de control es el id `CP-…`. **Niveles ficticios** (el archivo no los trae). Solo con `--datos-prueba`. Generado, no editar a mano |
+| `020_seed_riesgos.sql` | Biblioteca (69 riesgos) y registro (249) del Consolidado sobre las subdivisiones de 018; el procedimiento de control es el id `CP-…`. **Niveles ficticios** (el archivo no los trae). Solo con `--datos-prueba`. Generado, no editar a mano |
 | `021_nombres_reales.sql` | `display_name` opcional en `business_units`, `division` y `business`: el nombre real (KOF, Brasil…) que se muestra junto al código; `name` sigue siendo el código único |
-| `022_seed_nombres_reales.sql` | Nombres reales **inferidos** de `02_Estructura.pptx` para las 6 unidades y 11 de las 12 divisiones (confianza anotada en el script; Spin y FEMSA Servicios sin confirmar). Solo con `--datos-prueba` |
+| `022_seed_nombres_reales.sql` | Nombres **inferidos** de `02_Estructura.pptx` para las 6 unidades y 11 de las 12 divisiones (confianza anotada en el script; Spin y FEMSA Servicios sin confirmar). Solo con `--datos-prueba` |
+| `023_codigo_y_nombre.sql` | Fija el significado: `name`/`business_name` = **código** (identificador que asigna el backend, fijo) y `display_name` = **nombre** opcional y editable. Crea `structure_code_counters` (último número asignado por nivel; su fila se bloquea en el alta y no baja al borrar) y, como respaldo, el índice `uq_division_unit_code` |
+| `024_seed_quitar_sin_codigo.sql` | Limpia bases que ya cargaron los datos de prueba anteriores: quita la subdivisión "SIN NOMBRE (B-923765)", que no sigue el formato de código, con sus áreas y riesgos. Solo con `--datos-prueba`; en una base nueva no hace nada |
 
 ### Cómo agregar un cambio al esquema
 
@@ -444,7 +446,7 @@ erDiagram
   la primera versión se borran sus procesos y los controles quedan sin proceso (016).
 - El comentario de `015_seed_estructura.sql` dice "solo con --datos-prueba", pero el
   script se aplica siempre; no se corrige para no cambiar un script ya aplicado.
-- Mapeo de `UDN-0001…0006` a nombres reales: **inferido** en 022 (datos de prueba); falta que FEMSA lo confirme, sobre todo Spin / FEMSA Servicios (UDN-0002 / UDN-0005) y DIVISION-0011. Las subdivisiones no tienen nombre real en ningún archivo.
+- Mapeo de `UDN-0001…0006` a nombres: **inferido** en 022 (datos de prueba); falta que FEMSA lo confirme, sobre todo Spin / FEMSA Servicios (UDN-0002 / UDN-0005) y DIVISION-0011. Las subdivisiones no tienen nombre en ningún archivo.
 - Riesgos: el catálogo solo los muestra (sin alta ni edición); falta el CRUD del catálogo
   de riesgos de la historia original, confirmar la escala de `level` y definir si un
   riesgo tiene estado (el explorador de prueba anterior lo tenía; el modelo no). TBD.

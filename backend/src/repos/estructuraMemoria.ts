@@ -4,6 +4,9 @@
 import {
   claveNombre,
   ESTADOS_PLAN_ACTIVOS,
+  formatearCodigo,
+  numeroDeCodigo,
+  type NivelCodigo,
   type AltaNodoInput,
   type AltaPeriodoInput,
   type AltaUnidadInput,
@@ -27,7 +30,7 @@ interface FilaNodo extends NodoPlano {
   pais: string | null;
 }
 
-const plano = (n: FilaNodo): NodoPlano => ({ id: n.id, nombre: n.nombre, nombreReal: n.nombreReal, padreId: n.padreId });
+const plano = (n: FilaNodo): NodoPlano => ({ id: n.id, codigo: n.codigo, nombre: n.nombre, padreId: n.padreId });
 
 export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   private periodos: PeriodoFiscal[] = [
@@ -42,8 +45,8 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
 
   private unidades: Array<{
     id: number;
-    nombre: string;
-    nombreReal: string | null;
+    codigo: string;
+    nombre: string | null;
     responsableId: number;
     periodoFiscalId: number;
     departamentoAuditoriaId: number | null;
@@ -60,6 +63,9 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   private riesgos: Array<Riesgo & { subdivisionId: number }> = [];
 
   private sigId = { periodo: 3, unidad: 1, division: 1, subdivision: 1, area: 1, riesgo: 1 };
+
+  /** Último número de código asignado por nivel; no baja al borrar (igual que en SQL). */
+  private ultimoCodigo: Record<NivelCodigo, number> = { unidad: 0, division: 0, subdivision: 0 };
 
   constructor(private usuarios?: RepositorioUsuarios) {}
 
@@ -79,14 +85,15 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
    * DATA_MODE=memoria; las pruebas parten vacías.
    */
   sembrar(semilla: SemillaUnidad[], responsableId: number): void {
+    // La semilla (generada) conserva su formato: `nombre` es el código y `nombreReal`, el nombre.
     const periodo = this.periodos.find((p) => p.activo)?.id ?? this.periodos[0]?.id ?? 0;
     for (const u of semilla) {
       const unidadId = this.sigId.unidad++;
       const departamento = this.departamentos.find((d) => d.nombre === u.departamento);
       this.unidades.push({
         id: unidadId,
-        nombre: u.nombre,
-        nombreReal: u.nombreReal,
+        codigo: u.nombre,
+        nombre: u.nombreReal,
         responsableId,
         periodoFiscalId: periodo,
         departamentoAuditoriaId: departamento?.id ?? null,
@@ -95,18 +102,18 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
       });
       for (const d of u.divisiones) {
         const divisionId = this.sigId.division++;
-        this.nodos.division.push({ id: divisionId, nombre: d.nombre, nombreReal: d.nombreReal, padreId: unidadId, pais: null });
+        this.nodos.division.push({ id: divisionId, codigo: d.nombre, nombre: d.nombreReal, padreId: unidadId, pais: null });
         for (const s of d.subdivisiones) {
           const subdivisionId = this.sigId.subdivision++;
           this.nodos.subdivision.push({
             id: subdivisionId,
-            nombre: s.nombre,
-            nombreReal: s.nombreReal,
+            codigo: s.nombre,
+            nombre: s.nombreReal,
             padreId: divisionId,
             pais: s.pais,
           });
           for (const area of s.areas) {
-            this.nodos.area.push({ id: this.sigId.area++, nombre: area, nombreReal: null, padreId: subdivisionId, pais: null });
+            this.nodos.area.push({ id: this.sigId.area++, codigo: null, nombre: area, padreId: subdivisionId, pais: null });
           }
           for (const riesgo of s.riesgos) this.registrarRiesgo(subdivisionId, riesgo);
         }
@@ -172,20 +179,20 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
       .filter((d) => d.padreId === unidadId)
       .map((d) => ({
         id: d.id,
+        codigo: d.codigo ?? "",
         nombre: d.nombre,
-        nombreReal: d.nombreReal,
         unidadNegocioId: unidadId,
         subdivisiones: this.nodos.subdivision
           .filter((s) => s.padreId === d.id)
           .map((s) => ({
             id: s.id,
+            codigo: s.codigo ?? "",
             nombre: s.nombre,
-            nombreReal: s.nombreReal,
             pais: s.pais,
             divisionId: d.id,
             areas: this.nodos.area
               .filter((a) => a.padreId === s.id)
-              .map((a) => ({ id: a.id, nombre: a.nombre, subdivisionId: s.id })),
+              .map((a) => ({ id: a.id, nombre: a.nombre ?? "", subdivisionId: s.id })),
             riesgos: this.riesgos
               .filter((r) => r.subdivisionId === s.id)
               .map(({ subdivisionId: _, ...riesgo }) => riesgo),
@@ -194,7 +201,7 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   }
 
   async listarUnidades(): Promise<UnidadNegocio[]> {
-    const unidades = [...this.unidades].sort((a, b) => a.nombre.localeCompare(b.nombre));
+    const unidades = [...this.unidades].sort((a, b) => a.codigo.localeCompare(b.codigo));
     return Promise.all(unidades.map((u) => this.buscarUnidadPorId(u.id) as Promise<UnidadNegocio>));
   }
 
@@ -205,8 +212,8 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
     const departamento = this.departamentos.find((d) => d.id === u.departamentoAuditoriaId);
     return {
       id: u.id,
+      codigo: u.codigo,
       nombre: u.nombre,
-      nombreReal: u.nombreReal,
       responsableId: u.responsableId,
       responsableNombre: await this.resolverNombreUsuario(u.responsableId),
       periodoFiscalId: u.periodoFiscalId,
@@ -219,23 +226,24 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
     };
   }
 
-  private validarNombreUnidad(nombre: string, exceptoId?: number): void {
-    if (this.unidades.some((u) => u.id !== exceptoId && claveNombre(u.nombre) === claveNombre(nombre))) {
-      throw new ErrorNombreDuplicado("una unidad de negocio", nombre);
-    }
+  /** Siguiente código del nivel: por encima del último asignado y del mayor existente. */
+  private siguienteCodigo(nivel: NivelCodigo): string {
+    const existentes = nivel === "unidad" ? this.unidades : this.nodos[nivel];
+    const mayor = Math.max(this.ultimoCodigo[nivel], ...existentes.map((n) => numeroDeCodigo(nivel, n.codigo ?? "")));
+    this.ultimoCodigo[nivel] = mayor + 1;
+    return formatearCodigo(nivel, mayor + 1);
   }
 
   async crearUnidad(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio> {
-    this.validarNombreUnidad(datos.nombre);
     const id = this.sigId.unidad++;
-    this.unidades.push({ id, ...datos, periodoFiscalId, creadoPor, creadoEn: new Date().toISOString() });
+    const codigo = this.siguienteCodigo("unidad");
+    this.unidades.push({ id, codigo, ...datos, periodoFiscalId, creadoPor, creadoEn: new Date().toISOString() });
     return (await this.buscarUnidadPorId(id))!;
   }
 
   async editarUnidad(id: number, campos: EdicionUnidadInput): Promise<UnidadNegocio | null> {
     const u = this.unidades.find((x) => x.id === id);
     if (!u) return null;
-    if (campos.nombre !== undefined) this.validarNombreUnidad(campos.nombre, id);
     Object.assign(u, campos);
     return this.buscarUnidadPorId(id);
   }
@@ -254,8 +262,8 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   async crearNodo(nivel: NivelNodo, datos: AltaNodoInput): Promise<NodoPlano> {
     const nodo = {
       id: this.sigId[nivel]++,
+      codigo: nivel === "area" ? null : this.siguienteCodigo(nivel),
       nombre: datos.nombre,
-      nombreReal: nivel === "area" ? null : datos.nombreReal,
       padreId: datos.padreId,
       pais: datos.pais,
     };

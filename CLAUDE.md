@@ -43,7 +43,7 @@ src/
   app/api/                 ← cliente HTTP y llamadas a la API
   app/auth/                ← sesión, inicio de sesión (MSAL / modo dev)
   app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, FormularioPlanAccion, VistaControles, EvidenciasSection, SpreadsheetEditor
-  app/components/catalogo/ ← Catálogo Organizacional: HierarchyView (árbol), DetalleUnidadTarjetas (tarjetas), modales y piezasCatalogo
+  app/components/catalogo/ ← Catálogo Organizacional: HierarchyView (explorador), ArbolCatalogo (árbol de navegación), DetalleCatalogo (panel de detalle), modales y piezasCatalogo
   app/components/ui/       ← shadcn/ui (no editar salvo necesidad)
   app/components/figma/    ← ImageWithFallback
   app/domain/              ← lógica de estado/ViewModels (ej. useHallazgosViewModel)
@@ -53,7 +53,7 @@ src/
   imports/logo.svg         ← logo Expedite
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
 backend/
-  sql/                     ← scripts de PostgreSQL (esquema, datos iniciales, primer administrador, hallazgos y sus datos de prueba, auditorías, planes de acción, estructura y controles, catálogos, riesgos y ejecución; 017 jerarquía, 019 riesgos en la jerarquía, 021 nombres reales; 018/020/022 datos del Consolidado)
+  sql/                     ← scripts de PostgreSQL (esquema, datos iniciales, primer administrador, hallazgos y sus datos de prueba, auditorías, planes de acción, estructura y controles, catálogos, riesgos y ejecución; 017 jerarquía, 019 riesgos en la jerarquía, 021 nombre opcional; 023 código asignado por el sistema; 018/020/022 datos del Consolidado; 024 quita la subdivisión sin código)
   src/server.ts            ← único punto de arranque; abre la conexión a la base y monta las rutas
   src/app.ts               ← app Express; recibe repositorio, verificador de tokens y rutas
   src/db.ts                ← conexión compartida (la registra server.ts)
@@ -167,7 +167,7 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 11. **Rol "Auditado":** no existe como rol; hoy el responsable de un plan de acción es cualquier usuario activo. Falta definir si FEMSA quiere un rol propio con acceso restringido al portal.
 12. **Entidad "auditoría":** `audits` solo guarda id, nombre y fecha de cierre para los planes de acción; el resto del modelo (SF-05) está pendiente.
 
-13. **Nombres reales de la estructura:** el mapeo código → nombre (UDN-0003 = KOF…) se **infirió** de `02_Estructura.pptx`; falta que FEMSA lo confirme, sobre todo UDN-0002 = Spin / UDN-0005 = FEMSA Servicios y DIVISION-0011. Las subdivisiones no tienen nombre real en ningún archivo.
+13. **Nombres de la estructura:** el mapeo código → nombre (UDN-0003 = KOF…) se **infirió** de `02_Estructura.pptx`; falta que FEMSA lo confirme, sobre todo UDN-0002 = Spin / UDN-0005 = FEMSA Servicios y DIVISION-0011. Las subdivisiones no tienen nombre en ningún archivo.
 14. **Nivel y estado del riesgo:** la escala Crítico/Alto/Medio/Bajo no está confirmada y los niveles de los datos de prueba son ficticios (el Consolidado no los trae). No hay estado del riesgo en el modelo.
 15. **Catálogo de riesgos:** la historia pedía su alta y edición; hoy los riesgos solo se muestran en el Catálogo.
 16. **Duplicados con acento:** el nombre de unidad no distingue mayúsculas pero sí acentos (intercalación `sin_mayusculas`, nivel 2); el borrador pedía rechazar también por acento.
@@ -180,7 +180,7 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 - Los permisos se leen de la base en cada petición (sin caché ni claims en el token) para que el cambio de rol sea inmediato (SF-17).
 - Un solo backend: arranca en `backend/src/server.ts`, puerto 3000, todo bajo `/api`, con una sola conexión a la base (variables `DB_*`).
 - **Planes de acción (historia #91, SF-10/SF-11):** tabla `action_plans` (un plan por hallazgo, responsable = usuario registrado, estado inicial `Asignado`) y tabla mínima `audits` (id, nombre, `end_date`) porque la fecha de cierre de la auditoría no existía en la base. Rutas `/api/planes-accion` (listar, `mios`, `responsables`, `hallazgos/:id`, POST) detrás de `autenticar`; crean Administrador, Jefe de Auditoría, Auditor Senior y Auditor. La validación "fecha de compromiso ≥ cierre de auditoría" vive en `backend/src/domain/planesAccion.ts` y se repite en el formulario. Al crear el plan el hallazgo pasa a `Asignado` y se registra `plan_accion.alta` en bitácora. El portal del auditado lee `/planes-accion/mios` del usuario en sesión.
-- **Estructura organizacional (SF-03, Planeación):** jerarquía **unidad → división → subdivisión (`business`) → área**; el "proceso" de la historia es el área. El nombre es el **código del Consolidado** (único solo en la unidad) y el **nombre real** es opcional y solo se muestra. Gerente = Jefe de Auditoría activo; escriben Administrador y Jefe de Auditoría. Periodo = trimestre, uno activo. **Auditoría activa** = engagement de un plan `Aprobado` o `En Ejecución` en la rama, y bloquea el borrado; tampoco se borra un nodo con hijos o una subdivisión con riesgos (sin cascada). Los riesgos cuelgan de la subdivisión y son de solo lectura. El Catálogo combina árbol, vista de tarjetas y riesgos en una sola página. Los datos de prueba se generan del Consolidado (anonimizado). Detalle en `docs/diseno/estructura-organizacional.md`.
+- **Estructura organizacional (SF-03, Planeación):** jerarquía **unidad → división → subdivisión (`business`) → área**; el "proceso" de la historia es el área. Cada unidad, división y subdivisión tiene **código** (formato del Consolidado: UDN-0007…), que es su identificador y **lo asigna el backend** al dar de alta (siguiente número del nivel, sin reutilizar los borrados; el usuario no lo escribe ni lo edita), y **nombre** opcional y editable (sin él se muestra el código); el área solo tiene nombre. En la base el código vive en `name`/`business_name`, el nombre en `display_name` y el contador en `structure_code_counters` (023). Gerente = Jefe de Auditoría activo; escriben Administrador y Jefe de Auditoría. Periodo = trimestre, uno activo. **Auditoría activa** = engagement de un plan `Aprobado` o `En Ejecución` en la rama, y bloquea el borrado; tampoco se borra un nodo con hijos o una subdivisión con riesgos (sin cascada). Los riesgos cuelgan de la subdivisión y son de solo lectura. El Catálogo es un explorador de dos paneles: árbol de navegación (unidad › división › subdivisión, sin áreas ni riesgos) y panel de detalle (resumen de unidades, indicadores, lista de hijos y, en la subdivisión, pestañas de riesgos y áreas). Los datos de prueba se generan del Consolidado (anonimizado). Detalle en `docs/diseno/estructura-organizacional.md`.
 
 ## 8. Referencias
 

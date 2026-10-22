@@ -1,8 +1,9 @@
 // Semilla de la estructura organizacional para DATA_MODE=memoria (SF-03).
 // GENERADO de 00_Consolidado_2026Q1.xlsx (hojas Catalogs, Risk Library y Risk Register);
 // mismos datos que 018_seed_jerarquia.sql y 020_seed_riesgos.sql. No editar a mano.
-// Los niveles de riesgo son FICTICIOS: el Consolidado no los trae. Los nombres reales son
-// INFERIDOS (ver 022_seed_nombres_reales.sql); Spin y FEMSA Servicios, sin confirmar.
+// Los niveles de riesgo son FICTICIOS: el Consolidado no los trae. Los nombres son INFERIDOS
+// (ver 022_seed_nombres_reales.sql); Spin y FEMSA Servicios, sin confirmar. Sin la
+// subdivisión B-923765, que no tiene código.
 
 import type { NivelRiesgo } from "../domain/estructura.js";
 
@@ -710,30 +711,6 @@ export const SEMILLA_ESTRUCTURA: SemillaUnidad[] = [
                 "nombre": "Ambiente de control deficiente",
                 "nivel": "Bajo",
                 "procedimientoControl": "CP-918746"
-              }
-            ]
-          },
-          {
-            "nombre": "SIN NOMBRE (B-923765)",
-            "nombreReal": null,
-            "pais": "Alemania",
-            "areas": [
-              "Administración y Finanzas",
-              "Cadena de Suministro",
-              "Expansión e Infraestructura",
-              "Recursos Humanos",
-              "Operaciones"
-            ],
-            "riesgos": [
-              {
-                "nombre": "Sobrevaluación CxC",
-                "nivel": "Medio",
-                "procedimientoControl": "CP-366104"
-              },
-              {
-                "nombre": "Sobrevaluación Efectivo",
-                "nivel": "Medio",
-                "procedimientoControl": "CP-366112"
               }
             ]
           }

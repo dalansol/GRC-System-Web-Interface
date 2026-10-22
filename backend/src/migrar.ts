@@ -36,8 +36,9 @@ const SCRIPTS = [
   "017_jerarquia_organizacional.sql",
   "019_riesgos_jerarquia.sql",
   "021_nombres_reales.sql",
+  "023_codigo_y_nombre.sql",
 ];
-const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql", "022_seed_nombres_reales.sql"];
+const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql", "022_seed_nombres_reales.sql", "024_seed_quitar_sin_codigo.sql"];
 
 const { values: opciones } = parseArgs({
   options: {

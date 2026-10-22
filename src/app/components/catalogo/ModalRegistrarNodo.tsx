@@ -1,28 +1,31 @@
 import { useState } from "react";
 import { AlertCircle, GitBranch, Loader2, X } from "lucide-react";
-import { ETIQUETA_NIVEL } from "../../api/estructura";
+import { ETIQUETA_NIVEL, type DatosNodo } from "../../api/estructura";
 import type { AltaNodoContexto } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
-import { Sugerencias } from "./piezasCatalogo";
+import { CampoCodigo, Sugerencias } from "./piezasCatalogo";
 
 // Alta de división, subdivisión o área dentro de su nivel padre (SF-03).
-// Los nombres de estos niveles se repiten entre ramas: no hay validación de duplicados.
+// División y subdivisión: el código lo asigna el sistema (aquí solo se muestra el próximo) y
+// el nombre es opcional. El área no tiene código: solo su nombre, que se repite entre ramas.
 
 interface ModalRegistrarNodoProps {
   contexto: AltaNodoContexto | null;
   guardando: boolean;
   errorServidor: string | null;
-  onGuardar: (datos: { nombre: string; nombreReal?: string | null; pais?: string | null }) => Promise<boolean>;
+  onGuardar: (datos: DatosNodo) => Promise<boolean>;
   onCerrar: () => void;
-  /** Nombres sugeridos (siguiente código o áreas de FEMSA); ver domain/estructura/sugerencias.ts. */
-  sugerenciasNombre?: readonly string[];
+  /** Vista previa del código que asignará el sistema (división y subdivisión). */
+  codigoProximo?: string;
+  /** Áreas sugeridas (solo área); ver domain/estructura/sugerencias.ts. */
+  sugerencias?: readonly string[];
   /** Países o regiones sugeridos para la subdivisión. */
   sugerenciasPais?: readonly string[];
 }
 
-const PLACEHOLDER: Record<AltaNodoContexto["nivel"], string> = {
-  division: "Ej. DIVISION-0001",
-  subdivision: "Ej. SUBDIVISION-0001",
+const PLACEHOLDER_NOMBRE: Record<AltaNodoContexto["nivel"], string> = {
+  division: "Ej. Latam, Oxxo México…",
+  subdivision: "Ej. Brasil, Centroamérica…",
   area: "Ej. Nómina, Inventarios, Compras…",
 };
 
@@ -32,11 +35,11 @@ export function ModalRegistrarNodo({
   errorServidor,
   onGuardar,
   onCerrar,
-  sugerenciasNombre = [],
+  codigoProximo,
+  sugerencias = [],
   sugerenciasPais = [],
 }: ModalRegistrarNodoProps) {
   const [nombre, setNombre] = useState("");
-  const [nombreReal, setNombreReal] = useState("");
   const [pais, setPais] = useState("");
   const [errorLocal, setErrorLocal] = useState("");
 
@@ -44,12 +47,11 @@ export function ModalRegistrarNodo({
 
   const etiqueta = ETIQUETA_NIVEL[contexto.nivel];
   const conPais = contexto.nivel === "subdivision";
-  // El área no lleva nombre real: su nombre ya es el real.
-  const conNombreReal = contexto.nivel !== "area";
+  // El área no tiene código: su nombre la identifica dentro de la subdivisión.
+  const conCodigo = contexto.nivel !== "area";
 
   const cerrar = () => {
     setNombre("");
-    setNombreReal("");
     setPais("");
     setErrorLocal("");
     onCerrar();
@@ -57,18 +59,16 @@ export function ModalRegistrarNodo({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nombre.trim()) {
+    if (!conCodigo && !nombre.trim()) {
       setErrorLocal("El nombre es obligatorio.");
       return;
     }
 
-    const datos: { nombre: string; nombreReal?: string | null; pais?: string | null } = { nombre: nombre.trim() };
-    if (conNombreReal) datos.nombreReal = nombreReal.trim() || null;
+    const datos: DatosNodo = { nombre: nombre.trim() || null };
     if (conPais) datos.pais = pais.trim() || null;
     const exito = await onGuardar(datos);
     if (exito) {
       setNombre("");
-      setNombreReal("");
       setPais("");
       setErrorLocal("");
     }
@@ -110,9 +110,11 @@ export function ModalRegistrarNodo({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {conCodigo && codigoProximo && <CampoCodigo codigo={codigoProximo} proximo />}
+
           <div>
             <label htmlFor="nodo-nombre" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
-              Nombre <span className="text-red-500">*</span>
+              Nombre {!conCodigo && <span className="text-red-500">*</span>}
             </label>
             <input
               id="nodo-nombre"
@@ -120,38 +122,22 @@ export function ModalRegistrarNodo({
               value={nombre}
               onChange={(e) => {
                 setNombre(e.target.value);
-                setErrorLocal("");
+                if (!conCodigo) setErrorLocal("");
               }}
-              placeholder={PLACEHOLDER[contexto.nivel]}
-              list="nodo-nombre-sugerencias"
+              placeholder={PLACEHOLDER_NOMBRE[contexto.nivel]}
+              list={conCodigo ? undefined : "nodo-nombre-sugerencias"}
               autoComplete="off"
               maxLength={150}
               disabled={guardando}
-              className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
-                errorLocal ? "border-red-400" : "border-border"
-              }`}
+              className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${!conCodigo && errorLocal ? "border-red-400" : "border-border"}`}
             />
-            {errorLocal && <p className="text-xs text-red-600 mt-1">{errorLocal}</p>}
-            <Sugerencias id="nodo-nombre-sugerencias" opciones={sugerenciasNombre} />
+            {!conCodigo && errorLocal && <p className="text-xs text-red-600 mt-1">{errorLocal}</p>}
+            {conCodigo ? (
+              <p className="text-[11px] text-muted-foreground mt-1">Opcional. Si lo dejas vacío se muestra el código.</p>
+            ) : (
+              <Sugerencias id="nodo-nombre-sugerencias" opciones={sugerencias} />
+            )}
           </div>
-
-          {conNombreReal && (
-            <div>
-              <label htmlFor="nodo-nombre-real" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
-                Nombre real (opcional)
-              </label>
-              <input
-                id="nodo-nombre-real"
-                type="text"
-                value={nombreReal}
-                onChange={(e) => setNombreReal(e.target.value)}
-                placeholder={contexto.nivel === "division" ? "Ej. Latam, Oxxo México…" : "Ej. el nombre de la operación"}
-                maxLength={150}
-                disabled={guardando}
-                className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-              />
-            </div>
-          )}
 
           {conPais && (
             <div>

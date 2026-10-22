@@ -2,7 +2,7 @@ import { useState } from "react";
 import { AlertCircle, Building2, Calendar, Landmark, Loader2, User, X } from "lucide-react";
 import type { AltaUnidadInput, DepartamentoAuditoria, PeriodoFiscal, Responsable } from "../../api/estructura";
 import { Card } from "../SharedComponents";
-import { Sugerencias } from "./piezasCatalogo";
+import { CampoCodigo } from "./piezasCatalogo";
 
 interface ModalRegistrarUnidadProps {
   abierto: boolean;
@@ -13,8 +13,8 @@ interface ModalRegistrarUnidadProps {
   errorServidor: string | null;
   onGuardar: (datos: AltaUnidadInput) => Promise<boolean>;
   onCerrar: () => void;
-  /** Nombre sugerido: el siguiente código UDN libre. */
-  sugerenciasNombre?: readonly string[];
+  /** Vista previa del código que asignará el sistema (domain/estructura/sugerencias.ts). */
+  codigoProximo: string;
 }
 
 export function ModalRegistrarUnidad({
@@ -26,10 +26,9 @@ export function ModalRegistrarUnidad({
   errorServidor,
   onGuardar,
   onCerrar,
-  sugerenciasNombre = [],
+  codigoProximo,
 }: ModalRegistrarUnidadProps) {
   const [nombre, setNombre] = useState("");
-  const [nombreReal, setNombreReal] = useState("");
   const [responsableId, setResponsableId] = useState<number | "">("");
   const [departamentoId, setDepartamentoId] = useState<number | "">("");
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -38,7 +37,6 @@ export function ModalRegistrarUnidad({
 
   const validar = () => {
     const err: Record<string, string> = {};
-    if (!nombre.trim()) err.nombre = "El nombre de la unidad es obligatorio.";
     if (!responsableId) err.responsableId = "Debes seleccionar un gerente responsable.";
     if (!periodoActivo) err.periodo = "No hay un periodo de auditoría activo configurado.";
     return err;
@@ -53,15 +51,13 @@ export function ModalRegistrarUnidad({
     }
 
     const exito = await onGuardar({
-      nombre: nombre.trim(),
-      nombreReal: nombreReal.trim() || null,
+      nombre: nombre.trim() || null,
       responsableId: Number(responsableId),
       departamentoAuditoriaId: departamentoId ? Number(departamentoId) : null,
     });
 
     if (exito) {
       setNombre("");
-      setNombreReal("");
       setResponsableId("");
       setDepartamentoId("");
       setErrores({});
@@ -109,54 +105,30 @@ export function ModalRegistrarUnidad({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Nombre de la Unidad */}
-          <div>
-            <label
-              htmlFor="unidad-nombre"
-              className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5"
-            >
-              Nombre de la Unidad de Negocio <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="unidad-nombre"
-              type="text"
-              value={nombre}
-              onChange={(e) => {
-                setNombre(e.target.value);
-                setErrores((prev) => ({ ...prev, nombre: "" }));
-              }}
-              placeholder="Ej. UDN-0007, Proximidad y Salud…"
-              list="unidad-nombre-sugerencias"
-              autoComplete="off"
-              maxLength={150}
-              disabled={guardando}
-              className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
-                errores.nombre ? "border-red-400 focus:ring-red-100" : "border-border"
-              }`}
-            />
-            {errores.nombre && <p className="text-xs text-red-600 mt-1">{errores.nombre}</p>}
-            <Sugerencias id="unidad-nombre-sugerencias" opciones={sugerenciasNombre} />
-          </div>
+          {/* Código: lo asigna el sistema (identificador); el nombre es opcional y editable */}
+          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3">
+            <CampoCodigo codigo={codigoProximo} proximo />
 
-          {/* Nombre real (opcional): se muestra en lugar del código */}
-          <div>
-            <label htmlFor="unidad-nombre-real" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
-              Nombre real (opcional)
-            </label>
-            <input
-              id="unidad-nombre-real"
-              type="text"
-              value={nombreReal}
-              onChange={(e) => setNombreReal(e.target.value)}
-              placeholder="Ej. KOF, Proximidad y Salud…"
-              maxLength={150}
-              disabled={guardando}
-              className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-            />
-            <p className="text-[11px] text-muted-foreground mt-1">
-              El nombre de arriba es el código del Consolidado y debe ser único; este solo se muestra.
-            </p>
+            <div>
+              <label htmlFor="unidad-nombre" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
+                Nombre
+              </label>
+              <input
+                id="unidad-nombre"
+                type="text"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                placeholder="Ej. KOF, Proximidad y Salud…"
+                maxLength={150}
+                disabled={guardando}
+                className="w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all border-border"
+              />
+            </div>
           </div>
+          <p className="text-[11px] text-muted-foreground -mt-2">
+            El sistema asigna el código al guardar: identifica a la unidad y no cambia. El nombre es opcional y se puede
+            editar cuando quieras; sin él se muestra el código.
+          </p>
 
           {/* Gerente Responsable */}
           <div>

@@ -49,7 +49,8 @@ const como = (correo: string) => ({
 
 const idDe = async (correo: string) => (await usuarios.buscarPorCorreo(correo))!.id;
 
-async function altaUnidad(nombre: string, correo = JEFA) {
+/** Alta de unidad; el código lo asigna el sistema (UDN-0001, UDN-0002… en un repositorio vacío). */
+async function altaUnidad(nombre: string | null = null, correo = JEFA) {
   return como(correo).post("/api/unidades-negocio").send({
     nombre,
     responsableId: await idDe(JEFA),
@@ -58,13 +59,11 @@ async function altaUnidad(nombre: string, correo = JEFA) {
 }
 
 /** Crea una unidad con una rama completa y devuelve los ids de cada nivel. */
-async function altaRama(nombre: string) {
-  const unidadId = (await altaUnidad(nombre)).body.id as number;
-  const divisionId = (await como(JEFA).post("/api/divisiones").send({ nombre: "DIVISION-0001", padreId: unidadId })).body
+async function altaRama() {
+  const unidadId = (await altaUnidad()).body.id as number;
+  const divisionId = (await como(JEFA).post("/api/divisiones").send({ padreId: unidadId })).body.id as number;
+  const subdivisionId = (await como(JEFA).post("/api/subdivisiones").send({ padreId: divisionId, pais: "México" })).body
     .id as number;
-  const subdivisionId = (
-    await como(JEFA).post("/api/subdivisiones").send({ nombre: "SUBDIVISION-0001", padreId: divisionId, pais: "México" })
-  ).body.id as number;
   const areaId = (await como(JEFA).post("/api/areas").send({ nombre: "Nómina", padreId: subdivisionId })).body
     .id as number;
   return { unidadId, divisionId, subdivisionId, areaId };
@@ -116,10 +115,11 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
 
   describe("CP-EST-01: Alta en la jerarquía con periodo activo (AC1)", () => {
     it("como Jefe de Auditoría crea una unidad con gerente, departamento y periodo activo", async () => {
-      const res = await altaUnidad("UDN-0001");
+      const res = await altaUnidad();
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({
-        nombre: "UDN-0001",
+        codigo: "UDN-0001",
+        nombre: null,
         responsableId: await idDe(JEFA),
         periodoFiscalNombre: "2026Q4",
         departamentoAuditoriaNombre: "Retail & Spin",
@@ -128,21 +128,21 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
 
       const evento = eventos.find((e) => e.accion === "estructura.alta");
       expect(evento?.actor).toBe(JEFA);
-      expect(evento?.detalle.nivel).toBe("unidad");
+      expect(evento?.detalle).toMatchObject({ nivel: "unidad", codigo: "UDN-0001" });
     });
 
     it("la rama completa queda visible en el catálogo central para cualquier usuario con sesión", async () => {
-      await altaRama("UDN-0003");
+      await altaRama();
       const res = await como(AUDITOR).get("/api/unidades-negocio");
       expect(res.status).toBe(200);
       const [unidad] = res.body;
-      expect(unidad.divisiones[0].nombre).toBe("DIVISION-0001");
-      expect(unidad.divisiones[0].subdivisiones[0]).toMatchObject({ nombre: "SUBDIVISION-0001", pais: "México" });
+      expect(unidad.divisiones[0].codigo).toBe("DIVISION-0001");
+      expect(unidad.divisiones[0].subdivisiones[0]).toMatchObject({ codigo: "SUBDIVISION-0001", pais: "México" });
       expect(unidad.divisiones[0].subdivisiones[0].areas[0].nombre).toBe("Nómina");
     });
 
     it("como Administrador también puede dar de alta", async () => {
-      expect((await altaUnidad("UDN-0002", ADMIN)).status).toBe(201);
+      expect((await altaUnidad(null, ADMIN)).status).toBe(201);
     });
 
     it("rechaza crear un nodo cuyo padre no existe (404)", async () => {
@@ -170,7 +170,7 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
   describe("CP-EST-03: Gerente responsable", () => {
     it("rechaza un gerente inexistente, inactivo o sin rol Jefe de Auditoría (400)", async () => {
       for (const responsableId of [9999, await idDe(INACTIVO), await idDe(AUDITOR)]) {
-        const res = await como(JEFA).post("/api/unidades-negocio").send({ nombre: "UDN-0009", responsableId });
+        const res = await como(JEFA).post("/api/unidades-negocio").send({ responsableId });
         expect(res.status).toBe(400);
         expect(res.body.error.codigo).toBe("DATOS_INVALIDOS");
       }
@@ -185,33 +185,65 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
   describe("CP-EST-04: Sin periodo activo", () => {
     it("rechaza el alta con 409 PERIODO_ACTIVO_NO_CONFIGURADO", async () => {
       estructura.limpiarPeriodos();
-      const res = await altaUnidad("UDN-0004");
+      const res = await altaUnidad();
       expect(res.status).toBe(409);
       expect(res.body.error.codigo).toBe("PERIODO_ACTIVO_NO_CONFIGURADO");
     });
   });
 
-  describe("CP-EST-05: Nombres duplicados (AC2)", () => {
-    // La intercalación sin_mayusculas ignora mayúsculas pero distingue acentos.
-    it("rechaza una unidad con el mismo nombre, sin importar mayúsculas", async () => {
-      expect((await altaUnidad("Proximidad y Salud")).status).toBe(201);
-      for (const nombre of ["Proximidad y Salud", "PROXIMIDAD Y SALUD", "  proximidad y salud "]) {
-        const res = await altaUnidad(nombre);
-        expect(res.status).toBe(409);
-        expect(res.body.error.codigo).toBe("NOMBRE_DUPLICADO");
+  describe("CP-EST-05: Código asignado por el sistema (AC2)", () => {
+    it("asigna el siguiente código de cada nivel, en todo el catálogo", async () => {
+      const a = await altaRama();
+      const b = await altaRama();
+      const codigos = async (unidadId: number) => {
+        const u = (await como(AUDITOR).get(`/api/unidades-negocio/${unidadId}`)).body;
+        return [u.codigo, u.divisiones[0].codigo, u.divisiones[0].subdivisiones[0].codigo];
+      };
+      expect(await codigos(a.unidadId)).toEqual(["UDN-0001", "DIVISION-0001", "SUBDIVISION-0001"]);
+      expect(await codigos(b.unidadId)).toEqual(["UDN-0002", "DIVISION-0002", "SUBDIVISION-0002"]);
+      // El área no tiene código.
+      const area = (await como(AUDITOR).get(`/api/unidades-negocio/${a.unidadId}`)).body.divisiones[0].subdivisiones[0].areas[0];
+      expect(area).not.toHaveProperty("codigo");
+    });
+
+    it("rechaza un código enviado por el usuario (400)", async () => {
+      const rama = await altaRama();
+      for (const [ruta, cuerpo] of [
+        ["unidades-negocio", { codigo: "UDN-0099", responsableId: await idDe(JEFA) }],
+        ["divisiones", { codigo: "DIVISION-0099", padreId: rama.unidadId }],
+        ["subdivisiones", { codigo: "SUBDIVISION-0099", padreId: rama.divisionId }],
+        ["areas", { codigo: "A-1", nombre: "Fletes", padreId: rama.subdivisionId }],
+      ] as const) {
+        const res = await como(JEFA).post(`/api/${ruta}`).send(cuerpo);
+        expect(res.status, ruta).toBe(400);
+        expect(res.body.error.mensaje).toMatch(/lo asigna el sistema/);
       }
     });
 
-    it("rechaza renombrar una unidad con el nombre de otra", async () => {
-      await altaUnidad("UDN-0001");
-      const otra = (await altaUnidad("UDN-0002")).body.id;
-      const res = await como(JEFA).patch(`/api/unidades-negocio/${otra}`).send({ nombre: "udn-0001" });
-      expect(res.status).toBe(409);
+    it("no reutiliza el código de un elemento eliminado", async () => {
+      await altaUnidad();
+      const segunda = (await altaUnidad()).body.id;
+      expect((await como(JEFA).delete(`/api/unidades-negocio/${segunda}`)).status).toBe(204);
+      expect((await altaUnidad()).body.codigo).toBe("UDN-0003");
+    });
+
+    it("con el Consolidado cargado continúa después del código más alto de cada nivel", async () => {
+      estructura.sembrar(SEMILLA_ESTRUCTURA, await idDe(JEFA));
+      const mayor = (codigos: string[]) => Math.max(...codigos.map((c) => Number(/^[A-Z]+-(\d+)$/.exec(c)?.[1] ?? 0)));
+      const divisiones = SEMILLA_ESTRUCTURA.flatMap((u) => u.divisiones);
+      const subdivisiones = divisiones.flatMap((d) => d.subdivisiones);
+
+      const unidad = (await altaUnidad()).body;
+      expect(unidad.codigo).toBe("UDN-0007");
+      const division = (await como(JEFA).post("/api/divisiones").send({ padreId: unidad.id })).body;
+      expect(division.codigo).toBe(`DIVISION-${String(mayor(divisiones.map((d) => d.nombre)) + 1).padStart(4, "0")}`);
+      const subdivision = (await como(JEFA).post("/api/subdivisiones").send({ padreId: division.id })).body;
+      expect(subdivision.codigo).toBe(`SUBDIVISION-${String(mayor(subdivisiones.map((s) => s.nombre)) + 1).padStart(4, "0")}`);
     });
 
     it("permite áreas con el mismo nombre en subdivisiones distintas", async () => {
-      const a = await altaRama("UDN-0001");
-      const b = await altaRama("UDN-0002");
+      const a = await altaRama();
+      const b = await altaRama();
       const repetida = await como(JEFA).post("/api/areas").send({ nombre: "Recursos Humanos", padreId: a.subdivisionId });
       const otra = await como(JEFA).post("/api/areas").send({ nombre: "Recursos Humanos", padreId: b.subdivisionId });
       expect(repetida.status).toBe(201);
@@ -221,7 +253,7 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
 
   describe("CP-EST-06: Bloqueo de eliminación con auditorías activas (AC3)", () => {
     it.each(["Aprobado", "En Ejecución"])("bloquea cada nivel de la rama con un plan %s", async (estado) => {
-      const rama = await altaRama("UDN-0005");
+      const rama = await altaRama();
       estructura.registrarAuditoria(rama.subdivisionId, estado);
 
       for (const [ruta, id] of [
@@ -237,7 +269,7 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
     });
 
     it.each(["Borrador", "Cerrado"])("con un plan %s permite eliminar de la hoja a la raíz", async (estado) => {
-      const rama = await altaRama("UDN-0006");
+      const rama = await altaRama();
       estructura.registrarAuditoria(rama.subdivisionId, estado);
 
       for (const [ruta, id] of [
@@ -253,7 +285,7 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
     });
 
     it("no elimina en cascada: un nodo con hijos responde 409 HIJOS_EXISTENTES", async () => {
-      const rama = await altaRama("UDN-0007");
+      const rama = await altaRama();
       const res = await como(JEFA).delete(`/api/divisiones/${rama.divisionId}`);
       expect(res.status).toBe(409);
       expect(res.body.error.codigo).toBe("HIJOS_EXISTENTES");
@@ -262,7 +294,7 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
 
   describe("Riesgos en la jerarquía (consolidación con el explorador de riesgos)", () => {
     it("los riesgos registrados aparecen bajo su subdivisión en el catálogo", async () => {
-      const rama = await altaRama("UDN-0001");
+      const rama = await altaRama();
       estructura.registrarRiesgo(rama.subdivisionId, {
         nombre: "Pagos de nómina sin doble aprobación",
         nivel: "Alto",
@@ -276,7 +308,7 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
     });
 
     it("no elimina una subdivisión con riesgos registrados (409 HIJOS_EXISTENTES)", async () => {
-      const rama = await altaRama("UDN-0002");
+      const rama = await altaRama();
       await como(JEFA).delete(`/api/areas/${rama.areaId}`);
       estructura.registrarRiesgo(rama.subdivisionId, { nombre: "Fraude", nivel: null, procedimientoControl: null });
 
@@ -286,51 +318,60 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
     });
   });
 
-  describe("Nombre real (opcional) junto al código", () => {
-    it("se guarda al dar de alta y editar una unidad, sin afectar la regla de nombre único", async () => {
-      const alta = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "UDN-0003",
-        nombreReal: "  KOF ",
-        responsableId: await idDe(JEFA),
-      });
-      expect(alta.status).toBe(201);
-      expect(alta.body).toMatchObject({ nombre: "UDN-0003", nombreReal: "KOF" });
-
-      // El nombre real no es único ni cuenta para el duplicado: el código sí.
-      const otra = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "UDN-0099",
-        nombreReal: "KOF",
-        responsableId: await idDe(JEFA),
-      });
-      expect(otra.status).toBe(201);
-
-      // Vacío lo quita.
-      const editada = await como(JEFA).patch(`/api/unidades-negocio/${alta.body.id}`).send({ nombreReal: "" });
-      expect(editada.status).toBe(200);
-      expect(editada.body.nombreReal).toBeNull();
+  describe("Código (fijo) y nombre (editable)", () => {
+    it("el nombre es obligatorio solo en el área", async () => {
+      const rama = await altaRama();
+      expect((await como(JEFA).post("/api/areas").send({ padreId: rama.subdivisionId })).status).toBe(400);
+      expect((await como(JEFA).post("/api/divisiones").send({ padreId: rama.unidadId })).status).toBe(201);
     });
 
-    it("división y subdivisión lo aceptan; el área lo ignora porque su nombre ya es el real", async () => {
-      const rama = await altaRama("UDN-0003");
-      const division = await como(JEFA).patch(`/api/divisiones/${rama.divisionId}`).send({ nombreReal: "Latam" });
-      expect(division.body).toMatchObject({ nombre: "DIVISION-0001", nombreReal: "Latam" });
+    it("el nombre es opcional, no es único y se edita; vacío lo quita", async () => {
+      const alta = await altaUnidad("  KOF ");
+      expect(alta.status).toBe(201);
+      expect(alta.body).toMatchObject({ codigo: "UDN-0001", nombre: "KOF" });
 
-      const area = await como(JEFA).post("/api/areas").send({ nombre: "Fletes", nombreReal: "Ignorado", padreId: rama.subdivisionId });
+      const otra = await altaUnidad("KOF");
+      expect(otra.status).toBe(201);
+      expect(otra.body.codigo).toBe("UDN-0002");
+
+      const renombrada = await como(JEFA).patch(`/api/unidades-negocio/${alta.body.id}`).send({ nombre: "Coca-Cola FEMSA" });
+      expect(renombrada.body).toMatchObject({ codigo: "UDN-0001", nombre: "Coca-Cola FEMSA" });
+      const sinNombre = await como(JEFA).patch(`/api/unidades-negocio/${alta.body.id}`).send({ nombre: "" });
+      expect(sinNombre.status).toBe(200);
+      expect(sinNombre.body.nombre).toBeNull();
+    });
+
+    it("rechaza cambiar el código de una unidad o de un nodo (400)", async () => {
+      const rama = await altaRama();
+      for (const [ruta, id] of [
+        ["unidades-negocio", rama.unidadId],
+        ["divisiones", rama.divisionId],
+        ["subdivisiones", rama.subdivisionId],
+      ] as const) {
+        const res = await como(JEFA).patch(`/api/${ruta}/${id}`).send({ codigo: "OTRO-0001", nombre: "Otro" });
+        expect(res.status).toBe(400);
+        expect(res.body.error.mensaje).toMatch(/código no se puede modificar/);
+      }
+      const unidad = (await como(AUDITOR).get(`/api/unidades-negocio/${rama.unidadId}`)).body;
+      expect(unidad).toMatchObject({ codigo: "UDN-0001", nombre: null });
+    });
+
+    it("división y subdivisión guardan su nombre; el área no tiene código", async () => {
+      const rama = await altaRama();
+      const division = await como(JEFA).patch(`/api/divisiones/${rama.divisionId}`).send({ nombre: "Latam" });
+      expect(division.body).toMatchObject({ codigo: "DIVISION-0001", nombre: "Latam" });
+
+      const area = await como(JEFA).post("/api/areas").send({ nombre: "Fletes", padreId: rama.subdivisionId });
       expect(area.status).toBe(201);
-      expect(area.body.nombreReal).toBeNull();
+      expect(area.body).toMatchObject({ codigo: null, nombre: "Fletes" });
 
       const unidad = (await como(AUDITOR).get(`/api/unidades-negocio/${rama.unidadId}`)).body;
-      expect(unidad.divisiones[0].nombreReal).toBe("Latam");
-      expect(unidad.divisiones[0].subdivisiones[0].nombreReal).toBeNull();
+      expect(unidad.divisiones[0].nombre).toBe("Latam");
+      expect(unidad.divisiones[0].subdivisiones[0].nombre).toBeNull();
     });
 
-    it("rechaza un nombre real de más de 150 caracteres (400)", async () => {
-      const res = await como(JEFA).post("/api/unidades-negocio").send({
-        nombre: "UDN-0010",
-        nombreReal: "x".repeat(151),
-        responsableId: await idDe(JEFA),
-      });
-      expect(res.status).toBe(400);
+    it("rechaza un nombre de más de 150 caracteres (400)", async () => {
+      expect((await altaUnidad("x".repeat(151))).status).toBe(400);
     });
   });
 
@@ -339,58 +380,58 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
       estructura.sembrar(SEMILLA_ESTRUCTURA, await idDe(JEFA));
 
       const unidades = (await como(AUDITOR).get("/api/unidades-negocio")).body as Array<{
-        nombre: string;
+        codigo: string;
         responsableNombre: string;
         departamentoAuditoriaNombre: string;
         divisiones: Array<{ subdivisiones: Array<{ areas: unknown[]; riesgos: unknown[] }> }>;
       }>;
       const subdivisiones = unidades.flatMap((u) => u.divisiones.flatMap((d) => d.subdivisiones));
-      expect(unidades.map((u) => u.nombre)).toEqual(["UDN-0001", "UDN-0002", "UDN-0003", "UDN-0004", "UDN-0005", "UDN-0006"]);
+      expect(unidades.map((u) => u.codigo)).toEqual(["UDN-0001", "UDN-0002", "UDN-0003", "UDN-0004", "UDN-0005", "UDN-0006"]);
       expect(unidades.every((u) => u.responsableNombre === "María García")).toBe(true);
-      expect(unidades.find((u) => u.nombre === "UDN-0003")?.departamentoAuditoriaNombre).toBe("Beverage");
-      expect(subdivisiones).toHaveLength(40);
-      expect(subdivisiones.flatMap((s) => s.areas)).toHaveLength(343);
-      expect(subdivisiones.flatMap((s) => s.riesgos)).toHaveLength(251);
+      expect(unidades.find((u) => u.codigo === "UDN-0003")?.departamentoAuditoriaNombre).toBe("Beverage");
+      expect(subdivisiones).toHaveLength(39);
+      expect(subdivisiones.flatMap((s) => s.areas)).toHaveLength(338);
+      expect(subdivisiones.flatMap((s) => s.riesgos)).toHaveLength(249);
 
-      // Nombres reales inferidos del deck (022): el código se conserva.
-      const kof = (await como(AUDITOR).get("/api/unidades-negocio")).body.find(
-        (u: { nombre: string }) => u.nombre === "UDN-0003",
-      );
-      expect(kof.nombreReal).toBe("KOF");
-      expect(kof.divisiones.map((d: { nombreReal: string }) => d.nombreReal).sort()).toEqual([
-        "Brasil",
-        "Corporativo",
-        "Latam",
-        "México",
-      ]);
+      // Códigos con el formato del nivel y nombres inferidos del deck (022).
+      const todas = (await como(AUDITOR).get("/api/unidades-negocio")).body as Array<{
+        codigo: string;
+        nombre: string | null;
+        divisiones: Array<{ codigo: string; nombre: string | null; subdivisiones: Array<{ codigo: string }> }>;
+      }>;
+      const nodos = todas.flatMap((u) => [u, ...u.divisiones, ...u.divisiones.flatMap((d) => d.subdivisiones)]);
+      expect(nodos.every((n) => /^(UDN|DIVISION|SUBDIVISION)-\d{4}$/.test(n.codigo))).toBe(true);
+      const kof = todas.find((u) => u.codigo === "UDN-0003")!;
+      expect(kof.nombre).toBe("KOF");
+      expect(kof.divisiones.map((d) => d.nombre).sort()).toEqual(["Brasil", "Corporativo", "Latam", "México"]);
     });
   });
 
   describe("Edición", () => {
     it("edita nombre, gerente y departamento de una unidad y lo registra en bitácora", async () => {
-      const id = (await altaUnidad("UDN-0001")).body.id;
+      const id = (await altaUnidad()).body.id;
       const res = await como(JEFA).patch(`/api/unidades-negocio/${id}`).send({
-        nombre: "UDN-0010",
+        nombre: "Deportes",
         departamentoAuditoriaId: 2,
       });
       expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ nombre: "UDN-0010", departamentoAuditoriaNombre: "Beverage" });
+      expect(res.body).toMatchObject({ codigo: "UDN-0001", nombre: "Deportes", departamentoAuditoriaNombre: "Beverage" });
       expect(eventos.some((e) => e.accion === "estructura.edicion")).toBe(true);
     });
 
     it("edita el nombre y país de una subdivisión", async () => {
-      const rama = await altaRama("UDN-0001");
+      const rama = await altaRama();
       const res = await como(JEFA).patch(`/api/subdivisiones/${rama.subdivisionId}`).send({
-        nombre: "SUBDIVISION-0002",
+        nombre: "Brasil",
         pais: "KFS RTR",
       });
       expect(res.status).toBe(200);
       const unidad = (await como(JEFA).get(`/api/unidades-negocio/${rama.unidadId}`)).body;
-      expect(unidad.divisiones[0].subdivisiones[0]).toMatchObject({ nombre: "SUBDIVISION-0002", pais: "KFS RTR" });
+      expect(unidad.divisiones[0].subdivisiones[0]).toMatchObject({ codigo: "SUBDIVISION-0001", nombre: "Brasil", pais: "KFS RTR" });
     });
 
     it("rechaza un departamento de auditoría inexistente (400)", async () => {
-      const id = (await altaUnidad("UDN-0001")).body.id;
+      const id = (await altaUnidad()).body.id;
       const res = await como(JEFA).patch(`/api/unidades-negocio/${id}`).send({ departamentoAuditoriaId: 99 });
       expect(res.status).toBe(400);
     });

@@ -41,6 +41,15 @@ export function nivelMaximo(riesgos: Riesgo[]): NivelRiesgo | null {
   return peor;
 }
 
+/** Cuántos riesgos hay de cada nivel, del peor al mejor y al final los que no tienen nivel. */
+export function distribucionRiesgos(riesgos: Riesgo[]): Array<{ nivel: NivelRiesgo | "sin"; cantidad: number }> {
+  const cuenta = new Map<NivelRiesgo | "sin", number>();
+  for (const { nivel } of riesgos) cuenta.set(nivel ?? "sin", (cuenta.get(nivel ?? "sin") ?? 0) + 1);
+  return [...NIVELES_RIESGO, "sin" as const]
+    .map((nivel) => ({ nivel, cantidad: cuenta.get(nivel) ?? 0 }))
+    .filter((d) => d.cantidad > 0);
+}
+
 /** Todos los riesgos de una rama: subdivisión, división o unidad completa. */
 export function riesgosDeNodo(nodo: UnidadNegocio | Division | Subdivision): Riesgo[] {
   if ("riesgos" in nodo) return nodo.riesgos;
@@ -54,7 +63,7 @@ function alcanzaNivel(riesgos: Riesgo[], nivel: NivelRiesgo): boolean {
 }
 
 export interface FiltroCatalogo {
-  /** Texto a buscar en los nombres de cualquier nivel (vacío = sin filtro). */
+  /** Texto a buscar en códigos y nombres de cualquier nivel (vacío = sin filtro). */
   texto: string;
   /** Mostrar solo ramas con riesgos de este nivel o peor (null = sin filtro). */
   nivel: NivelRiesgo | null;
@@ -71,20 +80,20 @@ function normalizar(texto: string): string {
  */
 export function filtrarUnidades(unidades: UnidadNegocio[], { texto, nivel }: FiltroCatalogo): UnidadNegocio[] {
   const busqueda = normalizar(texto);
-  const coincide = (nombre: string, nombreReal?: string | null) =>
-    busqueda === "" || normalizar(nombre).includes(busqueda) || (!!nombreReal && normalizar(nombreReal).includes(busqueda));
+  const coincide = (...textos: Array<string | null | undefined>) =>
+    busqueda === "" || textos.some((t) => !!t && normalizar(t).includes(busqueda));
   if (busqueda === "" && nivel === null) return unidades;
 
   const filtrarSubdivision = (s: Subdivision, padreCoincide: boolean): Subdivision | null => {
     if (nivel && !alcanzaNivel(s.riesgos, nivel)) return null;
-    if (padreCoincide || coincide(s.nombre, s.nombreReal)) return s;
+    if (padreCoincide || coincide(s.codigo, s.nombre)) return s;
     const areas = s.areas.filter((a) => coincide(a.nombre));
     const riesgos = s.riesgos.filter((r) => coincide(r.nombre));
     return areas.length || riesgos.length ? { ...s, areas, riesgos } : null;
   };
 
   const filtrarDivision = (d: Division, padreCoincide: boolean): Division | null => {
-    const propia = padreCoincide || coincide(d.nombre, d.nombreReal);
+    const propia = padreCoincide || coincide(d.codigo, d.nombre);
     const subdivisiones = d.subdivisiones
       .map((s) => filtrarSubdivision(s, propia))
       .filter((s): s is Subdivision => s !== null);
@@ -94,7 +103,7 @@ export function filtrarUnidades(unidades: UnidadNegocio[], { texto, nivel }: Fil
   };
 
   return unidades.flatMap((u) => {
-    const propia = coincide(u.nombre, u.nombreReal);
+    const propia = coincide(u.codigo, u.nombre);
     const divisiones = u.divisiones
       .map((d) => filtrarDivision(d, propia))
       .filter((d): d is Division => d !== null);

@@ -3242,7 +3242,7 @@ const TOUR_STEPS = [
   {
     targetId: "tour-nav-hierarchy",
     title: "Catálogo",
-    description: "Estructura organizacional completa y riesgos por entidad, con vista de tarjetas y árbol jerárquico.",
+    description: "Estructura organizacional completa y riesgos por entidad, en un explorador con árbol de navegación y panel de detalle.",
   },
   {
     targetId: "tour-nav-plans",

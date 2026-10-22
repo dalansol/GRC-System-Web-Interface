@@ -37,9 +37,10 @@ export interface Area {
 
 export interface Subdivision {
   id: number;
-  /** Código del Consolidado (SUBDIVISION-0002); ver nombreReal. */
-  nombre: string;
-  nombreReal: string | null;
+  /** Código del Consolidado (SUBDIVISION-0002): único en su unidad y fijo. */
+  codigo: string;
+  /** Opcional y editable; sin él se muestra el código. */
+  nombre: string | null;
   pais: string | null;
   divisionId: number;
   areas: Area[];
@@ -48,18 +49,20 @@ export interface Subdivision {
 
 export interface Division {
   id: number;
-  /** Código del Consolidado (DIVISION-0002); ver nombreReal. */
-  nombre: string;
-  nombreReal: string | null;
+  /** Código del Consolidado (DIVISION-0002): único en su unidad y fijo. */
+  codigo: string;
+  /** Opcional y editable; sin él se muestra el código. */
+  nombre: string | null;
   unidadNegocioId: number;
   subdivisiones: Subdivision[];
 }
 
 export interface UnidadNegocio {
   id: number;
-  /** Código del Consolidado (UDN-0003), único; el nombre real (KOF) es opcional. */
-  nombre: string;
-  nombreReal: string | null;
+  /** Código del Consolidado (UDN-0003): único en el catálogo y fijo. */
+  codigo: string;
+  /** Opcional y editable (KOF); sin él se muestra el código. */
+  nombre: string | null;
   responsableId: number;
   responsableNombre: string;
   periodoFiscalId: number;
@@ -83,36 +86,41 @@ export type NivelNodo = "division" | "subdivision" | "area";
 
 export interface NodoPlano {
   id: number;
-  nombre: string;
-  nombreReal: string | null;
+  /** Null en el área, que no tiene código. */
+  codigo: string | null;
+  nombre: string | null;
   padreId: number;
 }
 
+/** El código no se envía: lo asigna el backend. */
 export interface AltaUnidadInput {
-  nombre: string;
-  nombreReal?: string | null;
+  nombre: string | null;
   responsableId: number;
   departamentoAuditoriaId: number | null;
 }
 
+/** El código no se edita. */
 export interface EdicionUnidadInput {
-  nombre?: string;
-  nombreReal?: string | null;
+  nombre?: string | null;
   responsableId?: number;
   departamentoAuditoriaId?: number | null;
 }
 
-export interface AltaNodoInput {
-  nombre: string;
-  /** Solo división y subdivisión. */
-  nombreReal?: string | null;
-  padreId: number;
+/** Datos del formulario de alta de un nodo (el padre lo pone el ViewModel; el código, el backend). */
+export interface DatosNodo {
+  /** Opcional en división y subdivisión; obligatorio en el área. */
+  nombre: string | null;
+  /** Solo subdivisión. */
   pais?: string | null;
 }
 
+export interface AltaNodoInput extends DatosNodo {
+  padreId: number;
+}
+
+/** El código no se edita. */
 export interface EdicionNodoInput {
-  nombre?: string;
-  nombreReal?: string | null;
+  nombre?: string | null;
   pais?: string | null;
 }
 

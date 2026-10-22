@@ -6,7 +6,6 @@ import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { RepositorioEstructuraSql } from "../src/repos/estructuraSql.js";
-import { ErrorNombreDuplicado } from "../src/repos/estructura.js";
 
 const env = process.env;
 const ESQUEMA = "prueba_estructura";
@@ -32,6 +31,8 @@ const SCRIPTS = [
   "020_seed_riesgos.sql",
   "021_nombres_reales.sql",
   "022_seed_nombres_reales.sql",
+  "023_codigo_y_nombre.sql",
+  "024_seed_quitar_sin_codigo.sql",
 ];
 
 const script = (nombre: string) => readFile(new URL(`../sql/${nombre}`, import.meta.url), "utf8");
@@ -84,7 +85,7 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
 
   it("el seed carga la jerarquía del Consolidado sin duplicarse al repetirse", async () => {
     const unidades = await repo.listarUnidades();
-    expect(unidades.map((u) => [u.nombre, u.departamentoAuditoriaNombre])).toEqual([
+    expect(unidades.map((u) => [u.codigo, u.departamentoAuditoriaNombre])).toEqual([
       ["UDN-0001", "Retail & Spin"],
       ["UDN-0002", "Retail & Spin"],
       ["UDN-0003", "Beverage"],
@@ -96,12 +97,12 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
       `SELECT (SELECT COUNT(*)::int FROM division) AS divisiones, (SELECT COUNT(*)::int FROM business) AS subdivisiones,
               (SELECT COUNT(*)::int FROM area) AS areas, (SELECT COUNT(*)::int FROM risk_register) AS riesgos`,
     )).rows[0];
-    expect(conteo).toEqual({ divisiones: 12, subdivisiones: 40, areas: 343, riesgos: 251 });
+    expect(conteo).toEqual({ divisiones: 12, subdivisiones: 39, areas: 338, riesgos: 249 });
   });
 
-  it("los nombres reales inferidos se muestran junto al código", async () => {
+  it("los nombres inferidos se muestran junto al código", async () => {
     const unidades = await repo.listarUnidades();
-    expect(unidades.map((u) => [u.nombre, u.nombreReal])).toEqual([
+    expect(unidades.map((u) => [u.codigo, u.nombre])).toEqual([
       ["UDN-0001", "Deportes"],
       ["UDN-0002", "Spin"],
       ["UDN-0003", "KOF"],
@@ -109,17 +110,41 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
       ["UDN-0005", "FEMSA Servicios"],
       ["UDN-0006", "Tragetta"],
     ]);
-    const europa = unidades[3]!.divisiones.find((d) => d.nombre === "DIVISION-0005");
-    expect(europa?.nombreReal).toBe("Europa");
-    expect(unidades.flatMap((u) => u.divisiones).filter((d) => d.nombreReal === null).map((d) => d.nombre)).toEqual([
+    const europa = unidades[3]!.divisiones.find((d) => d.codigo === "DIVISION-0005");
+    expect(europa?.nombre).toBe("Europa");
+    expect(unidades.flatMap((u) => u.divisiones).filter((d) => d.nombre === null).map((d) => d.codigo)).toEqual([
       "DIVISION-0011",
     ]);
   });
 
+  it("los datos de prueba solo traen códigos con el formato del nivel", async () => {
+    const unidades = await repo.listarUnidades();
+    const divisiones = unidades.flatMap((u) => u.divisiones);
+    const subdivisiones = divisiones.flatMap((d) => d.subdivisiones);
+    expect(unidades.every((u) => /^UDN-\d{4}$/.test(u.codigo))).toBe(true);
+    expect(divisiones.every((d) => /^DIVISION-\d{4}$/.test(d.codigo))).toBe(true);
+    expect(subdivisiones.every((s) => /^SUBDIVISION-\d{4}$/.test(s.codigo))).toBe(true);
+  });
+
+  it("024 quita la subdivisión sin código con sus áreas, sin tocar los nombres", async () => {
+    // Simula una base que cargó los datos anteriores.
+    const division = (await repo.listarUnidades()).find((u) => u.codigo === "UDN-0004")!.divisiones.find(
+      (d) => d.codigo === "DIVISION-0005",
+    )!;
+    const subdivision = await repo.crearNodo("subdivision", { nombre: null, padreId: division.id, pais: "Alemania" });
+    await pool.query("UPDATE business SET business_name = 'SIN NOMBRE (B-923765)' WHERE business_id = $1", [subdivision.id]);
+    await repo.crearNodo("area", { nombre: "Operaciones", padreId: subdivision.id, pais: null });
+
+    await pool.query(await script("024_seed_quitar_sin_codigo.sql"));
+
+    expect(await repo.buscarNodo("subdivision", subdivision.id)).toBeNull();
+    expect((await repo.listarUnidades()).find((u) => u.codigo === "UDN-0003")?.nombre).toBe("KOF");
+  });
+
   it("los riesgos de prueba cuelgan de su subdivisión con nivel y procedimiento", async () => {
-    const unidad = (await repo.listarUnidades()).find((u) => u.nombre === "UDN-0001")!;
+    const unidad = (await repo.listarUnidades()).find((u) => u.codigo === "UDN-0001")!;
     const subdivision = unidad.divisiones[0]!.subdivisiones[0]!;
-    expect(subdivision.nombre).toBe("SUBDIVISION-0012");
+    expect(subdivision.codigo).toBe("SUBDIVISION-0012");
     expect(subdivision.riesgos.length).toBeGreaterThan(0);
     expect(subdivision.riesgos.every((r) => r.nivel !== null && r.procedimientoControl?.startsWith("CP-"))).toBe(true);
     expect(await repo.tieneHijos("subdivision", subdivision.id)).toBe(true);
@@ -135,16 +160,29 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
     await expect(pool.query("INSERT INTO area (area_name) VALUES ('Suelta')")).rejects.toThrow(/null/i);
   });
 
-  it("el nombre de la unidad es único sin importar mayúsculas", async () => {
+  it("asigna el siguiente código por encima del Consolidado y no reutiliza el de una unidad borrada", async () => {
     const periodo = (await repo.obtenerPeriodoActivo())!.id;
-    await repo.crearUnidad({ nombre: "Proximidad y Salud", nombreReal: null, responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId);
-    await expect(
-      repo.crearUnidad({ nombre: "PROXIMIDAD Y SALUD", nombreReal: null, responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId),
-    ).rejects.toBeInstanceOf(ErrorNombreDuplicado);
+    const alta = () => repo.crearUnidad({ nombre: null, responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId);
+    const nueva = await alta();
+    expect(nueva.codigo).toBe("UDN-0007");
+    await repo.eliminarUnidad(nueva.id);
+    const segunda = await alta();
+    expect(segunda.codigo).toBe("UDN-0008");
+
+    // División: después de DIVISION-0012 (el mayor del Consolidado).
+    const division = await repo.crearNodo("division", { nombre: null, padreId: segunda.id, pais: null });
+    expect(division.codigo).toBe("DIVISION-0013");
+  });
+
+  it("dos altas simultáneas reciben códigos distintos", async () => {
+    const periodo = (await repo.obtenerPeriodoActivo())!.id;
+    const alta = () => repo.crearUnidad({ nombre: null, responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId);
+    const [a, b] = await Promise.all([alta(), alta()]);
+    expect(a.codigo).not.toBe(b.codigo);
   });
 
   it("solo los planes Aprobado o En Ejecución bloquean cada nivel de la rama", async () => {
-    const unidad = (await repo.listarUnidades()).find((u) => u.nombre === "UDN-0006")!;
+    const unidad = (await repo.listarUnidades()).find((u) => u.codigo === "UDN-0006")!;
     const division = unidad.divisiones[0]!;
     const subdivision = division.subdivisiones[0]!;
     const area = subdivision.areas[0]!;
@@ -172,8 +210,8 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
   });
 
   it("eliminar una subdivisión conserva su entidad auditable sin vínculo", async () => {
-    const unidad = (await repo.listarUnidades()).find((u) => u.nombre === "UDN-0001")!;
-    const subdivision = await repo.crearNodo("subdivision", { nombre: "SUBDIVISION-0099", nombreReal: null, padreId: unidad.divisiones[0]!.id, pais: null });
+    const unidad = (await repo.listarUnidades()).find((u) => u.codigo === "UDN-0001")!;
+    const subdivision = await repo.crearNodo("subdivision", { nombre: null, padreId: unidad.divisiones[0]!.id, pais: null });
     const entidad = await uno(`INSERT INTO audit_entity (name, business_id) VALUES ('Entidad', $1) RETURNING id`, [subdivision.id]);
 
     expect(await repo.tieneHijos("subdivision", subdivision.id)).toBe(false);

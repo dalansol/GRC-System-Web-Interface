@@ -10,7 +10,7 @@ import {
 } from "../../api/estructura";
 import type { NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
-import { Sugerencias } from "./piezasCatalogo";
+import { CampoCodigo, Sugerencias } from "./piezasCatalogo";
 
 interface ModalEditarEntidadProps {
   unidad: UnidadNegocio | null;
@@ -41,7 +41,6 @@ export function ModalEditarEntidad({
   const abierto = Boolean(unidad || nodo);
 
   const [nombre, setNombre] = useState("");
-  const [nombreReal, setNombreReal] = useState("");
   const [responsableId, setResponsableId] = useState<number | "">("");
   const [departamentoId, setDepartamentoId] = useState<number | "">("");
   const [pais, setPais] = useState("");
@@ -49,13 +48,11 @@ export function ModalEditarEntidad({
 
   useEffect(() => {
     if (unidad) {
-      setNombre(unidad.nombre);
-      setNombreReal(unidad.nombreReal ?? "");
+      setNombre(unidad.nombre ?? "");
       setResponsableId(unidad.responsableId);
       setDepartamentoId(unidad.departamentoAuditoriaId ?? "");
     } else if (nodo) {
-      setNombre(nodo.nombre);
-      setNombreReal(nodo.nombreReal ?? "");
+      setNombre(nodo.nombre ?? "");
       setPais(nodo.pais ?? "");
     }
     setErrorLocal("");
@@ -64,7 +61,9 @@ export function ModalEditarEntidad({
   if (!abierto) return null;
 
   const conPais = nodo?.nivel === "subdivision";
-  const conNombreReal = Boolean(unidad) || (nodo !== null && nodo.nivel !== "area");
+  // El código no se edita (identifica al elemento); el área no tiene y su nombre es obligatorio.
+  const codigo = unidad?.codigo ?? nodo?.codigo ?? null;
+  const nombreObligatorio = !codigo;
   // El gerente actual puede ya no ser Jefe de Auditoría; se muestra para no perderlo.
   const opcionesResponsable =
     unidad && !responsables.some((r) => r.id === unidad.responsableId)
@@ -73,22 +72,20 @@ export function ModalEditarEntidad({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nombre.trim()) {
+    if (nombreObligatorio && !nombre.trim()) {
       setErrorLocal("El nombre no puede quedar vacío.");
       return;
     }
 
     if (unidad) {
       const cambios: EdicionUnidadInput = {
-        nombre: nombre.trim(),
-        nombreReal: nombreReal.trim() || null,
+        nombre: nombre.trim() || null,
         departamentoAuditoriaId: departamentoId ? Number(departamentoId) : null,
       };
       if (responsableId && responsableId !== unidad.responsableId) cambios.responsableId = Number(responsableId);
       await onGuardarUnidad(unidad.id, cambios);
     } else if (nodo) {
-      const cambios: EdicionNodoInput = { nombre: nombre.trim() };
-      if (conNombreReal) cambios.nombreReal = nombreReal.trim() || null;
+      const cambios: EdicionNodoInput = { nombre: nombre.trim() || null };
       if (conPais) cambios.pais = pais.trim() || null;
       await onGuardarNodo(nodo, cambios);
     }
@@ -130,9 +127,11 @@ export function ModalEditarEntidad({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {codigo && <CampoCodigo codigo={codigo} />}
+
           <div>
             <label htmlFor="editar-nombre" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
-              Nombre <span className="text-red-500">*</span>
+              Nombre {nombreObligatorio && <span className="text-red-500">*</span>}
             </label>
             <input
               id="editar-nombre"
@@ -142,6 +141,7 @@ export function ModalEditarEntidad({
                 setNombre(e.target.value);
                 setErrorLocal("");
               }}
+              placeholder={nombreObligatorio ? undefined : "Sin nombre: se muestra el código"}
               maxLength={150}
               disabled={guardando}
               className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
@@ -150,23 +150,6 @@ export function ModalEditarEntidad({
             />
             {errorLocal && <p className="text-xs text-red-600 mt-1">{errorLocal}</p>}
           </div>
-
-          {conNombreReal && (
-            <div>
-              <label htmlFor="editar-nombre-real" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
-                Nombre real (opcional)
-              </label>
-              <input
-                id="editar-nombre-real"
-                type="text"
-                value={nombreReal}
-                onChange={(e) => setNombreReal(e.target.value)}
-                maxLength={150}
-                disabled={guardando}
-                className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-              />
-            </div>
-          )}
 
           {unidad && (
             <>

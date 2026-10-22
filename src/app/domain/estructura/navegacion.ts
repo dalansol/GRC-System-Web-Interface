@@ -1,4 +1,4 @@
-// Navegación por tarjetas del catálogo organizacional (SF-03).
+// Navegación del catálogo organizacional (SF-03): la selección del explorador.
 // La ruta guarda solo ids: tras un alta, edición o baja la vista vuelve a resolverla contra
 // los datos frescos, y si el nodo ya no existe cae al ancestro más profundo que siga vivo.
 
@@ -34,7 +34,26 @@ function plural(cantidad: number, singular: string, varios: string): string {
   return `${cantidad} ${cantidad === 1 ? singular : varios}`;
 }
 
-/** Texto del pie de una tarjeta: qué contiene la división o subdivisión. */
+/** Claves de los nodos que hay que expandir en el árbol para que la ruta se vea. */
+export function clavesAncestros(ruta: RutaCatalogo | null): string[] {
+  if (!ruta) return [];
+  const claves = [`unidad-${ruta.unidadId}`];
+  if (ruta.divisionId !== undefined) claves.push(`division-${ruta.divisionId}`);
+  return claves;
+}
+
+/** Conteos de la rama de una unidad o división, para los indicadores del encabezado. */
+export function conteosRama(nodo: UnidadNegocio | Division): { divisiones: number; subdivisiones: number; areas: number } {
+  const divisiones = "divisiones" in nodo ? nodo.divisiones : [nodo];
+  const subdivisiones = divisiones.flatMap((d) => d.subdivisiones);
+  return {
+    divisiones: divisiones.length,
+    subdivisiones: subdivisiones.length,
+    areas: subdivisiones.reduce((total, s) => total + s.areas.length, 0),
+  };
+}
+
+/** Texto de una fila: qué contiene la división o subdivisión. */
 export function resumenHijos(nodo: Division | Subdivision): string {
   if ("subdivisiones" in nodo) {
     const areas = nodo.subdivisiones.reduce((total, s) => total + s.areas.length, 0);

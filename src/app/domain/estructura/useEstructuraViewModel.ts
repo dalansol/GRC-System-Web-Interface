@@ -23,16 +23,23 @@ import {
   type PeriodoFiscal,
   type Responsable,
   type UnidadNegocio,
+  type DatosNodo,
 } from "../../api/estructura";
 import { useSesion } from "../../auth/SesionContext";
-import { nombreVisible } from "./nombres";
+import { nombreVisible, tieneNombre, type ConNombre } from "./nombres";
+
+/** "KOF" (UDN-0003) o solo "UDN-0003": el aviso de alta confirma el código asignado. */
+function conCodigo(nodo: ConNombre): string {
+  return tieneNombre(nodo) ? `"${nombreVisible(nodo)}" (${nodo.codigo})` : `"${nombreVisible(nodo)}"`;
+}
 
 /** Nodo de la jerarquía (división, subdivisión o área) junto con la unidad a la que pertenece. */
 export interface NodoSeleccionado {
   nivel: NivelNodo;
   id: number;
-  nombre: string;
-  nombreReal?: string | null;
+  /** Null en el área. */
+  codigo?: string | null;
+  nombre?: string | null;
   pais?: string | null;
   unidadId: number;
 }
@@ -122,8 +129,8 @@ export function useEstructuraViewModel() {
     setErrorModalAlta(null);
     try {
       const nueva = await apiCrearUnidad(datos);
-      setUnidades((prev) => [...prev, nueva].sort((a, b) => a.nombre.localeCompare(b.nombre)));
-      toast.success(`Unidad de negocio "${nombreVisible(nueva)}" creada exitosamente.`);
+      setUnidades((prev) => [...prev, nueva].sort((a, b) => a.codigo.localeCompare(b.codigo)));
+      toast.success(`Unidad de negocio ${conCodigo(nueva)} creada exitosamente.`);
       cerrarModalAlta();
       return true;
     } catch (err) {
@@ -148,18 +155,14 @@ export function useEstructuraViewModel() {
     setErrorModalNodo(null);
   };
 
-  const guardarNuevoNodo = async (datos: {
-    nombre: string;
-    nombreReal?: string | null;
-    pais?: string | null;
-  }): Promise<boolean> => {
+  const guardarNuevoNodo = async (datos: DatosNodo): Promise<boolean> => {
     if (!altaNodo) return false;
     setGuardando(true);
     setErrorModalNodo(null);
     try {
       const nodo = await apiCrearNodo(altaNodo.nivel, { ...datos, padreId: altaNodo.padreId });
       await refrescarUnidad(altaNodo.unidadId);
-      toast.success(`${ETIQUETA_NIVEL[altaNodo.nivel]} "${nombreVisible(nodo)}" agregada exitosamente.`);
+      toast.success(`${ETIQUETA_NIVEL[altaNodo.nivel]} ${conCodigo(nodo)} agregada exitosamente.`);
       cerrarAltaNodo();
       return true;
     } catch (err) {

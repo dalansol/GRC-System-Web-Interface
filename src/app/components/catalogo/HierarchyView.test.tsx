@@ -75,8 +75,8 @@ const RESPONSABLES: Responsable[] = [
 
 const UNIDAD: UnidadNegocio = {
   id: 10,
-  nombre: "UDN-0001",
-  nombreReal: null,
+  codigo: "UDN-0001",
+  nombre: null,
   responsableId: 2,
   responsableNombre: "María García",
   periodoFiscalId: 2,
@@ -88,14 +88,14 @@ const UNIDAD: UnidadNegocio = {
   divisiones: [
     {
       id: 100,
-      nombre: "DIVISION-0001",
-      nombreReal: null,
+      codigo: "DIVISION-0001",
+      nombre: null,
       unidadNegocioId: 10,
       subdivisiones: [
         {
           id: 200,
-          nombre: "SUBDIVISION-0001",
-          nombreReal: null,
+          codigo: "SUBDIVISION-0001",
+          nombre: null,
           pais: "México",
           divisionId: 100,
           areas: [{ id: 300, nombre: "Nómina", subdivisionId: 200 }],
@@ -114,6 +114,20 @@ const UNIDAD: UnidadNegocio = {
   ],
 };
 
+type Usuario = ReturnType<typeof userEvent.setup>;
+
+/** Abre en el panel de detalle la unidad 10, luego la división 100 y la subdivisión 200. */
+async function abrirDivision(usuario: Usuario) {
+  await usuario.click(await screen.findByTestId("tarjeta-unidad-10"));
+  await usuario.click(within(screen.getByTestId("fila-division-100")).getByRole("button", { name: /^Abrir/ }));
+}
+
+async function abrirSubdivision(usuario: Usuario, pestana?: "Áreas") {
+  await abrirDivision(usuario);
+  await usuario.click(within(screen.getByTestId("fila-subdivision-200")).getByRole("button", { name: /^Abrir/ }));
+  if (pestana) await usuario.click(screen.getByRole("tab", { name: /Áreas/ }));
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   sesion.usuario = { ...ADMIN };
@@ -127,19 +141,22 @@ beforeEach(() => {
 });
 
 describe("Catálogo de estructura organizacional (HierarchyView)", () => {
-  it("CP-FE-01 (AC1): muestra la jerarquía completa, gerente, departamento y periodo activo", async () => {
+  it("CP-FE-01 (AC1): muestra el resumen de unidades y la jerarquía completa al navegarla", async () => {
+    const usuario = userEvent.setup();
     render(<HierarchyView />);
 
     await waitFor(() => expect(screen.getByText(/Periodo Activo: 2026Q4/i)).toBeInTheDocument());
 
-    expect(screen.getByText("UDN-0001")).toBeInTheDocument();
-    expect(screen.getByText("María García")).toBeInTheDocument();
-    expect(screen.getByText("Retail & Spin")).toBeInTheDocument();
-    expect(screen.getByText("DIVISION-0001")).toBeInTheDocument();
-    expect(screen.getByText("SUBDIVISION-0001")).toBeInTheDocument();
-    expect(screen.getByText("México")).toBeInTheDocument();
-    expect(within(screen.getByTestId("nodo-area-300")).getByText("Nómina")).toBeInTheDocument();
-    expect(within(screen.getByTestId("nodo-area-300")).getByText("Área (proceso)")).toBeInTheDocument();
+    const tarjeta = screen.getByTestId("tarjeta-unidad-10");
+    expect(within(tarjeta).getByText("UDN-0001")).toBeInTheDocument();
+    expect(within(tarjeta).getByText(/María García/)).toBeInTheDocument();
+    expect(within(tarjeta).getByText(/Retail & Spin/)).toBeInTheDocument();
+
+    await abrirSubdivision(usuario, "Áreas");
+    const detalle = screen.getByTestId("detalle-catalogo");
+    expect(within(detalle).getByRole("heading", { name: "SUBDIVISION-0001" })).toBeInTheDocument();
+    expect(within(detalle).getByText("México")).toBeInTheDocument();
+    expect(within(screen.getByTestId("fila-area-300")).getByText("Nómina")).toBeInTheDocument();
   });
 
   it("CP-FE-02 (AC1): crea una unidad con gerente y departamento, sin proceso inicial", async () => {
@@ -147,7 +164,7 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     vi.mocked(apiEstructura.crearUnidadNegocio).mockResolvedValue({
       ...UNIDAD,
       id: 20,
-      nombre: "UDN-0003",
+      codigo: "UDN-0003",
       departamentoAuditoriaId: 2,
       departamentoAuditoriaNombre: "Beverage",
       divisiones: [],
@@ -156,32 +173,33 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     render(<HierarchyView />);
     await usuario.click(await screen.findByTestId("btn-nueva-unidad"));
 
-    await usuario.type(screen.getByLabelText(/Nombre de la Unidad de Negocio/i), "UDN-0003");
+    // El código no se escribe: se muestra el próximo y lo asigna el backend.
+    expect(screen.getByTestId("campo-codigo")).toHaveTextContent("UDN-0002");
+    expect(screen.getByTestId("campo-codigo")).toHaveTextContent("Se asigna al guardar");
+    expect(screen.queryByRole("textbox", { name: /Código/i })).not.toBeInTheDocument();
     await usuario.selectOptions(screen.getByLabelText(/Gerente Responsable/i), "2");
     await usuario.selectOptions(screen.getByLabelText(/Departamento de Auditoría/i), "2");
     await usuario.click(screen.getByRole("button", { name: /Guardar Unidad/i }));
 
     await waitFor(() => {
       expect(apiEstructura.crearUnidadNegocio).toHaveBeenCalledWith({
-        nombre: "UDN-0003",
-        nombreReal: null,
+        nombre: null,
         responsableId: 2,
         departamentoAuditoriaId: 2,
       });
       expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('"UDN-0003" creada exitosamente'));
     });
-    expect(screen.getByText("UDN-0003")).toBeInTheDocument();
+    expect(within(screen.getByTestId("tarjeta-unidad-20")).getByText("UDN-0003")).toBeInTheDocument();
   });
 
-  it("CP-FE-03 (AC2): con NOMBRE_DUPLICADO muestra el mensaje en el formulario y lo mantiene abierto", async () => {
+  it("CP-FE-03: con un error del servidor muestra el mensaje en el formulario y lo mantiene abierto", async () => {
     const usuario = userEvent.setup();
-    const mensaje = 'Ya existe una unidad de negocio con el nombre "UDN-0001".';
-    vi.mocked(apiEstructura.crearUnidadNegocio).mockRejectedValue(new ErrorApi(409, "NOMBRE_DUPLICADO", mensaje));
+    const mensaje = "No hay un periodo de auditoría activo configurado. Activa uno antes de dar de alta unidades.";
+    vi.mocked(apiEstructura.crearUnidadNegocio).mockRejectedValue(new ErrorApi(409, "PERIODO_ACTIVO_NO_CONFIGURADO", mensaje));
 
     render(<HierarchyView />);
     await usuario.click(await screen.findByTestId("btn-nueva-unidad"));
 
-    await usuario.type(screen.getByLabelText(/Nombre de la Unidad de Negocio/i), "udn-0001");
     await usuario.selectOptions(screen.getByLabelText(/Gerente Responsable/i), "2");
     await usuario.click(screen.getByRole("button", { name: /Guardar Unidad/i }));
 
@@ -192,7 +210,7 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
 
   it("CP-FE-04 (AC1): agrega una subdivisión con país dentro de una división y refresca la unidad", async () => {
     const usuario = userEvent.setup();
-    vi.mocked(apiEstructura.crearNodo).mockResolvedValue({ id: 201, nombre: "SUBDIVISION-0002", nombreReal: null, padreId: 100 });
+    vi.mocked(apiEstructura.crearNodo).mockResolvedValue({ id: 201, codigo: "SUBDIVISION-0002", nombre: null, padreId: 100 });
     const division = UNIDAD.divisiones[0]!;
     vi.mocked(apiEstructura.obtenerUnidadPorId).mockResolvedValue({
       ...UNIDAD,
@@ -201,30 +219,32 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
           ...division,
           subdivisiones: [
             ...division.subdivisiones,
-            { id: 201, nombre: "SUBDIVISION-0002", nombreReal: null, pais: "KFS RTR", divisionId: 100, areas: [], riesgos: [] },
+            { id: 201, codigo: "SUBDIVISION-0002", nombre: null, pais: "KFS RTR", divisionId: 100, areas: [], riesgos: [] },
           ],
         },
       ],
     });
 
     render(<HierarchyView />);
-    await usuario.click(await screen.findByTestId("btn-agregar-division-100"));
+    await abrirDivision(usuario);
+    await usuario.click(screen.getByTestId("btn-agregar-hijo"));
 
     expect(screen.getByText("Agregar Subdivisión")).toBeInTheDocument();
-    await usuario.type(screen.getByLabelText(/^Nombre\s*\*/i), "SUBDIVISION-0002");
+    expect(screen.getByTestId("campo-codigo")).toHaveTextContent("SUBDIVISION-0002");
     await usuario.type(screen.getByLabelText(/País o región/i), "KFS RTR");
     await usuario.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => {
       expect(apiEstructura.crearNodo).toHaveBeenCalledWith("subdivision", {
-        nombre: "SUBDIVISION-0002",
-        nombreReal: null,
+        nombre: null,
         pais: "KFS RTR",
         padreId: 100,
       });
       expect(apiEstructura.obtenerUnidadPorId).toHaveBeenCalledWith(10);
     });
-    expect(await screen.findByText("SUBDIVISION-0002")).toBeInTheDocument();
+    // Aparece en la lista de la división y en el árbol (ya expandido hasta la división).
+    expect(await screen.findByTestId("fila-subdivision-201")).toHaveTextContent("KFS RTR");
+    expect(screen.getByTestId("arbol-subdivision-201")).toBeInTheDocument();
   });
 
   it("CP-FE-05 (AC3): con auditorías activas muestra el bloqueo en el diálogo de eliminación", async () => {
@@ -233,17 +253,18 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     vi.mocked(apiEstructura.eliminarUnidadNegocio).mockRejectedValue(new ErrorApi(409, "AUDITORIAS_ACTIVAS", mensaje));
 
     render(<HierarchyView />);
-    await usuario.click(await screen.findByTestId("btn-eliminar-unidad-10"));
+    await usuario.click(await screen.findByTestId("tarjeta-unidad-10"));
+    await usuario.click(screen.getByTestId("btn-eliminar-encabezado"));
     await usuario.click(screen.getByTestId("btn-confirmar-eliminar"));
 
     expect(await screen.findByTestId("error-eliminacion")).toHaveTextContent(mensaje);
     expect(apiEstructura.eliminarUnidadNegocio).toHaveBeenCalledWith(10);
     expect(toast.error).toHaveBeenCalledWith(mensaje);
-    // La unidad sigue en el catálogo.
-    expect(screen.getAllByText("UDN-0001").length).toBeGreaterThan(0);
+    // La unidad sigue abierta en el detalle.
+    expect(within(screen.getByTestId("detalle-catalogo")).getByRole("heading", { name: "UDN-0001" })).toBeInTheDocument();
   });
 
-  it("CP-FE-06 (AC3): elimina un área sin auditorías activas y la quita del árbol", async () => {
+  it("CP-FE-06 (AC3): elimina un área sin auditorías activas y la quita de la subdivisión", async () => {
     const usuario = userEvent.setup();
     vi.mocked(apiEstructura.eliminarNodo).mockResolvedValue(undefined);
     const division = UNIDAD.divisiones[0]!;
@@ -253,61 +274,87 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     });
 
     render(<HierarchyView />);
-    await usuario.click(await screen.findByTestId("btn-eliminar-area-300"));
+    await abrirSubdivision(usuario, "Áreas");
+    await usuario.click(screen.getByTestId("btn-eliminar-area-300"));
     await usuario.click(screen.getByTestId("btn-confirmar-eliminar"));
 
     await waitFor(() => expect(apiEstructura.eliminarNodo).toHaveBeenCalledWith("area", 300));
-    await waitFor(() => expect(screen.queryByTestId("nodo-area-300")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByTestId("fila-area-300")).not.toBeInTheDocument());
+    expect(screen.getByText("Sin áreas registradas.")).toBeInTheDocument();
   });
 
-  it("CP-FE-07 (SNF-05): un Auditor Senior consulta el árbol pero no ve acciones de gestión", async () => {
+  it("CP-FE-07 (SNF-05): un Auditor Senior consulta la estructura pero no ve acciones de gestión", async () => {
     sesion.usuario = { ...ADMIN, id: 3, nombre: "Carlos Morales", rol: "Auditor Senior" };
     sesion.esAdministrador = false;
+    const usuario = userEvent.setup();
 
     render(<HierarchyView />);
-    await screen.findByText("UDN-0001");
-
-    expect(screen.getByText("Nómina")).toBeInTheDocument();
     expect(screen.queryByTestId("btn-nueva-unidad")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("btn-eliminar-unidad-10")).not.toBeInTheDocument();
+
+    await usuario.click(await screen.findByTestId("tarjeta-unidad-10"));
+    expect(screen.queryByTestId("btn-eliminar-encabezado")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-agregar-hijo")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("btn-eliminar-division-100")).not.toBeInTheDocument();
+
+    await usuario.click(within(screen.getByTestId("fila-division-100")).getByRole("button", { name: /^Abrir/ }));
+    await usuario.click(within(screen.getByTestId("fila-subdivision-200")).getByRole("button", { name: /^Abrir/ }));
+    await usuario.click(screen.getByRole("tab", { name: /Áreas/ }));
+    expect(screen.getByText("Nómina")).toBeInTheDocument();
     expect(screen.queryByTestId("btn-eliminar-area-300")).not.toBeInTheDocument();
     expect(apiEstructura.listarResponsables).not.toHaveBeenCalled();
   });
 
-  it("CP-FE-08: muestra los riesgos de cada subdivisión y el resumen por rama, sin pestaña de explorador", async () => {
+  it("CP-FE-08: muestra los riesgos de la subdivisión y el resumen por rama, sin pestaña de explorador", async () => {
+    const usuario = userEvent.setup();
     render(<HierarchyView />);
-    await screen.findByText("UDN-0001");
+    await screen.findByTestId("tarjeta-unidad-10");
 
     expect(screen.queryByText(/Explorador de Riesgos/i)).not.toBeInTheDocument();
-    expect(within(screen.getByTestId("riesgo-900")).getByText("Pagos de nómina sin doble aprobación")).toBeInTheDocument();
-    expect(within(screen.getByTestId("riesgo-900")).getByText("Control: Doble aprobación del layout")).toBeInTheDocument();
-    expect(within(screen.getByTestId("riesgo-901")).getByText("Bajo")).toBeInTheDocument();
-    // La división y la unidad suman los riesgos de su rama y se colorean con el peor nivel.
+    // La unidad suma los riesgos de su rama, por nivel.
+    expect(screen.getByTestId("riesgos-unidad-10")).toHaveTextContent(/1\s*Alto/);
+    expect(screen.getByTestId("riesgos-unidad-10")).toHaveTextContent(/1\s*Bajo/);
+
+    // La división se colorea con el peor nivel de su rama.
+    await usuario.click(screen.getByTestId("tarjeta-unidad-10"));
     expect(screen.getByTestId("riesgos-division-100")).toHaveTextContent("2");
     expect(screen.getByTestId("riesgos-division-100")).toHaveAttribute("title", expect.stringContaining("Alto"));
-    expect(screen.getByTestId("riesgos-unidad-10")).toHaveTextContent("2");
-    expect(screen.queryByTestId("riesgos-area-300")).not.toBeInTheDocument();
+
+    await usuario.click(within(screen.getByTestId("fila-division-100")).getByRole("button", { name: /^Abrir/ }));
+    await usuario.click(within(screen.getByTestId("fila-subdivision-200")).getByRole("button", { name: /^Abrir/ }));
+    expect(within(screen.getByTestId("riesgo-900")).getByText("Pagos de nómina sin doble aprobación")).toBeInTheDocument();
+    expect(within(screen.getByTestId("riesgo-900")).getByText("Doble aprobación del layout")).toBeInTheDocument();
+    expect(within(screen.getByTestId("riesgo-901")).getByText("Bajo")).toBeInTheDocument();
+    expect(within(screen.getByTestId("riesgo-901")).getByText("Sin procedimiento")).toBeInTheDocument();
+    // Ordenados del peor al mejor nivel.
+    const filas = within(screen.getByTestId("tabla-riesgos")).getAllByRole("row").slice(1);
+    expect(filas.map((f) => f.getAttribute("data-testid"))).toEqual(["riesgo-900", "riesgo-901"]);
   });
 
   it("CP-FE-09: el filtro por nivel oculta las ramas sin riesgos de ese nivel y la búsqueda encuentra riesgos", async () => {
     const usuario = userEvent.setup();
     render(<HierarchyView />);
-    await screen.findByText("UDN-0001");
+    await screen.findByTestId("tarjeta-unidad-10");
 
     await usuario.selectOptions(screen.getByLabelText(/Filtrar por nivel de riesgo/i), "Crítico");
     expect(screen.getByTestId("sin-coincidencias")).toBeInTheDocument();
 
+    // Con filtro el árbol se expande para mostrar las coincidencias.
     await usuario.selectOptions(screen.getByLabelText(/Filtrar por nivel de riesgo/i), "Alto");
-    expect(screen.getByTestId("nodo-subdivision-200")).toBeInTheDocument();
+    expect(screen.getByTestId("arbol-subdivision-200")).toBeInTheDocument();
 
     await usuario.selectOptions(screen.getByLabelText(/Filtrar por nivel de riesgo/i), "");
     await usuario.type(screen.getByLabelText(/Buscar en el catálogo/i), "proveedores");
+    await usuario.click(within(screen.getByTestId("arbol-subdivision-200")).getByText("SUBDIVISION-0001"));
     expect(screen.getByTestId("riesgo-901")).toBeInTheDocument();
     expect(screen.queryByTestId("riesgo-900")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("nodo-area-300")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Áreas/ })).toHaveTextContent("0");
+
+    // Al limpiar, la selección se conserva y vuelven todos los riesgos.
+    await usuario.click(screen.getAllByRole("button", { name: "Limpiar filtros" })[0]!);
+    expect(screen.getByTestId("riesgo-900")).toBeInTheDocument();
   });
 
-  it("CP-FE-13: los formularios sugieren áreas, países y el siguiente código del Consolidado", async () => {
+  it("CP-FE-13: los formularios sugieren áreas y países y muestran el próximo código", async () => {
     const usuario = userEvent.setup();
     const valores = (id: string) =>
       Array.from(screen.getByTestId(id).querySelectorAll("option")).map((o) => o.getAttribute("value"));
@@ -315,7 +362,8 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     render(<HierarchyView />);
 
     // Área: catálogo de FEMSA sin las que ya tiene la subdivisión.
-    await usuario.click(await screen.findByTestId("btn-agregar-subdivision-200"));
+    await abrirSubdivision(usuario, "Áreas");
+    await usuario.click(screen.getByTestId("btn-agregar-hijo"));
     expect(screen.getByLabelText(/^Nombre\s*\*/i)).toHaveAttribute("list", "nodo-nombre-sugerencias");
     const areas = valores("nodo-nombre-sugerencias");
     expect(areas[0]).toBe("Administración y Finanzas");
@@ -324,117 +372,161 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
 
     // Subdivisión: siguiente código y países del Consolidado.
-    await usuario.click(screen.getByTestId("btn-agregar-division-100"));
-    expect(valores("nodo-nombre-sugerencias")).toEqual(["SUBDIVISION-0002"]);
+    const migas = screen.getByRole("navigation", { name: /Ruta en la jerarquía/i });
+    await usuario.click(within(migas).getByRole("button", { name: "DIVISION-0001" }));
+    await usuario.click(screen.getByTestId("btn-agregar-hijo"));
+    expect(screen.getByTestId("campo-codigo")).toHaveTextContent("SUBDIVISION-0002");
     expect(valores("nodo-pais-sugerencias")).toEqual(expect.arrayContaining(["México", "Brasil", "KFS RTR"]));
     await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
 
-    // Unidad: siguiente UDN libre.
+    // Unidad: siguiente UDN.
     await usuario.click(screen.getByTestId("btn-nueva-unidad"));
-    expect(valores("unidad-nombre-sugerencias")).toEqual(["UDN-0002"]);
+    expect(screen.getByTestId("campo-codigo")).toHaveTextContent("UDN-0002");
   });
 
-  describe("Nombre real junto al código", () => {
+  describe("Código y nombre", () => {
     const KOF: UnidadNegocio = {
       ...UNIDAD,
-      nombre: "UDN-0003",
-      nombreReal: "KOF",
-      divisiones: [{ ...UNIDAD.divisiones[0]!, nombreReal: "Latam" }],
+      codigo: "UDN-0003",
+      nombre: "KOF",
+      divisiones: [{ ...UNIDAD.divisiones[0]!, nombre: "Latam" }],
     };
 
-    it("CP-FE-14: muestra el nombre real con el código aparte en el árbol, las tarjetas y las migas", async () => {
+    it("CP-FE-14: muestra el nombre con el código aparte en el resumen, el árbol, el detalle y las migas", async () => {
       const usuario = userEvent.setup();
       vi.mocked(apiEstructura.listarUnidades).mockResolvedValue([KOF]);
       render(<HierarchyView />);
 
-      const titulo = await screen.findByRole("button", { name: /KOF/ });
-      expect(titulo).toHaveTextContent("KOFUDN-0003");
-      expect(within(screen.getByTestId("nodo-division-100")).getByText("Latam")).toBeInTheDocument();
-      expect(within(screen.getByTestId("nodo-division-100")).getByText("DIVISION-0001")).toBeInTheDocument();
-      // La subdivisión no tiene nombre real: se muestra solo su código.
-      expect(within(screen.getByTestId("nodo-subdivision-200")).getAllByText("SUBDIVISION-0001")).toHaveLength(1);
+      const tarjeta = await screen.findByRole("button", { name: "Abrir KOF" });
+      expect(within(tarjeta).getByRole("heading")).toHaveTextContent("KOFUDN-0003");
+      expect(screen.getByTestId("arbol-unidad-10")).toHaveTextContent("KOFUDN-0003");
 
-      await usuario.click(screen.getByTestId("btn-ver-tarjetas-10"));
-      expect(screen.getByRole("button", { name: "Abrir Latam" })).toBeInTheDocument();
+      await usuario.click(tarjeta);
+      expect(within(screen.getByTestId("fila-division-100")).getByText("Latam")).toBeInTheDocument();
+      expect(within(screen.getByTestId("fila-division-100")).getByText("DIVISION-0001")).toBeInTheDocument();
+
       await usuario.click(screen.getByRole("button", { name: "Abrir Latam" }));
+      // La subdivisión no tiene nombre: se muestra solo su código.
+      expect(within(screen.getByTestId("fila-subdivision-200")).getAllByText("SUBDIVISION-0001")).toHaveLength(1);
       const migas = screen.getByRole("navigation", { name: /Ruta en la jerarquía/i });
       expect(within(migas).getByRole("button", { name: "KOF" })).toBeInTheDocument();
       expect(within(migas).getByRole("button", { name: "Latam" })).toBeInTheDocument();
     });
 
-    it("CP-FE-15: la búsqueda encuentra por nombre real y por código", async () => {
+    it("CP-FE-15: la búsqueda encuentra por nombre y por código", async () => {
       const usuario = userEvent.setup();
-      vi.mocked(apiEstructura.listarUnidades).mockResolvedValue([KOF, UNIDAD]);
+      vi.mocked(apiEstructura.listarUnidades).mockResolvedValue([KOF, { ...UNIDAD, id: 11 }]);
       render(<HierarchyView />);
-      await screen.findByText("KOF");
+      await screen.findByTestId("tarjeta-unidad-10");
 
       await usuario.type(screen.getByLabelText(/Buscar en el catálogo/i), "kof");
-      expect(screen.getAllByTestId(/^btn-ver-tarjetas-/)).toHaveLength(1);
+      expect(screen.getAllByTestId(/^tarjeta-unidad-/)).toHaveLength(1);
       await usuario.clear(screen.getByLabelText(/Buscar en el catálogo/i));
       await usuario.type(screen.getByLabelText(/Buscar en el catálogo/i), "UDN-0003");
-      expect(screen.getAllByTestId(/^btn-ver-tarjetas-/)).toHaveLength(1);
+      expect(screen.getAllByTestId(/^tarjeta-unidad-/)).toHaveLength(1);
     });
 
-    it("CP-FE-16: el alta de unidad y de división envía el nombre real; el área no lo pide", async () => {
+    it("CP-FE-16: el alta de unidad envía solo el nombre y confirma el código asignado; el área no tiene código", async () => {
       const usuario = userEvent.setup();
       vi.mocked(apiEstructura.crearUnidadNegocio).mockResolvedValue({ ...KOF, id: 30, divisiones: [] });
       render(<HierarchyView />);
 
       await usuario.click(await screen.findByTestId("btn-nueva-unidad"));
-      await usuario.type(screen.getByLabelText(/Nombre de la Unidad de Negocio/i), "UDN-0003");
-      await usuario.type(screen.getByLabelText(/Nombre real/i), " KOF ");
+      await usuario.type(screen.getByLabelText(/^Nombre$/i), " KOF ");
       await usuario.selectOptions(screen.getByLabelText(/Gerente Responsable/i), "2");
       await usuario.click(screen.getByRole("button", { name: /Guardar Unidad/i }));
-      await waitFor(() =>
-        expect(apiEstructura.crearUnidadNegocio).toHaveBeenCalledWith(
-          expect.objectContaining({ nombre: "UDN-0003", nombreReal: "KOF" }),
-        ),
-      );
+      await waitFor(() => expect(apiEstructura.crearUnidadNegocio).toHaveBeenCalled());
+      const enviado = vi.mocked(apiEstructura.crearUnidadNegocio).mock.calls[0]![0];
+      expect(enviado).toMatchObject({ nombre: "KOF" });
+      expect(enviado).not.toHaveProperty("codigo");
+      expect(toast.success).toHaveBeenCalledWith('Unidad de negocio "KOF" (UDN-0003) creada exitosamente.');
 
-      await usuario.click(screen.getByTestId("btn-agregar-subdivision-200"));
-      expect(screen.queryByLabelText(/Nombre real/i)).not.toBeInTheDocument();
+      await abrirSubdivision(usuario, "Áreas");
+      await usuario.click(screen.getByTestId("btn-agregar-hijo"));
+      expect(screen.queryByTestId("campo-codigo")).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/^Nombre\s*\*/i)).toBeInTheDocument();
+    });
+
+    it("CP-FE-18: al editar, el código se muestra fijo y solo se envía el nombre", async () => {
+      const usuario = userEvent.setup();
+      vi.mocked(apiEstructura.editarUnidadNegocio).mockResolvedValue({ ...UNIDAD, nombre: "Deportes" });
+      render(<HierarchyView />);
+
+      await usuario.click(await screen.findByTestId("tarjeta-unidad-10"));
+      await usuario.click(within(screen.getByTestId("detalle-catalogo")).getByRole("button", { name: "Editar unidad de negocio" }));
+
+      expect(screen.getByTestId("campo-codigo")).toHaveTextContent("UDN-0001");
+      expect(screen.getByTestId("campo-codigo")).toHaveTextContent("No se puede cambiar");
+      expect(screen.queryByRole("textbox", { name: /Código/i })).not.toBeInTheDocument();
+
+      await usuario.type(screen.getByLabelText(/^Nombre/i), "Deportes");
+      await usuario.click(screen.getByRole("button", { name: "Guardar Cambios" }));
+
+      await waitFor(() => expect(apiEstructura.editarUnidadNegocio).toHaveBeenCalled());
+      const [id, cambios] = vi.mocked(apiEstructura.editarUnidadNegocio).mock.calls[0]!;
+      expect(id).toBe(10);
+      expect(cambios).toMatchObject({ nombre: "Deportes" });
+      expect(cambios).not.toHaveProperty("codigo");
     });
   });
 
-  describe("Vista de tarjetas de una unidad", () => {
-    it("CP-FE-10: recorre unidad › división › subdivisión y vuelve al catálogo por las migas", async () => {
+  describe("Explorador: árbol y detalle", () => {
+    it("CP-FE-10: recorre unidad › división › subdivisión desde el detalle y vuelve al resumen por las migas", async () => {
       const usuario = userEvent.setup();
       render(<HierarchyView />);
-      await usuario.click(await screen.findByTestId("btn-ver-tarjetas-10"));
+      await usuario.click(await screen.findByTestId("tarjeta-unidad-10"));
 
-      // Nivel unidad: encabezado con gerente y tarjeta de la división con conteos y riesgos.
-      const detalle = screen.getByTestId("detalle-tarjetas");
+      // Nivel unidad: encabezado con gerente y fila de la división con conteos y riesgos.
+      const detalle = screen.getByTestId("detalle-catalogo");
       expect(within(detalle).getByRole("heading", { name: "UDN-0001" })).toBeInTheDocument();
       expect(within(detalle).getByText("María García")).toBeInTheDocument();
-      const tarjetaDivision = screen.getByTestId("tarjeta-division-100");
-      expect(tarjetaDivision).toHaveTextContent("1 subdivisión · 1 área");
-      expect(tarjetaDivision).toHaveTextContent("2");
-      expect(screen.queryByLabelText(/Buscar en el catálogo/i)).not.toBeInTheDocument();
+      expect(screen.getByTestId("fila-division-100")).toHaveTextContent("1 subdivisión · 1 área");
 
       // Nivel división.
-      await usuario.click(within(tarjetaDivision).getByRole("button", { name: "Abrir DIVISION-0001" }));
-      expect(screen.getByTestId("tarjeta-subdivision-200")).toHaveTextContent("México");
+      await usuario.click(screen.getByRole("button", { name: "Abrir DIVISION-0001" }));
+      expect(screen.getByTestId("fila-subdivision-200")).toHaveTextContent("México");
 
-      // Nivel subdivisión: áreas como tarjetas y la tabla de riesgos.
+      // Nivel subdivisión: riesgos por defecto y áreas en su pestaña.
       await usuario.click(screen.getByRole("button", { name: "Abrir SUBDIVISION-0001" }));
-      expect(screen.getByTestId("tarjeta-area-300")).toHaveTextContent("Nómina");
-      const tabla = screen.getByTestId("tabla-riesgos");
-      expect(within(tabla).getByText("Pagos de nómina sin doble aprobación")).toBeInTheDocument();
-      expect(within(tabla).getByText("Doble aprobación del layout")).toBeInTheDocument();
-      expect(within(tabla).getByText("Sin procedimiento")).toBeInTheDocument();
+      expect(screen.getByTestId("tabla-riesgos")).toBeInTheDocument();
+      await usuario.click(screen.getByRole("tab", { name: /Áreas/ }));
+      expect(screen.getByTestId("fila-area-300")).toHaveTextContent("Nómina");
 
-      // Migas: a la unidad y luego al catálogo (el árbol vuelve a verse).
+      // Migas: a la unidad y luego al resumen.
       const migas = screen.getByRole("navigation", { name: /Ruta en la jerarquía/i });
       await usuario.click(within(migas).getByRole("button", { name: "UDN-0001" }));
-      expect(screen.getByTestId("tarjeta-division-100")).toBeInTheDocument();
-      await usuario.click(within(screen.getByRole("navigation", { name: /Ruta en la jerarquía/i })).getByRole("button", { name: /Catálogo/ }));
-      expect(screen.getByTestId("nodo-area-300")).toBeInTheDocument();
-      expect(screen.queryByTestId("detalle-tarjetas")).not.toBeInTheDocument();
+      expect(screen.getByTestId("fila-division-100")).toBeInTheDocument();
+      await usuario.click(
+        within(screen.getByRole("navigation", { name: /Ruta en la jerarquía/i })).getByRole("button", {
+          name: "Todas las unidades",
+        }),
+      );
+      expect(screen.getByTestId("lista-unidades")).toBeInTheDocument();
+      expect(screen.queryByTestId("detalle-catalogo")).not.toBeInTheDocument();
     });
 
-    it("CP-FE-11: agrega una subdivisión desde las tarjetas y la tarjeta nueva aparece", async () => {
+    it("CP-FE-17: el árbol empieza contraído, se expande y selecciona nodos sin listar áreas ni riesgos", async () => {
       const usuario = userEvent.setup();
-      vi.mocked(apiEstructura.crearNodo).mockResolvedValue({ id: 201, nombre: "SUBDIVISION-0002", nombreReal: null, padreId: 100 });
+      render(<HierarchyView />);
+      await screen.findByTestId("arbol-unidad-10");
+
+      expect(screen.queryByTestId("arbol-division-100")).not.toBeInTheDocument();
+      await usuario.click(screen.getByRole("button", { name: "Expandir UDN-0001" }));
+      await usuario.click(screen.getByRole("button", { name: "Expandir DIVISION-0001" }));
+      const subdivision = screen.getByTestId("arbol-subdivision-200");
+      expect(subdivision).toHaveTextContent("México");
+
+      await usuario.click(within(subdivision).getByText("SUBDIVISION-0001"));
+      expect(within(screen.getByTestId("detalle-catalogo")).getByRole("heading", { name: "SUBDIVISION-0001" })).toBeInTheDocument();
+      expect(within(subdivision).getByRole("button", { current: true })).toBeInTheDocument();
+      // El árbol no repite las áreas ni los riesgos.
+      expect(screen.queryByTestId("arbol-area-300")).not.toBeInTheDocument();
+      expect(within(screen.getByRole("navigation", { name: /Árbol/ })).queryByText("Nómina")).not.toBeInTheDocument();
+    });
+
+    it("CP-FE-11: agrega una subdivisión desde el detalle y la fila nueva aparece", async () => {
+      const usuario = userEvent.setup();
+      vi.mocked(apiEstructura.crearNodo).mockResolvedValue({ id: 201, codigo: "SUBDIVISION-0002", nombre: null, padreId: 100 });
       const division = UNIDAD.divisiones[0]!;
       vi.mocked(apiEstructura.obtenerUnidadPorId).mockResolvedValue({
         ...UNIDAD,
@@ -443,56 +535,41 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
             ...division,
             subdivisiones: [
               ...division.subdivisiones,
-              { id: 201, nombre: "SUBDIVISION-0002", nombreReal: null, pais: null, divisionId: 100, areas: [], riesgos: [] },
+              { id: 201, codigo: "SUBDIVISION-0002", nombre: null, pais: null, divisionId: 100, areas: [], riesgos: [] },
             ],
           },
         ],
       });
 
       render(<HierarchyView />);
-      await usuario.click(await screen.findByTestId("btn-ver-tarjetas-10"));
-      await usuario.click(screen.getByRole("button", { name: "Abrir DIVISION-0001" }));
-      await usuario.click(screen.getByTestId("btn-agregar-tarjetas"));
-      await usuario.type(screen.getByLabelText(/^Nombre\s*\*/i), "SUBDIVISION-0002");
+      await abrirDivision(usuario);
+      await usuario.click(screen.getByTestId("btn-agregar-hijo"));
       await usuario.click(screen.getByRole("button", { name: "Guardar" }));
 
       await waitFor(() =>
         expect(apiEstructura.crearNodo).toHaveBeenCalledWith("subdivision", {
-          nombre: "SUBDIVISION-0002",
-          nombreReal: null,
+          nombre: null,
           pais: null,
           padreId: 100,
         }),
       );
-      expect(await screen.findByTestId("tarjeta-subdivision-201")).toBeInTheDocument();
-      // Sigue en la división, no regresa al catálogo.
-      expect(screen.getByTestId("detalle-tarjetas")).toBeInTheDocument();
-    });
-
-    it("CP-FE-12: un Auditor Senior navega las tarjetas sin acciones de gestión", async () => {
-      sesion.usuario = { ...ADMIN, id: 3, nombre: "Carlos Morales", rol: "Auditor Senior" };
-      sesion.esAdministrador = false;
-      const usuario = userEvent.setup();
-
-      render(<HierarchyView />);
-      await usuario.click(await screen.findByTestId("btn-ver-tarjetas-10"));
-
-      expect(screen.queryByTestId("btn-agregar-tarjetas")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("btn-eliminar-encabezado")).not.toBeInTheDocument();
-      expect(screen.queryByTestId("btn-eliminar-tarjeta-division-100")).not.toBeInTheDocument();
-      await usuario.click(screen.getByRole("button", { name: "Abrir DIVISION-0001" }));
-      expect(screen.getByTestId("tarjeta-subdivision-200")).toBeInTheDocument();
+      expect(await screen.findByTestId("fila-subdivision-201")).toBeInTheDocument();
+      // Sigue en la división, no regresa al resumen.
+      expect(within(screen.getByTestId("detalle-catalogo")).getByRole("heading", { name: "DIVISION-0001" })).toBeInTheDocument();
     });
   });
 
   it("permite a un Jefe de Auditoría gestionar la estructura", async () => {
     sesion.usuario = { ...ADMIN, id: 2, nombre: "María García", rol: "Jefe de Auditoría" };
     sesion.esAdministrador = false;
+    const usuario = userEvent.setup();
 
     render(<HierarchyView />);
 
     expect(await screen.findByTestId("btn-nueva-unidad")).toBeInTheDocument();
-    expect(screen.getByTestId("btn-eliminar-unidad-10")).toBeInTheDocument();
-    expect(screen.getByTestId("btn-agregar-subdivision-200")).toBeInTheDocument();
+    await abrirDivision(usuario);
+    expect(screen.getByTestId("btn-eliminar-encabezado")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-agregar-hijo")).toBeInTheDocument();
+    expect(screen.getByTestId("btn-eliminar-subdivision-200")).toBeInTheDocument();
   });
 });

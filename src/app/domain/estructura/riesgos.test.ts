@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Riesgo, UnidadNegocio } from "../../api/estructura";
-import { filtrarUnidades, nivelMaximo, riesgosDeNodo } from "./riesgos";
+import { distribucionRiesgos, filtrarUnidades, nivelMaximo, riesgosDeNodo } from "./riesgos";
 
 const riesgo = (id: number, nombre: string, nivel: Riesgo["nivel"]): Riesgo => ({
   id,
@@ -9,10 +9,10 @@ const riesgo = (id: number, nombre: string, nivel: Riesgo["nivel"]): Riesgo => (
   procedimientoControl: null,
 });
 
-const unidad = (id: number, nombre: string, subdivisiones: Array<[string, Riesgo[], string[]]>): UnidadNegocio => ({
+const unidad = (id: number, codigo: string, subdivisiones: Array<[string, Riesgo[], string[]]>): UnidadNegocio => ({
   id,
-  nombre,
-  nombreReal: null,
+  codigo,
+  nombre: null,
   responsableId: 1,
   responsableNombre: "María García",
   periodoFiscalId: 1,
@@ -24,13 +24,13 @@ const unidad = (id: number, nombre: string, subdivisiones: Array<[string, Riesgo
   divisiones: [
     {
       id: id * 10,
-      nombre: `DIVISION-${id}`,
-      nombreReal: null,
+      codigo: `DIVISION-${id}`,
+      nombre: null,
       unidadNegocioId: id,
       subdivisiones: subdivisiones.map(([nombreSub, riesgos, areas], i) => ({
         id: id * 100 + i,
-        nombre: nombreSub,
-        nombreReal: null,
+        codigo: nombreSub,
+        nombre: null,
         pais: null,
         divisionId: id * 10,
         riesgos,
@@ -71,25 +71,37 @@ describe("filtrarUnidades", () => {
 
   it("por nivel conserva solo las subdivisiones con un riesgo de ese nivel o peor", () => {
     const criticas = filtrarUnidades(UNIDADES, { texto: "", nivel: "Crítico" });
-    expect(criticas.map((u) => u.nombre)).toEqual(["UDN-0003"]);
+    expect(criticas.map((u) => u.codigo)).toEqual(["UDN-0003"]);
 
     const altas = filtrarUnidades(UNIDADES, { texto: "", nivel: "Alto" });
-    expect(altas.map((u) => u.nombre)).toEqual(["UDN-0001", "UDN-0003"]);
-    expect(altas[0]!.divisiones[0]!.subdivisiones.map((s) => s.nombre)).toEqual(["SUBDIVISION-A"]);
+    expect(altas.map((u) => u.codigo)).toEqual(["UDN-0001", "UDN-0003"]);
+    expect(altas[0]!.divisiones[0]!.subdivisiones.map((s) => s.codigo)).toEqual(["SUBDIVISION-A"]);
   });
 
   it("por texto busca en áreas y riesgos sin importar acentos ni mayúsculas", () => {
     const porArea = filtrarUnidades(UNIDADES, { texto: "nomina", nivel: null });
-    expect(porArea.map((u) => u.nombre)).toEqual(["UDN-0001"]);
+    expect(porArea.map((u) => u.codigo)).toEqual(["UDN-0001"]);
     expect(porArea[0]!.divisiones[0]!.subdivisiones[0]!.areas.map((a) => a.nombre)).toEqual(["Nómina"]);
 
     const porRiesgo = filtrarUnidades(UNIDADES, { texto: "CEDIS", nivel: null });
-    expect(porRiesgo.map((u) => u.nombre)).toEqual(["UDN-0003"]);
+    expect(porRiesgo.map((u) => u.codigo)).toEqual(["UDN-0003"]);
   });
 
   it("si coincide la unidad, conserva toda su rama", () => {
     const res = filtrarUnidades(UNIDADES, { texto: "udn-0001", nivel: null });
     expect(res).toHaveLength(1);
     expect(res[0]!.divisiones[0]!.subdivisiones).toHaveLength(2);
+  });
+});
+
+describe("distribucionRiesgos", () => {
+  it("cuenta por nivel del peor al mejor, con los riesgos sin nivel al final y sin niveles vacíos", () => {
+    const riesgos = [riesgo(1, "a", "Bajo"), riesgo(2, "b", null), riesgo(3, "c", "Crítico"), riesgo(4, "d", "Bajo")];
+    expect(distribucionRiesgos(riesgos)).toEqual([
+      { nivel: "Crítico", cantidad: 1 },
+      { nivel: "Bajo", cantidad: 2 },
+      { nivel: "sin", cantidad: 1 },
+    ]);
+    expect(distribucionRiesgos([])).toEqual([]);
   });
 });
