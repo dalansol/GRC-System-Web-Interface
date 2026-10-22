@@ -206,7 +206,7 @@ router.delete("/evidencias/:id", async (req: Request, res: Response) => {
 
     // Fetch the record first to get the storage path
     const lookup = await pool.query(
-      `SELECT e.storage_path, e.control_id, e.entity_type
+      `SELECT e.storage_path, e.control_id, e.entity_type, e.uploaded_by
        FROM evidence e
        WHERE e.id = $1`,
       [id],
@@ -220,31 +220,44 @@ router.delete("/evidencias/:id", async (req: Request, res: Response) => {
       storage_path: string;
       control_id: string | number | null;
       entity_type: string;
+      uploaded_by: string | null;
     };
-    if (evidence.entity_type !== "control" || evidence.control_id === null) {
-      return res.status(403).json({
-        error: {
-          codigo: "ROL_NO_AUTORIZADO",
-          mensaje: "Solo el auditor asignado puede eliminar evidencia de un control.",
-        },
-      });
-    }
+    if (evidence.entity_type === "hallazgo") {
+      // Hallazgo: quien la subió, igual que en la consulta (quién puede subir sigue TBD).
+      if (evidence.uploaded_by !== String(usuario.id)) {
+        return res.status(403).json({
+          error: {
+            codigo: "ROL_NO_AUTORIZADO",
+            mensaje: "Solo quien subió la evidencia puede eliminarla.",
+          },
+        });
+      }
+    } else {
+      if (evidence.control_id === null) {
+        return res.status(403).json({
+          error: {
+            codigo: "ROL_NO_AUTORIZADO",
+            mensaje: "Solo el auditor asignado puede eliminar evidencia de un control.",
+          },
+        });
+      }
 
-    const asignacion = await pool.query(
-      `SELECT 1
-       FROM audit_controls ac
-       WHERE ac.control_id = $1
-         AND ac.auditor_id = $2
-       LIMIT 1`,
-      [evidence.control_id, usuario.id],
-    );
-    if (asignacion.rowCount !== 1) {
-      return res.status(403).json({
-        error: {
-          codigo: "ROL_NO_AUTORIZADO",
-          mensaje: "Solo el auditor asignado puede eliminar evidencia de este control.",
-        },
-      });
+      const asignacion = await pool.query(
+        `SELECT 1
+         FROM audit_controls ac
+         WHERE ac.control_id = $1
+           AND ac.auditor_id = $2
+         LIMIT 1`,
+        [evidence.control_id, usuario.id],
+      );
+      if (asignacion.rowCount !== 1) {
+        return res.status(403).json({
+          error: {
+            codigo: "ROL_NO_AUTORIZADO",
+            mensaje: "Solo el auditor asignado puede eliminar evidencia de este control.",
+          },
+        });
+      }
     }
 
     const storagePath = path.join(UPLOADS_DIR, evidence.storage_path);
