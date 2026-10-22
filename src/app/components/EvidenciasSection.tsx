@@ -17,7 +17,7 @@ import { useSesion } from "../auth/SesionContext";
 import PanelAsistenteEvidencia from "./PanelAsistenteEvidencia";
 import { Card } from "./SharedComponents";
 import SpreadsheetEditor from "./SpreadsheetEditor.tsx";
-import { pedir, pedirFormData } from "../api/cliente";
+import { ErrorApi, pedir, pedirFormData } from "../api/cliente";
 
 // ─── Evidencias Section ───────────────────────────────────────────────────────
 const BLOCKED_EXTENSIONS = [".exe", ".bat", ".js", ".msi", ".sh", ".cmd", ".vbs", ".ps1"];
@@ -188,8 +188,8 @@ export default function EvidenciasSection({
       await pedir(`/evidencias/${encodeURIComponent(id)}`, { metodo: "DELETE" });
       toast.success("Evidencia eliminada.");
       await fetchEvidences();
-    } catch {
-      toast.error("Error de conexión al eliminar evidencia.");
+    } catch (error) {
+      toast.error(error instanceof ErrorApi ? error.message : "Error de conexión al eliminar evidencia.");
     }
   };
 
