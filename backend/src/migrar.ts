@@ -39,6 +39,7 @@ const SCRIPTS = [
   "023_codigo_y_nombre.sql",
   "025_nombres_unicos.sql",
   "026_nombres_periodos.sql",
+  "027_formatos_evidencia.sql",
 ];
 const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql", "022_seed_nombres_reales.sql", "024_seed_quitar_sin_codigo.sql"];
 

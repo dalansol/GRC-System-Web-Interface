@@ -31,11 +31,14 @@ router.get("/evidencias", async (req: Request, res: Response) => {
   try {
     const pool = await poolPromise;
     const usuario = usuarioEnSesion(res);
+    // Each query receives only the parameters it uses: PostgreSQL rejects a parameter
+    // it never sees ("could not determine data type of parameter").
     let query = `
       SELECT e.* FROM evidence e
       WHERE e.entity_id = $1
-        AND e.uploaded_by = $3
+        AND e.uploaded_by = $2
       ORDER BY e.created_at DESC`;
+    let params: string[] = [entityId as string, String(usuario.id)];
 
     if (entityType === "control") {
       query = `
@@ -54,15 +57,16 @@ router.get("/evidencias", async (req: Request, res: Response) => {
             ))
           )
         ORDER BY e.created_at DESC`;
+      params = [entityId as string, usuario.rol, String(usuario.id)];
     } else if (entityType === "hallazgo") {
       query = `
         SELECT e.* FROM evidence e
         WHERE e.finding_id = $1
-          AND e.uploaded_by = $3
+          AND e.uploaded_by = $2
         ORDER BY e.created_at DESC`;
     }
 
-    const result = await pool.query(query, [entityId as string, usuario.rol, String(usuario.id)]);
+    const result = await pool.query(query, params);
 
     res.json(result.rows);
   } catch (error) {
@@ -86,7 +90,7 @@ router.post(
         if (err.code === "LIMIT_FILE_SIZE") {
           return res
             .status(400)
-            .json({ error: "El archivo supera el límite de 50 MB." });
+            .json({ error: "El archivo supera el límite de 100 MB." });
         }
         return res.status(400).json({ error: err.message });
       }
@@ -119,6 +123,8 @@ router.post(
     }
 
     try {
+      // Control: only the Auditor assigned to it.
+      // Hallazgo: TBD who may upload (CLAUDE.md §7 #19); for now any signed-in user.
       if (entityType === "control") {
         const pool = await poolPromise;
         const asignacion = await pool.query(
@@ -155,8 +161,8 @@ router.post(
       // Write file to disk
       fs.writeFileSync(storagePath, file.buffer);
 
-      // Derive mime type label
-      const mimeType = ext === ".pdf" ? "pdf" : "xlsx";
+      // Derive mime type label (the extension, already validated by the upload filter)
+      const mimeType = ext.slice(1);
 
       // Insert metadata into database
       const pool = await poolPromise;
