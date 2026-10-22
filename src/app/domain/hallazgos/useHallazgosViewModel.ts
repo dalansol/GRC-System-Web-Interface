@@ -2,10 +2,15 @@ import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { INITIAL_FINDINGS } from "../../data/mock_data";
 import { listarPlanesAccion, type PlanAccion } from "../../api/planesAccion";
+import {
+  actualizarHallazgo,
+  eliminarHallazgo,
+  listarHallazgos,
+  type HallazgoApi,
+} from "../../api/hallazgos";
 
 const metaEnv = (import.meta as any).env;
-const API_BASE_URL = metaEnv?.VITE_API_URL || "http://localhost:3000/api";
-const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND === "true";
+const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND !== "false";
 
 export interface HallazgoViewModel {
   id: string;
@@ -65,7 +70,7 @@ export function useHallazgosViewModel() {
     setHallazgoParaPlan(null);
   };
 
-  // La edición solo cambia el plan; el estado del hallazgo no se toca.
+  // La edición solo cambia el plan; el status del hallazgo no se toca.
   const handlePlanActualizado = (plan: PlanAccion) => {
     setPlanesPorHallazgo((prev) => ({ ...prev, [plan.hallazgo.id]: plan }));
     setHallazgoParaPlan(null);
@@ -75,12 +80,8 @@ export function useHallazgosViewModel() {
     setLoading(true);
     try {
       if (USE_REAL_BACKEND) {
-        const response = await fetch(`${API_BASE_URL}/hallazgos`);
-        if (!response.ok) {
-          throw new Error("No se pudieron obtener los hallazgos del servidor.");
-        }
-        const data = await response.json();
-        setHallazgos(orderFindings(data));
+        const data = await listarHallazgos();
+        setHallazgos(orderFindings(data as HallazgoViewModel[]));
       } else {
         // Fallback a mock_data.tsx
         setHallazgos(orderFindings(INITIAL_FINDINGS as unknown as HallazgoViewModel[]));
@@ -102,7 +103,7 @@ export function useHallazgosViewModel() {
 
     if (finding?.status !== "Abierto") {
       toast.error(
-        "Solo se pueden eliminar hallazgos en estado Abierto.",
+        "Solo se pueden eliminar hallazgos en status Abierto.",
       );
       return;
     }
@@ -112,14 +113,7 @@ export function useHallazgosViewModel() {
     setDeletingId(id);
     try {
       if (USE_REAL_BACKEND) {
-        const response = await fetch(`${API_BASE_URL}/hallazgos/${id}`, {
-          method: "DELETE",
-        });
-
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Error al eliminar el hallazgo.");
-        }
+        await eliminarHallazgo(id);
       }
 
       setHallazgos((prev) => prev.filter((item) => item.id !== id));
@@ -138,18 +132,7 @@ export function useHallazgosViewModel() {
     setIsUpdating(true);
     try {
       if (USE_REAL_BACKEND) {
-        const response = await fetch(`${API_BASE_URL}/hallazgos/${editingHallazgo.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(editingHallazgo),
-        });
-
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Error al actualizar el hallazgo.");
-        }
-
-        const updatedData = await response.json();
+        const updatedData = await actualizarHallazgo(editingHallazgo.id, editingHallazgo);
         setHallazgos((prev) =>
           prev.map((item) => (item.id === updatedData.id ? updatedData : item))
         );

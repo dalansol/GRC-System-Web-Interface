@@ -64,7 +64,13 @@ huella del contenido y fecha) y la siguiente vez solo corre los que faltan.
 | `008_estructura_y_controles.sql` | `fiscal_periods`, `business_units`, `processes`, `controls`, `audit_controls`, `conflict_declarations` |
 | `009_seed_controles.sql` | Controles de prueba. Solo con `--datos-prueba` |
 | `010_catalogos_riesgos_y_ejecucion.sql` | Catálogos (`catalogs`, `catalog_department`, `catalog_domain`, `audit_status`, `audit_procedure_type`), estructura (`division`, `business`, `area`, `audit_entity`), riesgos (`risk_library`, `control_procedure`, `risk_register`) y ejecución (`audit_engagement`, `audit_engagement_team`, `audit_procedures`); agrega `business_units.catalog_id` |
-| `011_seed_demo.sql` | Usuarios de "Usar un rol de prueba", planes de auditoría, hallazgos y plan de acción del modo en memoria. Solo con `--datos-prueba` |
+| `011_audit_controls_plan.sql` | `audit_controls.audit_id` apunta a `audit_plans` (asignación de controles por plan) |
+| `012_seguimiento_controles.sql` | Estado, horas y retroalimentación de controles; tabla `control_horas` |
+| `013_seguimiento_asignaciones_control.sql` | Estado, horas y retroalimentación por asignación (`audit_controls`) |
+| `014_quitar_seguimiento_controles_catalogo.sql` | Quita el seguimiento del catálogo `controls` (queda en cada asignación) |
+| `015_estado_inicial_controles_progreso.sql` | Las asignaciones nuevas empiezan `En Progreso` |
+| `016_conflictos_por_plan.sql` | `conflict_declarations.audit_id` apunta a `audit_plans` (historia #96) |
+| `017_seed_demo.sql` | Usuarios de "Usar un rol de prueba", planes de auditoría, hallazgos y plan de acción del modo en memoria. Solo con `--datos-prueba` |
 
 ### Cómo agregar un cambio al esquema
 

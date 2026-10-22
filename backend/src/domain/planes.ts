@@ -35,6 +35,15 @@ export interface DatosPlan {
   alcance: string | null;
 }
 
+/** Devuelve la clave temporal que se usa para generar el código del plan. */
+export function periodoClave(datos: Pick<DatosPlan, "tipo" | "periodo" | "fechaInicio">): string {
+  const year = datos.fechaInicio.slice(0, 4);
+  if (datos.tipo === "Anual") return year;
+  const month = Number(datos.fechaInicio.slice(5, 7));
+  const quarter = Math.floor((month - 1) / 3) + 1;
+  return `Q${quarter} ${year}`;
+}
+
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 function fechaValida(valor: unknown): valor is string {

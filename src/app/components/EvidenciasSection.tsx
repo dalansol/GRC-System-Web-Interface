@@ -12,17 +12,15 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { URL_API } from "../api/cliente";
 import { ROLES_ASISTENTE } from "../api/asistente";
 import { useSesion } from "../auth/SesionContext";
 import PanelAsistenteEvidencia from "./PanelAsistenteEvidencia";
 import { Card } from "./SharedComponents";
 import SpreadsheetEditor from "./SpreadsheetEditor.tsx";
+import { pedir, pedirFormData } from "../api/cliente";
 
 // ─── Evidencias Section ───────────────────────────────────────────────────────
 const BLOCKED_EXTENSIONS = [".exe", ".bat", ".js", ".msi", ".sh", ".cmd", ".vbs", ".ps1"];
-
-const API_BASE = URL_API;
 
 interface EvidenceFile {
   id: string;
@@ -71,7 +69,8 @@ export default function EvidenciasSection({
   controlId,
   findingId,
   auditId,
-  businessEntityId
+  businessEntityId,
+  puedeSubir,
 }: { 
   entityId: string; 
   entityType?: "control" | "hallazgo";
@@ -79,7 +78,11 @@ export default function EvidenciasSection({
   findingId?: string;
   auditId?: string;
   businessEntityId?: string;
+  puedeSubir?: boolean;
 }) {
+  const puedeSubirEvidencia =
+    entityType === "control" &&
+    puedeSubir === true;
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -93,17 +96,15 @@ export default function EvidenciasSection({
   // ─── Fetch evidences from API (or fall back to mock data) ─────────────────
   const fetchEvidences = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/evidencias?entityId=${encodeURIComponent(entityId)}&entityType=${encodeURIComponent(entityType)}`);
-      if (!res.ok) throw new Error("API error");
-      const data = await res.json();
+      const data = await pedir<any[]>(`/evidencias?entityId=${encodeURIComponent(entityId)}&entityType=${encodeURIComponent(entityType)}`);
       setFiles(data.map(mapApiRow));
       setUsingFallback(false);
-    } catch {
-      // API unavailable — fall back to local mock data
-      setFiles(FALLBACK_EVIDENCES.filter(e => e.entityId === entityId).map(e => ({ ...e, version: e.version ?? 3 })));
-      setUsingFallback(true);
+    } catch (reason: unknown) {
+      setFiles([]);
+      setUsingFallback(false);
+      setError(reason instanceof Error ? reason.message : "No se pudieron cargar las evidencias.");
     }
-  }, [entityId]);
+  }, [entityId, entityType]);
 
   useEffect(() => {
     fetchEvidences();
@@ -156,23 +157,12 @@ export default function EvidenciasSection({
       formData.append("file", file);
       formData.append("entityId", entityId);
       formData.append("entityType", entityType);
-      formData.append("uploadedBy", "M. García");
-      
       if (controlId) formData.append("controlId", controlId);
       if (findingId) formData.append("findingId", findingId);
       if (auditId) formData.append("auditId", auditId);
       if (businessEntityId) formData.append("businessEntityId", businessEntityId);
 
-      const res = await fetch(`${API_BASE}/evidencias/upload`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: "Error al subir archivo." }));
-        setError(data.error || "Error al subir archivo.");
-        return;
-      }
+      await pedirFormData("/evidencias/upload", formData);
 
       toast.success(`Evidencia "${file.name}" cargada correctamente`);
       await fetchEvidences();
@@ -192,11 +182,7 @@ export default function EvidenciasSection({
     }
 
     try {
-      const res = await fetch(`${API_BASE}/evidencias/${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (!res.ok) {
-        toast.error("Error al eliminar evidencia.");
-        return;
-      }
+      await pedir(`/evidencias/${encodeURIComponent(id)}`, { metodo: "DELETE" });
       toast.success("Evidencia eliminada.");
       await fetchEvidences();
     } catch {
@@ -235,11 +221,13 @@ export default function EvidenciasSection({
             <div className="text-sm font-semibold text-foreground">Evidencias Documentales</div>
             <span className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-semibold">{files.length}</span>
           </div>
-          <label className={`inline-flex items-center gap-1.5 cursor-pointer px-3 py-1.5 bg-secondary text-secondary-foreground text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors ${uploading ? "opacity-60 pointer-events-none" : ""}`}>
-            {uploading ? <Loader2 size={12} className="animate-spin" /> : <UploadCloud size={12} />}
-            {uploading ? "Subiendo…" : "Adjuntar archivo"}
-            <input ref={inputRef} type="file" accept=".pdf,.xlsx" className="hidden" onChange={handleUpload} disabled={uploading} />
-          </label>
+          {puedeSubirEvidencia && (
+            <label className={`inline-flex items-center gap-1.5 cursor-pointer px-3 py-1.5 bg-secondary text-secondary-foreground text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors ${uploading ? "opacity-60 pointer-events-none" : ""}`}>
+              {uploading ? <Loader2 size={12} className="animate-spin" /> : <UploadCloud size={12} />}
+              {uploading ? "Subiendo…" : "Enviar evidencia"}
+              <input ref={inputRef} type="file" accept=".pdf,.xlsx" className="hidden" onChange={handleUpload} disabled={uploading} />
+            </label>
+          )}
         </div>
         {error && (
           <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-xs text-red-700">
@@ -249,7 +237,7 @@ export default function EvidenciasSection({
         {files.length === 0 ? (
           <div className="text-center py-8 text-xs text-muted-foreground bg-secondary/20 rounded-lg border-2 border-dashed border-border">
             <UploadCloud size={20} className="mx-auto mb-2 text-muted-foreground/40" />
-            Sin evidencias adjuntas. Sube archivos .pdf o .xlsx (máx. 50 MB).
+            {puedeSubirEvidencia ? "Sin evidencias adjuntas. Sube archivos .pdf o .xlsx (máx. 50 MB)." : "Sin evidencias adjuntas."}
           </div>
         ) : (
           <div className="space-y-2">
@@ -287,9 +275,11 @@ export default function EvidenciasSection({
                     <FileSpreadsheet size={10} /> Editar en Expedite
                   </button>
                 )}
-                <button onClick={() => removeFile(f.id)} className="p-1 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0">
-                  <Trash2 size={12} />
-                </button>
+                {puedeSubirEvidencia && (
+                  <button onClick={() => removeFile(f.id)} className="p-1 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0">
+                    <Trash2 size={12} />
+                  </button>
+                )}
               </div>
             ))}
           </div>

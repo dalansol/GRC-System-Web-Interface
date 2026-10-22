@@ -79,6 +79,7 @@ type View = NavView; // alias kept for existing components
 interface UserRecord {
   id: string; name: string; email: string;
   role: string; status: "active" | "inactive"; lastLogin: string;
+  manager?: string;
 }
 
 
@@ -148,6 +149,10 @@ interface ControlRecord {
   sampleSize: string;
   rotation: string;
   controlStatus: string;
+  status?: "En Progreso" | "En Revision" | "Completado";
+  horasInvertidas?: number;
+  feedback?: string | null;
+  auditIds?: number[];
 }
 interface ProcedureTracking {
   id: string;
@@ -606,4 +611,3 @@ function exportToCSV(filename: string, headers: string[], rows: string[][]) {
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
-

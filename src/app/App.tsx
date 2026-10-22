@@ -102,7 +102,6 @@ import type {
   NavView,
   Navigate,
   // Interfaces
-  AuditPlan,
   AuditDocument,
   AuditRecord,
   Finding,
@@ -137,6 +136,8 @@ import EvidenciasSection from "./components/EvidenciasSection";
 import CopilotPanel from "./components/CopilotPanel";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
 import UsuariosRolesView from "./components/UsuariosRolesView";
+import AuditPlansView from "./components/VistaPlanesAudito";
+import VistaControlDetallado from "./components/VistaControlDetallado";
 import { useSesion } from "./auth/SesionContext";
 import { listarMisPlanesAccion, type PlanAccion } from "./api/planesAccion";
 
@@ -1964,202 +1965,6 @@ function AuditEntityDetailView({
         </Card>
       </div>
       <AISummaryCard entityId={ae.id} entityType="Entidad Auditora" />
-    </div>
-  );
-}
-
-// ─── CONTROL DETAIL ───────────────────────────────────────────────────────────
-function ControlDetailView({
-  id,
-  crumbs,
-}: {
-  id: string;
-  crumbs: React.ReactNode;
-}) {
-  const ctrl = CONTROLS.find((c) => c.id === id)!;
-  const ae = AUDIT_ENTITIES.find(
-    (a) => a.id === ctrl.auditEntityId,
-  )!;
-  const procedures = PROCEDURE_TRACKING.filter(
-    (p) => p.controlId === id,
-  );
-
-  return (
-    <div
-      className="flex-1 overflow-auto p-6"
-      style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-    >
-      {crumbs}
-      {/* Header */}
-      <Card className="mb-5 p-5">
-        <div className="flex items-start gap-3 mb-3">
-          <div className="p-2 bg-emerald-100 rounded-lg flex-shrink-0">
-            <ClipboardCheck
-              size={18}
-              className="text-emerald-600"
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-xs font-bold text-primary bg-primary/8 px-2.5 py-1 rounded-md">
-                {ctrl.id}
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground bg-muted px-2 py-0.5 rounded">
-                Procedimiento de Control
-              </span>
-              <ValidityBadge status={ctrl.validityStatus} />
-            </div>
-            <h1 className="text-xl font-bold text-foreground leading-tight">
-              {ctrl.controlProcedureName}
-            </h1>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-4 pt-3 border-t border-border mb-4">
-          <DetailField label="ID Control" value={ctrl.id} />
-          <DetailField
-            label="Entidad Auditora"
-            value={ae.name}
-          />
-          <DetailField
-            label="ID Entidad Auditora"
-            value={ae.id}
-          />
-        </div>
-        <div className="pt-3 border-t border-border">
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
-            Actividad de Control
-          </div>
-          <p className="text-sm text-foreground leading-relaxed">
-            {ctrl.controlActivity}
-          </p>
-        </div>
-      </Card>
-
-      {/* Transversal Control Procedures */}
-      <Card className="mb-5 p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="text-sm font-bold text-foreground">
-            Procedimientos de Control Transversal
-          </div>
-          <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-semibold">
-            {ctrl.controlType}
-          </span>
-        </div>
-        <div className="grid grid-cols-5 gap-4">
-          {[
-            {
-              label: "Tipo de Control",
-              value: ctrl.controlType,
-            },
-            {
-              label: "Frecuencia de Operación",
-              value: ctrl.frequency,
-            },
-            {
-              label: "Tamaño de Muestra",
-              value: ctrl.sampleSize,
-            },
-            { label: "Rotación", value: ctrl.rotation },
-            { label: "Estatus", value: ctrl.controlStatus },
-          ].map((f) => (
-            <div
-              key={f.label}
-              className="bg-muted/40 rounded-lg p-3"
-            >
-              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                {f.label}
-              </div>
-              <div className="text-sm font-bold text-foreground">
-                {f.value}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Procedure Tracking Table */}
-      <Card>
-        <div className="px-4 pt-4 pb-3 border-b border-border flex items-center gap-2">
-          <ClipboardList size={15} className="text-primary" />
-          <div className="text-sm font-semibold text-foreground">
-            Seguimiento de Procedimientos
-          </div>
-          <span className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-semibold">
-            {procedures.length}
-          </span>
-        </div>
-        {procedures.length === 0 ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">
-            Sin procedimientos de seguimiento registrados
-          </div>
-        ) : (
-          <div className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  {[
-                    "ID Seguimiento",
-                    "Nombre Procedimiento",
-                    "Identificador",
-                    "Depto. Negocio",
-                    "Negocio",
-                    "División",
-                    "Área",
-                    "País",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {procedures.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="hover:bg-secondary/30 transition-colors"
-                  >
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-primary">
-                      {p.id}
-                    </td>
-                    <td className="px-4 py-3 text-xs font-medium text-foreground">
-                      {p.procedureName}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                      {p.identificator}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.businessDeptName}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.businessName}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.divisionName}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.area}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {p.country}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-      <EvidenciasSection 
-        entityId={ctrl.id} 
-        entityType="control"
-        controlId={ctrl.id}
-        businessEntityId={ctrl.auditEntityId} 
-      />
-      <AISummaryCard entityId={ctrl.id} entityType="Control" />
     </div>
   );
 }
@@ -4247,216 +4052,6 @@ function BitacoraView() {
   );
 }
 
-// ─── View: PLANES DE AUDITORÍA ───────────────────────────────────────────────
-const PLAN_STATUS_CFG: Record<AuditPlan["status"], { label: string; cls: string }> = {
-  "Borrador": { label: "Borrador", cls: "bg-slate-50 text-slate-600 border border-slate-200" },
-  "Aprobado": { label: "Aprobado", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
-  "En Ejecución": { label: "En Ejecución", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
-  "Cerrado": { label: "Cerrado", cls: "bg-blue-50 text-blue-700 border border-blue-200" },
-};
-
-function AuditPlansView({ canCreate }: { canCreate: boolean }) {
-  const [plans, setPlans] = useState<AuditPlan[]>(AUDIT_PLANS_DATA);
-  const [showForm, setShowForm] = useState(false);
-  const [planPdfTarget, setPlanPdfTarget] = useState<AuditPlan | null>(null);
-  const [form, setForm] = useState({ code: "", name: "", type: "", period: "", startDate: "", endDate: "", estimatedHours: "", responsible: "M. García", scope: "" });
-  const [formErr, setFormErr] = useState<Record<string, string>>({});
-
-  const validate = () => {
-    const errs: Record<string, string> = {};
-    if (!form.code.trim()) errs.code = "Requerido";
-    if (!form.name.trim()) errs.name = "Requerido";
-    if (form.type !== "Anual" && form.type !== "Trimestral") errs.type = "Selecciona anual o trimestral";
-    if (!form.startDate) errs.startDate = "Requerido";
-    if (!form.endDate) errs.endDate = "Requerido";
-    if (form.startDate && form.endDate && form.endDate <= form.startDate) errs.endDate = "Debe ser posterior a la fecha de inicio";
-    const h = Number(form.estimatedHours);
-    if (!form.estimatedHours || h <= 0 || !Number.isFinite(h)) errs.estimatedHours = "Debe ser mayor a 0";
-    return errs;
-  };
-
-  const handleSubmit = () => {
-    const errs = validate();
-    if (Object.keys(errs).length) { setFormErr(errs); return; }
-    const newPlan: AuditPlan = {
-      id: `AP-${String(plans.length + 1).padStart(3, "0")}`,
-      code: form.code, name: form.name, type: form.type as AuditPlan["type"], period: form.period,
-      startDate: form.startDate, endDate: form.endDate,
-      status: "Borrador", estimatedHours: Number(form.estimatedHours),
-      responsible: form.responsible, scope: form.scope,
-    };
-    setPlans(prev => [newPlan, ...prev]);
-    setShowForm(false);
-    setForm({ code: "", name: "", type: "", period: "", startDate: "", endDate: "", estimatedHours: "", responsible: "M. García", scope: "" });
-    setFormErr({});
-    toast.success(`Plan "${newPlan.name}" creado correctamente`);
-  };
-
-  const inp = (label: string, key: keyof typeof form, type = "text", placeholder = "") => (
-    <div>
-      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">{label}</label>
-      <input
-        type={type} value={form[key]} placeholder={placeholder}
-        onChange={e => { setForm(f => ({ ...f, [key]: e.target.value })); setFormErr(f => ({ ...f, [key]: "" })); }}
-        className={`w-full text-sm px-3 py-2 rounded-md border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${formErr[key] ? "border-red-400" : "border-border"}`}
-      />
-      {formErr[key] && <div className="text-xs text-red-600 mt-0.5">{formErr[key]}</div>}
-    </div>
-  );
-
-  return (
-    <div className="flex-1 overflow-auto p-6" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <Breadcrumbs items={["Inicio", "Auditoría", "Planes de Auditoría"]} />
-      <PageHeader
-        title="Planes de Auditoría"
-        subtitle={`${plans.length} planes registrados · Ciclo 2024–2025`}
-        actions={canCreate ? (
-          <PrimaryBtn icon={<Plus size={14} />} onClick={() => setShowForm(s => !s)}>
-            {showForm ? "Cancelar" : "Nuevo plan"}
-          </PrimaryBtn>
-        ) : undefined}
-      />
-
-      {showForm && (
-        <Card className="p-5 mb-6 border-primary/30 bg-primary/[0.02]">
-          <div className="flex items-center gap-2 mb-4">
-            <BookOpen size={15} className="text-primary" />
-            <div className="text-sm font-semibold text-foreground">Nuevo Plan de Auditoría</div>
-          </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            {inp("Código del plan", "code", "text", "PAI-2025-004")}
-            {inp("Nombre del plan", "name", "text", "Plan de Auditoría…")}
-            <div>
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Tipo de plan</label>
-              <select
-                value={form.type}
-                onChange={e => { setForm(f => ({ ...f, type: e.target.value })); setFormErr(f => ({ ...f, type: "" })); }}
-                className={`w-full text-sm px-3 py-2 rounded-md border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 ${formErr.type ? "border-red-400" : "border-border"}`}
-              >
-                <option value="">— Seleccionar —</option>
-                <option value="Anual">Anual</option>
-                <option value="Trimestral">Trimestral</option>
-              </select>
-              {formErr.type && <div className="text-xs text-red-600 mt-0.5">{formErr.type}</div>}
-            </div>
-            {inp("Periodo", "period", "text", "Q3–Q4 2025")}
-            {inp("Responsable", "responsible")}
-            {inp("Fecha de inicio", "startDate", "date")}
-            {inp("Fecha de fin", "endDate", "date")}
-            {inp("Horas estimadas", "estimatedHours", "number", "120")}
-          </div>
-          <div className="mb-4">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Alcance</label>
-            <textarea
-              value={form.scope} rows={2} placeholder="Descripción del alcance del plan…"
-              onChange={e => setForm(f => ({ ...f, scope: e.target.value }))}
-              className="w-full text-sm px-3 py-2 rounded-md border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
-            />
-          </div>
-          <PrimaryBtn icon={<Save size={14} />} onClick={handleSubmit}>Guardar plan</PrimaryBtn>
-        </Card>
-      )}
-
-      <Card>
-        <div className="px-4 pt-4 pb-3 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <BookOpen size={14} className="text-primary" />
-            <div className="text-sm font-semibold text-foreground">Planes registrados</div>
-            <span className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-semibold">{plans.length}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => exportToCSV("planes_auditoria.csv", ["ID", "Código", "Nombre", "Tipo", "Periodo", "Inicio", "Fin", "Estado", "Horas"], plans.map(p => [p.id, p.code, p.name, p.type, p.period, p.startDate, p.endDate, p.status, String(p.estimatedHours)]))}
-              className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-border text-muted-foreground hover:bg-secondary transition-colors"
-            >
-              <Download size={12} /> Exportar CSV
-            </button>
-            <button
-              onClick={() => setPlanPdfTarget(plans[0])}
-              className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-border text-muted-foreground hover:bg-secondary transition-colors"
-            >
-              <FileText size={12} /> Exportar PDF
-            </button>
-          </div>
-        </div>
-        {planPdfTarget && (
-          <PDFPreviewModal
-            onClose={() => setPlanPdfTarget(null)}
-            doc={{
-              title: `Plan de Auditoría — ${planPdfTarget.code}`,
-              subtitle: planPdfTarget.name,
-              sections: [
-                {
-                  heading: "Información General",
-                  rows: [
-                    ["Código", planPdfTarget.code],
-                    ["Nombre del plan", planPdfTarget.name],
-                    ["Tipo", planPdfTarget.type],
-                    ["Período", planPdfTarget.period],
-                    ["Estado", planPdfTarget.status],
-                    ["Responsable", planPdfTarget.responsible],
-                    ["Horas estimadas", `${planPdfTarget.estimatedHours}h`],
-                  ],
-                },
-                {
-                  heading: "Alcance y Fechas",
-                  rows: [
-                    ["Fecha de inicio", planPdfTarget.startDate],
-                    ["Fecha de fin", planPdfTarget.endDate],
-                    ["Alcance", planPdfTarget.scope || "No especificado"],
-                  ],
-                },
-                {
-                  heading: "Resumen de Planes",
-                  rows: plans.map(p => [p.code, `${p.name} · ${p.status}`]),
-                },
-              ],
-            }}
-          />
-        )}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                {["Código", "Nombre del Plan", "Tipo", "Periodo", "Inicio", "Fin", "Estado", "Horas Est.", "Responsable"].map(h => (
-                  <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {plans.map(p => {
-                const st = PLAN_STATUS_CFG[p.status];
-                return (
-                  <tr key={p.id} className="hover:bg-secondary/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-xs font-bold text-primary bg-primary/8 px-2 py-0.5 rounded-md">{p.code}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-foreground text-sm">{p.name}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{p.scope}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground whitespace-nowrap">{p.type}</span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{p.period}</td>
-                    <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{p.startDate}</td>
-                    <td className="px-4 py-3 text-xs font-mono text-muted-foreground">{p.endDate}</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-foreground font-semibold">{p.estimatedHours}h</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{p.responsible}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
 // ─── View: HALLAZGOS ─────────────────────────────────────────────────────────
 const SEV_COLOR: Record<Finding["severity"], string> = {
   "Crítico": "bg-red-50 text-red-700 border border-red-200",
@@ -4785,6 +4380,7 @@ const DETAIL_LABELS: Record<DetailType, string> = {
 type StackEntry = { type: DetailType; id: string };
 
 export default function App() {
+  const { usuario } = useSesion();
   const [navView, setNavView] = useState<NavView>("dashboard");
   const [stack, setStack] = useState<StackEntry[]>([]);
   const [copilotOpen, setCopilotOpen] = useState(false);
@@ -4881,7 +4477,7 @@ export default function App() {
           );
         case "control":
           return (
-            <ControlDetailView id={top.id} crumbs={crumbs} />
+            <VistaControlDetallado id={top.id} crumbs={crumbs} />
           );
       }
     }
@@ -4905,7 +4501,7 @@ export default function App() {
       case "bitacora":
         return <BitacoraView />;
       case "plans":
-        return <AuditPlansView canCreate={true} />;
+        return <AuditPlansView canCreate={usuario?.rol === "Jefe de Auditoría"} navigate={navigate} />;
       case "findings":
         return <VistaHallazgo />;
       case "controles":

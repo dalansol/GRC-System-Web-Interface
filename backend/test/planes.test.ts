@@ -12,6 +12,7 @@ import { escuchar } from "./servidor.js";
 
 const ADMIN = "s.ramirez@expedite.com";
 const JEFA = "m.garcia@expedite.com";
+const AUDITOR_SENIOR = "c.morales@expedite.com";
 const AUDITORA = "a.rodriguez@expedite.com";
 const INACTIVO = "p.sanchez@expedite.com";
 
@@ -75,6 +76,25 @@ describe("consulta de planes", () => {
     );
   });
 
+  it("un Auditor Senior solo ve los planes que tiene asignados", async () => {
+    const res = await como(AUDITOR_SENIOR).get("/api/planes");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0]).toMatchObject({
+      codigo: "PAI-2025-002",
+      responsable: { nombre: "Carlos Morales" },
+    });
+  });
+
+  it("un Auditor Senior no puede consultar por id un plan ajeno", async () => {
+    const planes = (await como(AUDITORA).get("/api/planes")).body;
+    const planAjeno = planes.find((plan: { responsable: { nombre: string } }) => plan.responsable.nombre === "María García");
+
+    expect(planAjeno).toBeDefined();
+    expect((await como(AUDITOR_SENIOR).get(`/api/planes/${planAjeno.id}`)).status).toBe(404);
+  });
+
   it("consulta un plan por id y responde 404 si no existe", async () => {
     const [primero] = (await como(AUDITORA).get("/api/planes")).body;
 
@@ -88,13 +108,15 @@ describe("alta de planes", () => {
     const res = await como(JEFA).post("/api/planes").send(await planNuevo());
 
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ codigo: "PAI-2026-001", tipo: "Anual", estado: "Borrador", responsable: { nombre: "María García" } });
+    expect(res.body).toMatchObject({ codigo: "PAA-2026-001", tipo: "Anual", estado: "Borrador", responsable: { nombre: "María García" } });
     expect(eventos).toEqual([expect.objectContaining({ accion: "plan.alta", actor: JEFA })]);
     expect((await como(AUDITORA).get("/api/planes")).body).toHaveLength(5);
   });
 
-  it("el Administrador también puede crear", async () => {
-    expect((await como(ADMIN).post("/api/planes").send(await planNuevo())).status).toBe(201);
+  it("el Administrador no puede crear planes", async () => {
+    const res = await como(ADMIN).post("/api/planes").send(await planNuevo());
+    expect(res.status).toBe(403);
+    expect(res.body.error.codigo).toBe("ROL_NO_AUTORIZADO");
   });
 
   it("un Auditor no puede crear planes", async () => {
@@ -103,10 +125,42 @@ describe("alta de planes", () => {
     expect(eventos).toEqual([]);
   });
 
-  it("rechaza un código repetido", async () => {
+  it("ignora el código enviado y genera el siguiente consecutivo", async () => {
     const res = await como(JEFA).post("/api/planes").send(await planNuevo({ codigo: "pai-2025-001" }));
-    expect(res.status).toBe(409);
-    expect(res.body.error.codigo).toBe("CODIGO_DUPLICADO");
+    expect(res.status).toBe(201);
+    expect(res.body.codigo).toBe("PAA-2026-001");
+  });
+
+  it("incrementa el consecutivo anual dentro del mismo año", async () => {
+    const primero = await como(JEFA).post("/api/planes").send(await planNuevo());
+    const segundo = await como(JEFA).post("/api/planes").send(await planNuevo({ codigo: "cliente-otro" }));
+
+    expect(primero.body.codigo).toBe("PAA-2026-001");
+    expect(segundo.body.codigo).toBe("PAA-2026-002");
+  });
+
+  it("reinicia el consecutivo trimestral para otro período", async () => {
+    const q1 = await planNuevo({
+      codigo: "cliente-q1",
+      tipo: "Trimestral",
+      periodo: "Q1 2026",
+      fechaInicio: "2026-01-01",
+      fechaFin: "2026-03-31",
+    });
+    const q1Primero = await como(JEFA).post("/api/planes").send(q1);
+    const q1Segundo = await como(JEFA).post("/api/planes").send({ ...q1, codigo: "cliente-q1-otro" });
+    const q2 = await planNuevo({
+      codigo: "cliente-q2",
+      tipo: "Trimestral",
+      periodo: "Q2 2026",
+      fechaInicio: "2026-04-01",
+      fechaFin: "2026-06-30",
+    });
+    const q2Primero = await como(JEFA).post("/api/planes").send(q2);
+
+    expect(q1Primero.body.codigo).toBe("PAT-2026-Q1-001");
+    expect(q1Segundo.body.codigo).toBe("PAT-2026-Q1-002");
+    expect(q2Primero.body.codigo).toBe("PAT-2026-Q2-001");
   });
 
   it.each([

@@ -1,6 +1,6 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import type { RegistrarEvento } from "../bitacora.js";
-import { normalizarPlan, validarPlan, type PlanAuditoria } from "../domain/planes.js";
+import { normalizarPlan, periodoClave, validarPlan, type PlanAuditoria } from "../domain/planes.js";
 import { ROL_ADMINISTRADOR } from "../domain/tipos.js";
 import { ErrorApi } from "../errores.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
@@ -8,8 +8,10 @@ import { autorizar } from "../middleware/autorizar.js";
 import { ErrorCodigoDuplicado, type RepositorioPlanes } from "../repos/planes.js";
 import type { RepositorioUsuarios } from "../repos/repositorio.js";
 
-// Roles que crean y editan planes. Todos los usuarios con sesión los consultan.
-const ROLES_EDICION = [ROL_ADMINISTRADOR, "Jefe de Auditoría"];
+// La creación está reservada a la Jefatura; la edición también puede hacerla el Administrador.
+const ROL_JEFATURA = "Jefe de Auditoría";
+const ROLES_EDICION = [ROL_ADMINISTRADOR, ROL_JEFATURA];
+const ROL_AUDITOR_SENIOR = "Auditor Senior";
 
 interface Dependencias {
   repo: RepositorioPlanes;
@@ -37,6 +39,9 @@ export function rutasPlanes({ repo, usuarios, registrarEvento }: Dependencias): 
     if (!responsable || responsable.estado !== "active") {
       throw new ErrorApi(400, "DATOS_INVALIDOS", "El responsable no existe o está inactivo.");
     }
+    if (responsable.rol !== ROL_AUDITOR_SENIOR) {
+      throw new ErrorApi(400, "DATOS_INVALIDOS", "El responsable del plan debe ser un Auditor Senior.");
+    }
     return normalizarPlan(datos);
   }
 
@@ -51,18 +56,42 @@ export function rutasPlanes({ repo, usuarios, registrarEvento }: Dependencias): 
     }
   }
 
+  function responsableVisible(id: number, res: Response) {
+    const usuario = usuarioEnSesion(res);
+    return usuario.rol !== ROL_AUDITOR_SENIOR || id === usuario.id;
+  }
+
   rutas.get("/planes", async (_req, res) => {
-    res.json(await repo.listar());
+    const usuario = usuarioEnSesion(res);
+    res.json(await repo.listar(
+      usuario.rol === ROL_AUDITOR_SENIOR ? usuario.id : undefined,
+      usuario.rol === "Auditor" ? usuario.id : undefined,
+    ));
   });
 
   rutas.get("/planes/:id", async (req, res) => {
     const plan = await repo.buscarPorId(idDePlan(req.params.id));
     if (!plan) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de auditoría no existe.");
+    if (!responsableVisible(plan.responsable.id, res)) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de auditoría no existe.");
     res.json(plan);
   });
 
-  rutas.post("/planes", autorizar(...ROLES_EDICION), async (req, res) => {
-    const datos = await validar({ estado: "Borrador", ...campos(req.body) });
+  rutas.post("/planes", autorizar(ROL_JEFATURA), async (req, res) => {
+    // El código es responsabilidad del backend; el valor enviado por el cliente se ignora.
+    const cuerpo = campos(req.body);
+    const datos = await validar({ ...cuerpo, estado: cuerpo.estado ?? "Borrador", codigo: "GENERADO" });
+    datos.estado = "Borrador";
+    if (datos.tipo === "Trimestral") datos.periodo = periodoClave(datos);
+    try {
+      datos.codigo = await repo.siguienteCodigo(datos);
+    } catch (error) {
+      console.error("No se pudo generar el código del plan de auditoría.", {
+        tipo: datos.tipo,
+        fechaInicio: datos.fechaInicio,
+        error,
+      });
+      throw error;
+    }
     const plan = (await guardar(() => repo.crear(datos, usuarioEnSesion(res).id)))!;
     registrarEvento({
       accion: "plan.alta",
