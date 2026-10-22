@@ -21,6 +21,9 @@ import { pedir, pedirFormData } from "../api/cliente";
 
 // ─── Evidencias Section ───────────────────────────────────────────────────────
 const BLOCKED_EXTENSIONS = [".exe", ".bat", ".js", ".msi", ".sh", ".cmd", ".vbs", ".ps1"];
+const ALLOWED_EXTENSIONS = [".pdf", ".xlsx", ".eml", ".msg", ".zip", ".7z"];
+const ALLOWED_FORMATS_LABEL = ".pdf, .xlsx, .eml, .msg, .zip y .7z";
+const MAX_FILE_SIZE_MB = 100;
 
 interface EvidenceFile {
   id: string;
@@ -80,9 +83,9 @@ export default function EvidenciasSection({
   businessEntityId?: string;
   puedeSubir?: boolean;
 }) {
+  // Hallazgo: TBD quién sube evidencia (CLAUDE.md §7 #19); por ahora cualquier usuario en sesión.
   const puedeSubirEvidencia =
-    entityType === "control" &&
-    puedeSubir === true;
+    entityType === "control" ? puedeSubir === true : true;
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -118,18 +121,18 @@ export default function EvidenciasSection({
 
     const ext = "." + file.name.split(".").pop()?.toLowerCase();
     if (BLOCKED_EXTENSIONS.includes(ext)) {
-      setError(`Tipo de archivo no permitido (${ext}). Solo se aceptan .pdf y .xlsx.`);
+      setError(`Tipo de archivo no permitido (${ext}). Solo se aceptan ${ALLOWED_FORMATS_LABEL}.`);
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
-    if (![".pdf", ".xlsx"].includes(ext)) {
-      setError(`Solo se aceptan archivos .pdf y .xlsx.`);
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      setError(`Solo se aceptan archivos ${ALLOWED_FORMATS_LABEL}.`);
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
     const sizeMB = file.size / (1024 * 1024);
-    if (sizeMB > 50) {
-      setError("El archivo supera el límite de 50 MB.");
+    if (sizeMB > MAX_FILE_SIZE_MB) {
+      setError(`El archivo supera el límite de ${MAX_FILE_SIZE_MB} MB.`);
       if (inputRef.current) inputRef.current.value = "";
       return;
     }
@@ -225,7 +228,7 @@ export default function EvidenciasSection({
             <label className={`inline-flex items-center gap-1.5 cursor-pointer px-3 py-1.5 bg-secondary text-secondary-foreground text-xs font-semibold rounded-md hover:bg-secondary/70 transition-colors ${uploading ? "opacity-60 pointer-events-none" : ""}`}>
               {uploading ? <Loader2 size={12} className="animate-spin" /> : <UploadCloud size={12} />}
               {uploading ? "Subiendo…" : "Enviar evidencia"}
-              <input ref={inputRef} type="file" accept=".pdf,.xlsx" className="hidden" onChange={handleUpload} disabled={uploading} />
+              <input ref={inputRef} type="file" accept={ALLOWED_EXTENSIONS.join(",")} className="hidden" onChange={handleUpload} disabled={uploading} />
             </label>
           )}
         </div>
@@ -237,7 +240,7 @@ export default function EvidenciasSection({
         {files.length === 0 ? (
           <div className="text-center py-8 text-xs text-muted-foreground bg-secondary/20 rounded-lg border-2 border-dashed border-border">
             <UploadCloud size={20} className="mx-auto mb-2 text-muted-foreground/40" />
-            {puedeSubirEvidencia ? "Sin evidencias adjuntas. Sube archivos .pdf o .xlsx (máx. 50 MB)." : "Sin evidencias adjuntas."}
+            {puedeSubirEvidencia ? `Sin evidencias adjuntas. Sube archivos ${ALLOWED_FORMATS_LABEL} (máx. ${MAX_FILE_SIZE_MB} MB).` : "Sin evidencias adjuntas."}
           </div>
         ) : (
           <div className="space-y-2">
@@ -285,7 +288,7 @@ export default function EvidenciasSection({
           </div>
         )}
         <div className="mt-3 pt-3 border-t border-border text-[10px] text-muted-foreground">
-          Formatos aceptados: PDF, XLSX · Máx. 50 MB · Hash SHA-256 · Los archivos .xlsx se pueden editar directamente en Expedite
+          Formatos aceptados: PDF, XLSX, EML, MSG, ZIP, 7Z · Máx. {MAX_FILE_SIZE_MB} MB · Hash SHA-256 · Los archivos .xlsx se pueden editar directamente en Expedite
         </div>
       </Card>
     </>

@@ -6,3 +6,4 @@ backend/.env
 backend/.env.docker
 .DS_Store
 backend/uploads/
+backend/package-lock.json 

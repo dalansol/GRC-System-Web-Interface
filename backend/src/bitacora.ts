@@ -13,7 +13,12 @@ export interface EventoBitacora {
     | "conflicto.aviso_jefatura"
     | "asistente.resumen"
     | "asistente.pregunta"
-    | "asistente.consulta";
+    | "asistente.consulta"
+    | "estructura.alta"
+    | "estructura.edicion"
+    | "estructura.baja"
+    | "periodo.alta"
+    | "periodo.edicion";
   actor: string;
   detalle: Record<string, unknown>;
 }

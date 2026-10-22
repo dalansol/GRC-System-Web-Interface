@@ -68,9 +68,22 @@ huella del contenido y fecha) y la siguiente vez solo corre los que faltan.
 | `012_seguimiento_controles.sql` | Estado, horas y retroalimentación de controles; tabla `control_horas` |
 | `013_seguimiento_asignaciones_control.sql` | Estado, horas y retroalimentación por asignación (`audit_controls`) |
 | `014_quitar_seguimiento_controles_catalogo.sql` | Quita el seguimiento del catálogo `controls` (queda en cada asignación) |
-| `015_estado_inicial_controles_progreso.sql` | Las asignaciones nuevas empiezan `En Progreso` |
-| `016_conflictos_por_plan.sql` | `conflict_declarations.audit_id` apunta a `audit_plans` (historia #96) |
-| `017_seed_demo.sql` | Usuarios de "Usar un rol de prueba", planes de auditoría, hallazgos y plan de acción del modo en memoria. Solo con `--datos-prueba` |
+| `015_seed_estructura.sql` | Año fiscal 2026 (inactivo) como periodo inicial de la estructura organizacional |
+| `016_mantener_controles_al_eliminar_proceso.sql` | Al borrar un proceso, sus controles se conservan sin proceso |
+| `017_jerarquia_organizacional.sql` | Jerarquía organizacional (SF-03): `division.business_unit_id`, `business.division_id` y `business.country` (`business` = subdivisión), `area.business_id`, `business_units.audit_department_id`, `audit_entity.business_id`; departamentos `Retail & Spin` y `Beverage`; periodos trimestrales `2026Q1…Q4` con `2026Q4` activo |
+| `018_seed_jerarquia.sql` | Jerarquía del Consolidado (hoja Catalogs, nombres anonimizados): 6 unidades, 12 divisiones, 39 subdivisiones y 338 áreas (sin la subdivisión B-923765, que no tiene código). Solo con `--datos-prueba`; requiere un Jefe de Auditoría activo. Generado, no editar a mano |
+| `019_riesgos_jerarquia.sql` | Riesgos en la jerarquía: `risk_register.business_id` (el riesgo cuelga de la subdivisión) y `risk_library.level` (Crítico, Alto, Medio o Bajo; opcional) |
+| `020_seed_riesgos.sql` | Biblioteca (69 riesgos) y registro (249) del Consolidado sobre las subdivisiones de 018; el procedimiento de control es el id `CP-…`. **Niveles ficticios** (el archivo no los trae). Solo con `--datos-prueba`. Generado, no editar a mano |
+| `021_nombres_reales.sql` | `display_name` opcional en `business_units`, `division` y `business`: el nombre real (KOF, Brasil…) que se muestra junto al código; `name` sigue siendo el código único |
+| `022_seed_nombres_reales.sql` | Nombres **inferidos** de `02_Estructura.pptx` para las 6 unidades y 11 de las 12 divisiones (confianza anotada en el script; Spin y FEMSA Servicios sin confirmar). Solo con `--datos-prueba` |
+| `023_codigo_y_nombre.sql` | Fija el significado: `name`/`business_name` = **código** (identificador que asigna el backend, fijo) y `display_name` = **nombre** opcional y editable. Crea `structure_code_counters` (último número asignado por nivel; su fila se bloquea en el alta y no baja al borrar) y, como respaldo, el índice `uq_division_unit_code` |
+| `024_seed_quitar_sin_codigo.sql` | Limpia bases que ya cargaron los datos de prueba anteriores: quita la subdivisión "SIN NOMBRE (B-923765)", que no sigue el formato de código, con sus áreas y riesgos. Solo con `--datos-prueba`; en una base nueva no hace nada |
+| `025_nombres_unicos.sql` | AC2 de la parametrización: `uq_business_units_display_name` (el nombre de la unidad, si lo tiene, no se repite) y `uq_area_business_name` (el nombre del área no se repite dentro de su subdivisión), ambos con la intercalación `sin_mayusculas`. El backend traduce su violación a `409 NOMBRE_DUPLICADO` |
+| `026_nombres_periodos.sql` | Formato de los periodos: "2026 Q1"…"2026 Q4" y "2026 Fiscal" (año completo). Renombra los de formato anterior ("2026Q1" de 017, "Fiscal 2026" de 015) si el nombre nuevo no existe. 015 y 017 ahora insertan por fechas, no por nombre |
+| `027_formatos_evidencia.sql` | Formatos de evidencia (SF-08): además de PDF y XLSX, correos (`eml`, `msg`) y comprimidos (`zip`, `7z`) |
+| `028_estado_inicial_controles_progreso.sql` | Las asignaciones nuevas empiezan `En Progreso` |
+| `029_conflictos_por_plan.sql` | `conflict_declarations.audit_id` apunta a `audit_plans` (historia #96) |
+| `030_seed_demo.sql` | Usuarios de "Usar un rol de prueba", planes de auditoría, hallazgos y plan de acción del modo en memoria. Solo con `--datos-prueba` |
 
 ### Cómo agregar un cambio al esquema
 
@@ -148,6 +161,11 @@ erDiagram
     audits ||..o{ evidence : "audit_id"
     controls ||..o{ evidence : "control_id"
     findings ||..o{ evidence : "finding_id"
+    business_units ||--o{ division : "business_unit_id"
+    division ||--o{ business : "division_id"
+    business ||--o{ area : "business_id"
+    business ||--o{ audit_entity : "business_id"
+    catalog_department ||--o{ business_units : "audit_department_id"
     catalogs ||--o{ division : "catalog_id"
     catalogs ||--o{ business : "catalog_id"
     catalogs ||--o{ area : "catalog_id"
@@ -155,6 +173,7 @@ erDiagram
     catalogs ||--o{ control_procedure : "catalog_id"
     catalogs ||--o{ risk_register : "catalog_id"
     risk_library ||--o{ risk_register : "risk_library_id"
+    business ||--o{ risk_register : "business_id"
     control_procedure ||--o{ risk_register : "control_procedure_id"
     catalog_department ||--o{ audit_entity : "department_id"
     catalog_domain ||--o{ audit_entity : "domain_id"
@@ -226,6 +245,7 @@ erDiagram
         int created_by FK
         datetime created_at
         int catalog_id FK
+        int audit_department_id FK
     }
     processes {
         int id PK
@@ -324,26 +344,32 @@ erDiagram
         int division_id PK
         string name
         int catalog_id FK
+        int business_unit_id FK
     }
     business {
         int business_id PK
         string business_name
         int catalog_id FK
+        int division_id FK
+        string country
     }
     area {
         int area_id PK
         string area_name
         int catalog_id FK
+        int business_id FK
     }
     audit_entity {
         int id PK
         string name
         int department_id FK
         int domain_id FK
+        int business_id FK
     }
     risk_library {
         int risk_library_id PK
         string name
+        string level
     }
     control_procedure {
         int control_procedure_id PK
@@ -355,6 +381,7 @@ erDiagram
         int catalog_id FK
         int risk_library_id FK
         int control_procedure_id FK
+        int business_id FK
     }
     audit_status {
         int id PK
@@ -397,7 +424,11 @@ erDiagram
 | Tabla | Regla |
 |---|---|
 | `fiscal_periods` | Nombre único; la fecha de fin es posterior a la de inicio; un solo periodo activo a la vez |
-| `business_units` | Nombre único; gerente responsable y periodo fiscal obligatorios |
+| `business_units` | Nombre único (sin distinguir mayúsculas; sí acentos, por `sin_mayusculas`); gerente responsable y periodo fiscal obligatorios |
+| `division`, `business`, `area` | Jerarquía unidad → división → subdivisión (`business`) → área; cada nivel exige su padre. Los nombres se repiten entre ramas: no son únicos |
+| `risk_library` | `level` es nulo o uno de Crítico, Alto, Medio, Bajo (escala por confirmar con FEMSA) |
+| `risk_register` | Cuelga de la subdivisión (`business_id`, nulo si el dato no viene en el Consolidado). El backend no deja eliminar una subdivisión con riesgos registrados |
+| `audit_entity` | Cuelga de la subdivisión (`business_id`); si la subdivisión se elimina, la entidad se conserva sin vínculo |
 | `processes` | El nombre no se repite dentro de la misma unidad de negocio |
 | `controls` | Código único. El `id` es texto (`CTR-001`), igual que en `findings.controlId` y `evidence.control_id` |
 | `audit_controls` | Un auditor se asigna una sola vez al mismo control en una auditoría; un control tiene a lo más un auditor líder por auditoría |
@@ -411,7 +442,23 @@ erDiagram
 - `audits` solo tiene `id`, `name` y `end_date`; falta ligarla a `audit_plans` y a la
   unidad de negocio (SF-05).
 - Las horas invertidas por control (historia de asignación de controles) no tienen tabla.
-- Las tablas de `010_catalogos_riesgos_y_ejecucion.sql` solo tienen las columnas del
-  diagrama de Miro y ninguna ruta del backend las usa todavía. Faltan sus reglas de
-  negocio (nombres únicos, qué llaves son obligatorias) y definir cómo conviven `audits`
-  con `audit_engagement`, y `business_units` con `business`, `division` y `area`.
+- De las tablas de `010_catalogos_riesgos_y_ejecucion.sql`, la estructura (`division`,
+  `business`, `area`), `catalog_department`, `risk_library`, `risk_register` y
+  `control_procedure` ya las usa el Catálogo (017, 019 y 021; ver
+  [`estructura-organizacional.md`](estructura-organizacional.md)); `audit_entity`,
+  `audit_engagement` y `audit_plans` solo se leen para la regla de auditoría activa. Las
+  demás no tienen rutas todavía. Falta definir cómo conviven `audits` con
+  `audit_engagement`, y `catalogs` queda en desuso.
+- Regla de borrado de la estructura (en el backend, no en la base): no se elimina una
+  unidad, división, subdivisión o área si un `audit_engagement` de un plan `Aprobado` o
+  `En Ejecución` apunta a una entidad auditable de su rama (para un área, la de su
+  subdivisión), ni si tiene hijos; no se borra en cascada.
+- `processes` y `controls.process_id` ya no los usa la parametrización (el "proceso" de
+  la historia es el área). Falta decidir si se retiran (TBD). Al eliminar una unidad de
+  la primera versión se borran sus procesos y los controles quedan sin proceso (016).
+- El comentario de `015_seed_estructura.sql` dice "solo con --datos-prueba", pero el
+  script se aplica siempre; no se corrige para no cambiar un script ya aplicado.
+- Mapeo de `UDN-0001…0006` a nombres: **inferido** en 022 (datos de prueba); falta que FEMSA lo confirme, sobre todo Spin / FEMSA Servicios (UDN-0002 / UDN-0005) y DIVISION-0011. Las subdivisiones no tienen nombre en ningún archivo.
+- Riesgos: el catálogo solo los muestra (sin alta ni edición); falta el CRUD del catálogo
+  de riesgos de la historia original, confirmar la escala de `level` y definir si un
+  riesgo tiene estado (el explorador de prueba anterior lo tenía; el modelo no). TBD.

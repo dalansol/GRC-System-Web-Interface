@@ -25,12 +25,13 @@
 
 ## 3. Stack técnico (estado actual del repo)
 
-- **Frontend** exportado desde Figma Make ("Expedite GRC"). Casi todos los datos siguen siendo mocks en memoria (`src/app/data/mock_data.tsx`); **usuarios, roles, planes de acción y el asistente de IA ya salen del backend**.
+- **Frontend** exportado desde Figma Make ("Expedite GRC"). Casi todos los datos siguen siendo mocks en memoria (`src/app/data/mock_data.tsx`); **usuarios y roles, planes de auditoría, planes de acción, la estructura organizacional (Catálogo) y el asistente de IA ya salen del backend**.
 - React 18 + TypeScript + **Vite 6**, Tailwind CSS v4 (`@tailwindcss/vite`), componentes **shadcn/ui** (Radix) en `src/app/components/ui/`, iconos `lucide-react`, gráficas `recharts`, toasts `sonner`, también MUI instalado.
 - **Backend** en `backend/`: Node + Express 5 + TypeScript (módulos ES), `pg` para PostgreSQL en Supabase, `jose` para validar tokens de Entra ID, `unpdf` y `exceljs` para leer evidencias en el asistente de IA. Usa **pnpm** (`corepack pnpm ...`); la raíz usa **npm**.
 - Comandos frontend: `npm i`, `npm run dev`, `npm run build`, `npm test` (Vitest + Testing Library). Comandos backend: `corepack pnpm dev`, `test`, `typecheck`, `build`, `ia:probar` (conexión con la IA) e `ia:evaluar` (reglas de contención contra la IA real). No hay linter ni revisión de tipos en el frontend.
 - La app exige sesión: sin el backend corriendo muestra un error de conexión. Para desarrollo local hace falta un `.env` en la raíz y otro en `backend/` (variables en el README; modo `dev`, sin Entra ID). Nunca leer ni versionar los `.env`.
 - Diseño y pruebas de usuarios y roles: `docs/diseno/usuarios-roles.md`, `docs/pruebas/usuarios-roles.md`.
+- Diseño y pruebas de la estructura organizacional (Catálogo, SF-03): `docs/diseno/estructura-organizacional.md`, `docs/pruebas/estructura-organizacional.md`.
 - Alias `@` → `src/`. Plugin `figma:asset/…` → `src/assets/`. **No quitar** los plugins `react()` ni `tailwindcss()` de `vite.config.ts`.
 
 ### Estructura
@@ -41,24 +42,27 @@ src/
   app/App.tsx              ← la mayoría de las vistas (en proceso de refactorización para reducir su tamaño)
   app/api/                 ← cliente HTTP y llamadas a la API
   app/auth/                ← sesión, inicio de sesión (MSAL / modo dev)
-  app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, FormularioPlanAccion, VistaControles, EvidenciasSection, SpreadsheetEditor, PanelAsistenteEvidencia, CopilotPanel
+  app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, FormularioPlanAccion, VistaControles, EvidenciasSection, SpreadsheetEditor, PanelAsistenteEvidencia, CopilotPanel, ConflictosPlan
+  app/components/catalogo/ ← Catálogo Organizacional: HierarchyView (explorador), ArbolCatalogo (árbol de navegación), DetalleCatalogo (panel de detalle), modales y piezasCatalogo
   app/components/ui/       ← shadcn/ui (no editar salvo necesidad)
   app/components/figma/    ← ImageWithFallback
   app/domain/              ← lógica de estado/ViewModels (ej. useHallazgosViewModel) y contextoVista (datos que recibe el asistente Copilot)
+  app/domain/estructura/   ← useEstructuraViewModel y lógica pura: riesgos, navegacion, sugerencias, nombres, periodos
   app/data/mock_data.tsx   ← constantes y datos de prueba
+  app/data/catalogoEstructura.ts ← áreas y países del Consolidado para sugerencias (generado)
   imports/logo.svg         ← logo Expedite
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
 backend/
-  sql/                     ← scripts de PostgreSQL (esquema, datos iniciales, primer administrador, hallazgos y sus datos de prueba, auditorías, planes de acción, estructura y controles, catálogos, riesgos y ejecución)
+  sql/                     ← scripts de PostgreSQL (esquema, datos iniciales, primer administrador, hallazgos y sus datos de prueba, auditorías, planes de acción, estructura y controles, catálogos, riesgos y ejecución; 017 jerarquía, 019 riesgos en la jerarquía, 021 nombre opcional; 023 código asignado por el sistema; 018/020/022 datos del Consolidado; 024 quita la subdivisión sin código; 025 nombres únicos; 026 formato de periodos; 027 formatos de evidencia; 028–029 seguimiento de controles y conflictos por plan; 030 datos de prueba del modo en memoria)
   src/server.ts            ← único punto de arranque; abre la conexión a la base y monta las rutas
   src/app.ts               ← app Express; recibe repositorio, verificador de tokens y rutas
   src/db.ts                ← conexión compartida (la registra server.ts)
-  src/routes/              ← endpoints: usuarios.ts, planes.ts, planesAccion.ts y asistente.ts (con sesión); hallazgos.ts y evidencias.ts (aún sin sesión, solo con DATA_MODE=sql)
+  src/routes/              ← endpoints: usuarios.ts, planes.ts, planesAccion.ts, estructura.ts, conflictos.ts, asistente.ts, auditControls.ts y evidencias.ts (con sesión); hallazgos.ts (aún sin sesión, solo con DATA_MODE=sql)
   src/asistente/           ← gateway de IA: interfaz ProveedorIA, adaptadores Gemini y Azure OpenAI, extracción de texto, instrucciones y reglas de contención
   src/scripts/             ← ia:probar e ia:evaluar
-  src/domain/              ← tipos y validaciones (planes.ts, planesAccion.ts)
+  src/domain/              ← tipos y validaciones (planes.ts, planesAccion.ts, estructura.ts, conflictos.ts)
   src/middleware/          ← autenticar (token → usuario), autorizar (por rol) y upload (archivos de evidencia)
-  src/repos/               ← repositorio SQL y en memoria (incluye evidencias para el asistente y documentos de ejemplo EV-001…EV-004)
+  src/repos/               ← repositorio SQL y en memoria (incluye evidencias para el asistente y documentos de ejemplo EV-001…EV-004; semillaEstructura.ts: datos del Consolidado para DATA_MODE=memoria, generado)
   test/                    ← pruebas (las de SQL requieren SQL_TEST_*)
 ```
 
@@ -69,7 +73,7 @@ Nota: La aplicación está en proceso de refactorización hacia un enfoque MVVM 
 - **Tipos:** `NavView` (`dashboard | filter | editor | hierarchy | settings | users | plans | findings | auditado | bitacora`), `DetailType`, `StatusKey`, `AuditEntity`, `GeneralRisk`, `SpecificRisk`, `ControlRecord`, `AuditPlan`, `Finding`, `ActionPlan`, `EvidenceFile`, `BilacoraEntry`, `UserRecord`, `Xlsx*`.
 - **Mocks/constantes:** `STATUS_CONFIG`, `NAV_ITEMS`, `TASKS`, `GENERAL_RISKS`, `AUDIT_ENTITIES`, `SPECIFIC_RISKS`, `CONTROLS`, `PROCEDURE_TRACKING`, `ROLES`, `DEFAULT_PERMISSIONS`, `INITIAL_USERS`, `AUDIT_RECORDS`, `AUDIT_PLANS_DATA`, `INITIAL_FINDINGS`, `INITIAL_EVIDENCES`, `BITACORA_DATA`.
 - **Componentes base:** `StatusBadge`, `Breadcrumbs`, `PageHeader`, `Card`, `PrimaryBtn`, `GhostBtn`, `Sidebar`, `TopBar`, `PDFPreviewModal`, `exportToCSV`.
-- **Vistas:** `DashboardView`, `FilterView`, `EditorView`, `HierarchyView` (Catálogo), `SettingsView`, `BitacoraView`, `AuditPlansView`, `FindingsView`, `AuditadoPortalView` (usuarios y roles vive en `components/UsuariosRolesView.tsx`, solo para Administrador), vistas de detalle (`GeneralRiskDetailView`, `SpecificRiskDetailView`, `AuditEntityDetailView`, `VistaControlDetallado`).
+- **Vistas:** `DashboardView`, `FilterView`, `EditorView`, `SettingsView`, `BitacoraView`, `AuditPlansView`, `FindingsView`, `AuditadoPortalView` (usuarios y roles vive en `components/UsuariosRolesView.tsx`, solo para Administrador), vistas de detalle (`GeneralRiskDetailView`, `SpecificRiskDetailView`, `AuditEntityDetailView`, `VistaControlDetallado`). El Catálogo (`HierarchyView`) ya no está en `App.tsx`: vive en `components/catalogo/` (se borró la copia antigua de datos fijos y el "Explorador de Riesgos Corporativos").
 - **IA / extras:** `GuidedTour`, `SpreadsheetEditor` (editor tipo Excel con versiones y hash). `CopilotPanel` ya vive en `components/CopilotPanel.tsx` y `AISummaryCard` en `SharedComponents.tsx`; ambos usan la IA real (sin respuestas fijas).
 
 ### Convenciones de código
@@ -151,7 +155,7 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 ## 7. Decisiones pendientes / conflictos abiertos (NO asumir)
 
 1. **Proveedor de almacenamiento:** SF-08 e INT-03 aún tienen placeholders en rojo; alinear con Apéndice B ("se elegirá en diseño técnico").
-2. **Tamaño máximo de archivo:** SNF-01 excluye >30 MB; Archer usa 100 MB de referencia.
+2. ~~**Tamaño máximo de archivo**~~: resuelto (100 MB), ver "Decisiones tomadas". Falta alinear el texto de SNF-01 (>30 MB) en el SRS.
 3. **Prioridad de la IA:** UF-16 (agente Copilot) y UF-17 (Excel) en prioridad Baja, pero la IA es la prioridad #1 de FEMSA y objetivo central del MVP.
 4. **Copilot API vs Copilot Premium:** términos usados indistintamente; implican gobernanzas distintas de datos en prompts.
 5. **Lineamientos de ciberseguridad de FEMSA:** pendientes de solicitar; condicionan la arquitectura de IA.
@@ -168,6 +172,14 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 14. **Evidencias en modo memoria:** con `DATA_MODE=memoria` no existen las rutas `/api/evidencias`; `EvidenciasSection` entra en modo de respaldo y "Adjuntar archivo" solo agrega una fila en el navegador con id y hash falsos. El asistente no puede analizar esos archivos ("La evidencia no existe."); solo los de ejemplo EV-001…EV-004. Opciones: guardar las cargas en memoria en el backend (recomendada), desactivar el botón de IA en archivos locales o usar SQL.
 15. **Asistente Copilot general (UF-16):** responde con los datos que la vista le envía, que hoy son los mocks del frontend (Hallazgos lee mocks aunque la vista use el backend). Falta registrarlo como historia propia en Azure DevOps.
 
+13. **Nombres de la estructura:** el mapeo código → nombre (UDN-0003 = KOF…) se **infirió** de `02_Estructura.pptx`; falta que FEMSA lo confirme, sobre todo UDN-0002 = Spin / UDN-0005 = FEMSA Servicios y DIVISION-0011. Las subdivisiones no tienen nombre en ningún archivo.
+14. **Nivel y estado del riesgo:** la escala Crítico/Alto/Medio/Bajo no está confirmada y los niveles de los datos de prueba son ficticios (el Consolidado no los trae). No hay estado del riesgo en el modelo.
+15. **Catálogo de riesgos:** la historia pedía su alta y edición; hoy los riesgos solo se muestran en el Catálogo.
+16. **Duplicados con acento:** los nombres únicos (unidad y área en su subdivisión, 025) no distinguen mayúsculas pero sí acentos (intercalación `sin_mayusculas`, nivel 2); el borrador pedía rechazar también por acento.
+17. **`processes` y `controls.process_id`:** en desuso tras la estructura organizacional; falta decidir si se retiran.
+18. **Periodo de la unidad:** la unidad conserva el periodo activo al darla de alta ("Periodo de alta") aunque después se active otro; falta que FEMSA confirme si debe seguir al periodo activo.
+19. **Quién sube evidencia a un hallazgo:** TBD. Opciones vistas: el Auditor asignado al control del hallazgo, el responsable de su plan de acción (`action_plans.responsible_id`) o `findings."ownerId"` (hoy sin uso en la UI). Mientras tanto, para demostrar el módulo, **cualquier usuario en sesión** puede subir evidencia a un hallazgo (`EvidenciasSection.tsx` y `POST /evidencias/upload`). En controles solo sube el Auditor asignado.
+
 ### Decisiones tomadas
 
 - **Base de datos en Supabase (PostgreSQL), no en Azure SQL** (2026-10-09). El backend se conecta con `pg` directo a Postgres por el *Session pooler*; no se usan la API ni el cliente de Supabase. Todas las tablas llevan seguridad por filas activada y sin políticas para que esa API no las exponga. El esquema se aplica con `corepack pnpm db:migrar` (detalle en `docs/diseno/base-de-datos.md`).
@@ -175,6 +187,8 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 - Los permisos se leen de la base en cada petición (sin caché ni claims en el token) para que el cambio de rol sea inmediato (SF-17).
 - Un solo backend: arranca en `backend/src/server.ts`, puerto 3000, todo bajo `/api`, con una sola conexión a la base (variables `DB_*`).
 - **Planes de acción (historia #91, SF-10/SF-11):** tabla `action_plans` (un plan por hallazgo, responsable = usuario registrado, estado inicial `Asignado`) y tabla mínima `audits` (id, nombre, `end_date`) porque la fecha de cierre de la auditoría no existía en la base. Rutas `/api/planes-accion` (listar, `mios`, `responsables`, `hallazgos/:id`, POST) detrás de `autenticar`; crean Administrador, Jefe de Auditoría, Auditor Senior y Auditor. La validación "fecha de compromiso ≥ cierre de auditoría" vive en `backend/src/domain/planesAccion.ts` y se repite en el formulario. Al crear el plan el hallazgo pasa a `Asignado` y se registra `plan_accion.alta` en bitácora. El portal del auditado lee `/planes-accion/mios` del usuario en sesión.
+- **Evidencias documentales (SF-08, 2026-10-21):** tamaño máximo **100 MB** por archivo (referencia de Archer). Formatos aceptados: `.pdf`, `.xlsx`, `.eml`, `.msg`, `.zip` y `.7z` (027 amplía `ck_evidence_mime_type`; `mime_type` guarda la extensión). Como los navegadores reportan `.msg`/`.7z` (y a veces `.zip`/`.eml`) como `application/octet-stream` o sin tipo, para esos formatos el filtro de `backend/src/middleware/upload.ts` también acepta ese tipo genérico. La subida usa `multer.memoryStorage()` (el archivo entero en RAM para calcular el hash); para límites mucho mayores habría que pasar a subida por flujo.
+- **Estructura organizacional (SF-03, Planeación):** jerarquía **unidad → división → subdivisión (`business`) → área**; el "proceso" de la historia es el área. Cada unidad, división y subdivisión tiene **código** (formato del Consolidado: UDN-0007…), que es su identificador y **lo asigna el backend** al dar de alta (siguiente número del nivel, sin reutilizar los borrados; el usuario no lo escribe ni lo edita), y **nombre** opcional y editable (sin él se muestra el código); el área solo tiene nombre. **Nombres únicos (AC2):** el de la unidad, si lo tiene, y el del área dentro de su subdivisión (025, sin distinguir mayúsculas; `409 NOMBRE_DUPLICADO`). En la base el código vive en `name`/`business_name`, el nombre en `display_name` y el contador en `structure_code_counters` (023). Gerente = Jefe de Auditoría activo; escriben Administrador y Jefe de Auditoría. Periodos = los cuatro trimestres de cada año ("2026 Q1") más el año fiscal ("2026 Fiscal"), uno activo; se crean con un botón por año y se activan desde el Catálogo (insignia del encabezado), y la unidad conserva el de su alta. **Auditoría activa** = engagement de un plan `Aprobado` o `En Ejecución` en la rama, y bloquea el borrado; tampoco se borra un nodo con hijos o una subdivisión con riesgos (sin cascada). Los riesgos cuelgan de la subdivisión y son de solo lectura. El Catálogo es un explorador de dos paneles: árbol de navegación (unidad › división › subdivisión, sin áreas ni riesgos) y panel de detalle (resumen de unidades, indicadores, lista de hijos y, en la subdivisión, pestañas de riesgos y áreas). Los datos de prueba se generan del Consolidado (anonimizado). Detalle en `docs/diseno/estructura-organizacional.md`.
 
 - **Asistente de IA (historia #105, tasks #134/#135, SF-19):** el backend es el único que habla con la IA (Copilot API Gateway del SRS); la clave vive en `backend/.env` y nunca llega al frontend. El proveedor queda detrás de la interfaz `ProveedorIA` y se elige con `IA_PROVEEDOR` (`gemini`, `azure` o `ninguno`; sin proveedor la plataforma funciona y la función queda desactivada). Llamadas sin reintentos y con tiempo de espera (`IA_TIEMPO_ESPERA_MS`); cualquier falla responde 503 y el frontend desactiva el panel con un aviso. Rutas `/api/asistente/estado`, `/asistente/evidencias/:id/resumen`, `/asistente/evidencias/:id/preguntas` y `/asistente/consultas` (datos de la vista; acepta hasta 100 kB), para Administrador, Jefe de Auditoría, Auditor Senior y Auditor. Bitácora: `asistente.resumen`, `asistente.pregunta` y `asistente.consulta`, sin guardar preguntas ni respuestas.
 - **Reglas de contención de la IA:** instrucciones del sistema en `backend/src/asistente/instrucciones.ts`; el documento o los datos de la vista van delimitados y se tratan como datos, no instrucciones; temperatura 0.2 y tope de longitud; cada pregunta es independiente (sin historial); pregunta de 5 a 500 caracteres. La IA responde un JSON con `estado` (`respondida`, `fuera_de_tema`, `sin_informacion`) y el backend sustituye los dos últimos por mensajes fijos. Cualquier cambio a las reglas debe pasar `corepack pnpm ia:evaluar` (22/22 al 2026-10-09).

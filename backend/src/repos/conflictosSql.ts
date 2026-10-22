@@ -17,7 +17,7 @@ interface FilaDeclaracion {
 // Código de PostgreSQL para violación de restricción o índice único.
 const ERROR_DUPLICADO = "23505";
 
-// conflict_declarations.audit_id apunta a audit_plans (sql/016_conflictos_por_plan.sql),
+// conflict_declarations.audit_id apunta a audit_plans (sql/029_conflictos_por_plan.sql),
 // igual que audit_controls.audit_id (sql/011_audit_controls_plan.sql).
 const SELECT_DECLARACION = `
   SELECT d.id, d.audit_id AS plan_id, p.code AS plan_code, p.name AS plan_name,

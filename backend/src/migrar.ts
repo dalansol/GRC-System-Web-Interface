@@ -31,10 +31,19 @@ const SCRIPTS = [
   "012_seguimiento_controles.sql",
   "013_seguimiento_asignaciones_control.sql",
   "014_quitar_seguimiento_controles_catalogo.sql",
-  "015_estado_inicial_controles_progreso.sql",
-  "016_conflictos_por_plan.sql",
+  "015_seed_estructura.sql",
+  "016_mantener_controles_al_eliminar_proceso.sql",
+  "017_jerarquia_organizacional.sql",
+  "019_riesgos_jerarquia.sql",
+  "021_nombres_reales.sql",
+  "023_codigo_y_nombre.sql",
+  "025_nombres_unicos.sql",
+  "026_nombres_periodos.sql",
+  "027_formatos_evidencia.sql",
+  "028_estado_inicial_controles_progreso.sql",
+  "029_conflictos_por_plan.sql",
 ];
-const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "017_seed_demo.sql"];
+const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql", "022_seed_nombres_reales.sql", "024_seed_quitar_sin_codigo.sql", "030_seed_demo.sql"];
 
 const { values: opciones } = parseArgs({
   options: {

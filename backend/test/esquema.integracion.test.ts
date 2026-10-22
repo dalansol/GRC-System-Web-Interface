@@ -26,18 +26,31 @@ const SCRIPTS = [
   "012_seguimiento_controles.sql",
   "013_seguimiento_asignaciones_control.sql",
   "014_quitar_seguimiento_controles_catalogo.sql",
-  "015_estado_inicial_controles_progreso.sql",
-  "016_conflictos_por_plan.sql",
-  "017_seed_demo.sql",
+  "015_seed_estructura.sql",
+  "016_mantener_controles_al_eliminar_proceso.sql",
+  "017_jerarquia_organizacional.sql",
+  "018_seed_jerarquia.sql",
+  "019_riesgos_jerarquia.sql",
+  "020_seed_riesgos.sql",
+  "021_nombres_reales.sql",
+  "022_seed_nombres_reales.sql",
+  "023_codigo_y_nombre.sql",
+  "024_seed_quitar_sin_codigo.sql",
+  "025_nombres_unicos.sql",
+  "026_nombres_periodos.sql",
+  "027_formatos_evidencia.sql",
+  "028_estado_inicial_controles_progreso.sql",
+  "029_conflictos_por_plan.sql",
+  "030_seed_demo.sql",
 ];
 
 // Las tablas del modelo entidad-relación de docs/diseno/base-de-datos.md.
 const TABLAS = [
   "action_plans", "area", "audit_controls", "audit_engagement", "audit_engagement_team", "audit_entity",
   "audit_plans", "audit_procedure_type", "audit_procedures", "audit_status", "audits", "business",
-  "business_units", "catalog_department", "catalog_domain", "catalogs", "conflict_declarations",
+  "business_units", "catalog_department", "catalog_domain", "catalogs", "conflict_declarations", "control_horas",
   "control_procedure", "controls", "division", "evidence", "findings", "fiscal_periods", "permissions",
-  "processes", "risk_library", "risk_register", "role_permissions", "roles", "users",
+  "processes", "risk_library", "risk_register", "role_permissions", "roles", "structure_code_counters", "users",
 ];
 
 const script = (nombre: string) => readFile(new URL(`../sql/${nombre}`, import.meta.url), "utf8");
