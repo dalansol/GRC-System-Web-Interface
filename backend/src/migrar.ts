@@ -5,7 +5,7 @@
 //   pnpm db:migrar --datos-prueba
 //   pnpm db:migrar --admin-nombre "Nombre Apellido" --admin-correo correo@dominio.com
 //
-// --datos-prueba agrega los hallazgos y controles de prueba (no usar en producción).
+// --datos-prueba agrega los usuarios, planes, hallazgos y controles de prueba (no usar en producción).
 // --admin-nombre y --admin-correo dan de alta al primer Administrador, igual que
 // 003_primer_administrador.sql, sin tener que editar ese archivo.
 //
@@ -28,7 +28,7 @@ const SCRIPTS = [
   "008_estructura_y_controles.sql",
   "010_catalogos_riesgos_y_ejecucion.sql",
 ];
-const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql"];
+const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "011_seed_demo.sql"];
 
 const { values: opciones } = parseArgs({
   options: {
