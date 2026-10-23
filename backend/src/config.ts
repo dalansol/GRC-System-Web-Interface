@@ -30,11 +30,17 @@ export type ConfigIA =
       tiempoEsperaMs: number;
     };
 
+// Almacenamiento de evidencias (SF-08, INT-03): disco local o Cloudflare R2.
+export type ConfigAlmacenamiento =
+  | { proveedor: "local" }
+  | { proveedor: "r2"; cuentaId: string; claveAcceso: string; claveSecreta: string; bucket: string };
+
 export interface Config {
   puerto: number;
   auth: ConfigAuth;
   datos: ConfigDatos;
   ia: ConfigIA;
+  almacenamiento: ConfigAlmacenamiento;
   dominiosPermitidos: string[];
   corsOrigin: string[];
 }
@@ -79,6 +85,22 @@ export function cargarConfigIA(env: Entorno): ConfigIA {
     };
   }
   throw new Error("IA_PROVEEDOR debe ser 'gemini', 'azure' o 'ninguno'.");
+}
+
+export function cargarConfigAlmacenamiento(env: Entorno): ConfigAlmacenamiento {
+  const requerida = variableRequerida(env);
+  const proveedor = env.ALMACENAMIENTO?.trim() || "local";
+  if (proveedor === "local") return { proveedor };
+  if (proveedor === "r2") {
+    return {
+      proveedor,
+      cuentaId: requerida("R2_ACCOUNT_ID"),
+      claveAcceso: requerida("R2_ACCESS_KEY_ID"),
+      claveSecreta: requerida("R2_SECRET_ACCESS_KEY"),
+      bucket: requerida("R2_BUCKET"),
+    };
+  }
+  throw new Error("ALMACENAMIENTO debe ser 'local' o 'r2'.");
 }
 
 export function cargarConfig(env: Entorno): Config {
@@ -146,6 +168,7 @@ export function cargarConfig(env: Entorno): Config {
     auth,
     datos,
     ia: cargarConfigIA(env),
+    almacenamiento: cargarConfigAlmacenamiento(env),
     dominiosPermitidos,
     // Vite usa el 5174 si el 5173 está ocupado.
     corsOrigin: corsOrigin.length > 0 ? corsOrigin : ["http://localhost:5173", "http://localhost:5174"],

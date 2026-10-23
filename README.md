@@ -132,6 +132,8 @@ Backend (`backend/.env`):
 | `GEMINI_API_KEY`, `GEMINI_MODELO` | Obligatorias con `IA_PROVEEDOR=gemini` (clave de Google AI Studio y modelo, p. ej. `gemini-2.5-flash`). El plan gratuito solo es para documentos de prueba. |
 | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION` | Obligatorias con `IA_PROVEEDOR=azure`. |
 | `IA_TIEMPO_ESPERA_MS` | Tiempo máximo de espera de la IA. Por omisión `30000`. |
+| `ALMACENAMIENTO` | Dónde se guardan los archivos de evidencia (SF-08): `local` (carpeta `backend/uploads`, por omisión; en Vercel y Render se pierde al reiniciar) o `r2` (Cloudflare R2). |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Obligatorias con `ALMACENAMIENTO=r2`: ID de la cuenta de Cloudflare, credenciales de un token de API de R2 con permiso "Object Read & Write" sobre el bucket, y nombre del bucket. Los archivos quedan bajo el prefijo `evidencias/`. |
 
 Frontend (`.env`):
 
