@@ -85,6 +85,8 @@ huella del contenido y fecha) y la siguiente vez solo corre los que faltan.
 | `029_conflictos_por_plan.sql` | `conflict_declarations.audit_id` apunta a `audit_plans` (historia #96) |
 | `030_seed_demo.sql` | Usuarios de "Usar un rol de prueba", planes de auditoría, hallazgos y plan de acción del modo en memoria. Solo con `--datos-prueba` |
 | `031_rls_control_horas.sql` | Activa la seguridad por filas en `control_horas` (012 la creó sin ella y quedaba expuesta en la API de Supabase) |
+| `034_asistente_conversaciones.sql` | Memoria del asistente de IA (SF-19, UF-16): `ai_conversations` (una por usuario y hallazgo) y `ai_messages` (preguntas y respuestas; se borran en cascada con la conversación) |
+| `035_asistente_evidencias_controles.sql` | `ai_conversations.entity_type` admite `evidencia` (una conversación por usuario y archivo) y `control` (`entity_id = "<planId>:<controlId>"`) |
 
 ### Cómo agregar un cambio al esquema
 
@@ -435,6 +437,8 @@ erDiagram
 | `audit_controls` | Un auditor se asigna una sola vez al mismo control en una auditoría; un control tiene a lo más un auditor líder por auditoría |
 | `conflict_declarations` | Una declaración por auditor y auditoría; si hay conflicto, la justificación es obligatoria |
 | `action_plans` | Un plan por hallazgo |
+| `ai_conversations` | Una conversación por usuario y entidad (`entity_type`: `hallazgo`, `evidencia` o `control`); es privada de su usuario |
+| `ai_messages` | `role` es `usuario` o `asistente`; `estado` solo en respuestas (`respondida`, `fuera_de_tema`, `sin_informacion`) |
 
 ## Pendiente
 

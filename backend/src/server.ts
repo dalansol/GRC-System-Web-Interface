@@ -25,6 +25,9 @@ import { RepositorioEstructuraMemoria } from "./repos/estructuraMemoria.js";
 import { SEMILLA_ESTRUCTURA } from "./repos/semillaEstructura.js";
 import { RepositorioEstructuraSql } from "./repos/estructuraSql.js";
 import { RepositorioSql } from "./repos/sql.js";
+import type { RepositorioAsistente } from "./repos/asistente.js";
+import { expedientesDeEjemplo, RepositorioAsistenteMemoria } from "./repos/asistenteMemoria.js";
+import { RepositorioAsistenteSql } from "./repos/asistenteSql.js";
 
 const config = cargarConfig(process.env);
 const almacenamiento = crearAlmacenamiento(config.almacenamiento);
@@ -35,6 +38,7 @@ let repoPlanesAccion: RepositorioPlanesAccion;
 let repoConflictos: RepositorioConflictos;
 let repoEvidencias: RepositorioEvidencias;
 let repoEstructura: RepositorioEstructura;
+let repoAsistente: RepositorioAsistente;
 const rutasSinSesion: Router[] = [];
 
 if (config.datos.modo === "sql") {
@@ -45,6 +49,7 @@ if (config.datos.modo === "sql") {
   repoConflictos = new RepositorioConflictosSql(repoSql.pool);
   repoEvidencias = new RepositorioEvidenciasSql(repoSql.pool, almacenamiento);
   repoEstructura = new RepositorioEstructuraSql(repoSql.pool);
+  repoAsistente = new RepositorioAsistenteSql(repoSql.pool, almacenamiento);
   // Las rutas de hallazgos y evidencias usan la misma conexión que las de usuarios.
   registrarPool(repoSql.pool);
   rutasSinSesion.push((await import("./routes/hallazgos.js")).default);
@@ -55,6 +60,8 @@ if (config.datos.modo === "sql") {
   repoPlanesAccion = new RepositorioPlanesAccionMemoria(repo);
   repoConflictos = new RepositorioConflictosMemoria(repo, repoPlanes);
   repoEvidencias = new RepositorioEvidenciasMemoria();
+  // Sin base solo existen los documentos de ejemplo; hallazgos y controles responden 404.
+  repoAsistente = new RepositorioAsistenteMemoria(expedientesDeEjemplo());
   // La estructura arranca con los datos del Consolidado (anonimizados), a cargo del primer
   // Jefe de Auditoría activo, igual que 018_seed_jerarquia.sql en la base.
   const estructuraMemoria = new RepositorioEstructuraMemoria(repo);
@@ -71,6 +78,7 @@ const app = crearApp({
   repoPlanesAccion,
   repoEvidencias,
   proveedorIA: crearProveedor(config.ia),
+  repoAsistente,
   repoConflictos,
   repoEstructura,
   rutasConSesion: config.datos.modo === "sql"

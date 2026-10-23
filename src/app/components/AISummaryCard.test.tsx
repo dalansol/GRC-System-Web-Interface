@@ -8,6 +8,7 @@ import { AISummaryCard } from "./SharedComponents";
 vi.mock("../api/asistente", async (original) => ({
   ...(await original<typeof api>()),
   consultarVista: vi.fn(),
+  consultarControl: vi.fn(),
 }));
 
 beforeEach(() => vi.clearAllMocks());
@@ -31,5 +32,23 @@ describe("AISummaryCard", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/tardó demasiado/);
     expect(screen.getByRole("button", { name: /generar resumen/i })).toBeDisabled();
+  });
+
+  it("resume un control de un plan con su expediente del backend", async () => {
+    vi.mocked(api.consultarControl).mockResolvedValue({
+      planId: 7,
+      controlId: "CTR-002",
+      tipo: "resumen",
+      estado: "respondida",
+      texto: "CTR-002 en PAA-2026-001: 4 h registradas.",
+      evidenciasRecortadas: [],
+    });
+    render(<AISummaryCard entityId="CTR-002" entityType="Control" planId="7" />);
+
+    await userEvent.click(screen.getByRole("button", { name: /generar resumen/i }));
+
+    expect(await screen.findByText("CTR-002 en PAA-2026-001: 4 h registradas.")).toBeInTheDocument();
+    expect(api.consultarControl).toHaveBeenCalledWith("7", "CTR-002");
+    expect(api.consultarVista).not.toHaveBeenCalled();
   });
 });

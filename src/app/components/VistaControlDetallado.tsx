@@ -1,19 +1,22 @@
 import { useEffect, useState } from "react";
-import { ClipboardCheck, ClipboardList, Loader2, Check, X } from "lucide-react";
+import { ClipboardCheck, Loader2, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   AISummaryCard,
   Card,
   DetailField,
-  ValidityBadge,
 } from "./SharedComponents";
 import type { ControlRecord } from "./SharedComponents";
 import EvidenciasSection from "./EvidenciasSection";
 import { listarControles, registrarHoras, actualizarstatusControl } from "../api/controles";
 import { AvisoDeclaracionesPendientes, useDeclaracionesPendientes } from "./ConflictosPlan";
 import { actualizarAsignacionStatus, consultarMiAsignacionControl, consultarRevisionControl, type RevisionControl } from "../api/auditControls";
-import { AUDIT_ENTITIES, CONTROLS, PROCEDURE_TRACKING } from "../data/mock_data";
+import { obtenerPlanAuditoria, type PlanAuditoria } from "../api/planes";
+
+// Solo se muestran datos del backend: lo que la pantalla enseña es lo mismo que recibe el
+// asistente de IA (expediente del control en su plan).
+const valorODefecto = (valor: string | null | undefined) => (valor && valor.trim() ? valor : "No definido");
 
 export default function VistaControlDetallado({
   id,
@@ -25,6 +28,7 @@ export default function VistaControlDetallado({
   crumbs: React.ReactNode;
 }) {
   const [backendControl, setBackendControl] = useState<ControlRecord | null>(null);
+  const [plan, setPlan] = useState<PlanAuditoria | null>(null);
   // Historia #96: sin declaración de conflictos no se evalúan los controles del plan.
   const { pendientes: planesPendientes } = useDeclaracionesPendientes();
   const [puedeSubirEvidencia, setPuedeSubirEvidencia] = useState(false);
@@ -61,6 +65,22 @@ export default function VistaControlDetallado({
       active = false;
     };
   }, [id]);
+
+  // El plan en el que se abrió el control; si no se puede leer, la tarjeta no se muestra.
+  useEffect(() => {
+    if (!auditId) return;
+    let active = true;
+    obtenerPlanAuditoria(auditId)
+      .then((datos) => {
+        if (active) setPlan(datos);
+      })
+      .catch(() => {
+        if (active) setPlan(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [auditId]);
 
   useEffect(() => {
     let active = true;
@@ -178,7 +198,7 @@ export default function VistaControlDetallado({
     };
   }, [id, auditId]);
 
-  const ctrl = backendControl ?? CONTROLS.find((control) => control.id === id);
+  const ctrl = backendControl;
   const pendientesDelControl = planesPendientes.filter((plan) =>
     (ctrl?.auditIds ?? []).some((planId) => String(planId) === String(plan.id)),
   );
@@ -212,12 +232,6 @@ export default function VistaControlDetallado({
     );
   }
 
-  const auditEntity = AUDIT_ENTITIES.find(
-    (entity) => entity.id === ctrl.auditEntityId,
-  ) ?? { id: "—", name: "No disponible" };
-  const procedures = PROCEDURE_TRACKING.filter(
-    (procedure) => procedure.controlId === id,
-  );
 
   return (
     <div
@@ -277,7 +291,6 @@ export default function VistaControlDetallado({
               <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground bg-muted px-2 py-0.5 rounded">
                 Procedimiento de Control
               </span>
-              <ValidityBadge status={ctrl.validityStatus} />
             </div>
             <h1 className="text-xl font-bold text-foreground leading-tight">
               {ctrl.controlProcedureName}
@@ -286,8 +299,7 @@ export default function VistaControlDetallado({
         </div>
         <div className="grid grid-cols-3 gap-4 pt-3 border-t border-border mb-4">
           <DetailField label="ID Control" value={ctrl.id} />
-          <DetailField label="Entidad Auditora" value={"FEMSA Departamento de Auditorias"} />
-          {/*Este nombre es un placeholder! Se debe de modificar cuando se implemente lo de los departamentos.*/}
+          <DetailField label="Código" value={ctrl.businessControlNumber} />
         </div>
         <div className="pt-3 border-t border-border">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
@@ -312,9 +324,9 @@ export default function VistaControlDetallado({
           {[
             { label: "Tipo de Control", value: ctrl.controlType },
             { label: "Frecuencia de Operación", value: ctrl.frequency },
-            { label: "Tamaño de Muestra", value: "30"/*ctrl.sampleSize*/ },
-            { label: "Rotación", value: "Semanal" /*ctrl.rotation*/ },
-            { label: "Estatus", value: ctrl.controlStatus },
+            { label: "Tamaño de Muestra", value: valorODefecto(ctrl.sampleSize) },
+            { label: "Rotación", value: valorODefecto(ctrl.rotation) },
+            { label: "Estatus", value: ctrl.status ?? "En Progreso" },
           ].map((field) => (
             <div key={field.label} className="bg-muted/40 rounded-lg p-3">
               <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
@@ -328,62 +340,23 @@ export default function VistaControlDetallado({
         </div>
       </Card>
 
-      <Card>
-        <div className="px-4 pt-4 pb-3 border-b border-border flex items-center gap-2">
-          <ClipboardList size={15} className="text-primary" />
-          <div className="text-sm font-semibold text-foreground">
-            Seguimiento de Procedimientos
+      {plan && (
+        <Card className="mb-5 p-5">
+          <div className="text-sm font-bold text-foreground mb-3">Plan de auditoría</div>
+          <div className="grid grid-cols-4 gap-4">
+            <DetailField label="Código" value={plan.codigo} />
+            <DetailField label="Nombre" value={plan.nombre} />
+            <DetailField label="Periodo" value={`${plan.fechaInicio} a ${plan.fechaFin}${plan.periodo ? ` (${plan.periodo})` : ""}`} />
+            <DetailField label="Responsable" value={plan.responsable.nombre} />
           </div>
-          <span className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-semibold">
-            {procedures.length}
-          </span>
-        </div>
-        {procedures.length === 0 ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">
-            Sin procedimientos de seguimiento registrados
-          </div>
-        ) : (
-          <div className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  {[
-                    "ID Seguimiento",
-                    "Nombre Procedimiento",
-                    "Identificador",
-                    "Depto. Negocio",
-                    "Negocio",
-                    "División",
-                    "Área",
-                    "País",
-                  ].map((heading) => (
-                    <th
-                      key={heading}
-                      className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
-                    >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {procedures.map((procedure) => (
-                  <tr key={procedure.id} className="hover:bg-secondary/30 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-primary">{procedure.id}</td>
-                    <td className="px-4 py-3 text-xs font-medium text-foreground">{procedure.procedureName}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{procedure.identificator}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{procedure.businessDeptName}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{procedure.businessName}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{procedure.divisionName}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{procedure.area}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{procedure.country}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+          {plan.alcance && (
+            <div className="pt-3 mt-3 border-t border-border">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Alcance</div>
+              <p className="text-sm text-foreground leading-relaxed">{plan.alcance}</p>
+            </div>
+          )}
+        </Card>
+      )}
       <EvidenciasSection
         entityId={ctrl.id}
         entityType="control"
@@ -444,7 +417,7 @@ export default function VistaControlDetallado({
           </div>
         </Card>
       )}
-      <AISummaryCard entityId={ctrl.id} entityType="Control" />
+      <AISummaryCard entityId={ctrl.id} entityType="Control" planId={auditId} />
     </div>
   );
 }

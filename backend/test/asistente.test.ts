@@ -8,6 +8,13 @@ const MENSAJES: MensajeIA[] = [
   { rol: "usuario", contenido: "Resume el documento." },
 ];
 
+const CONVERSACION: MensajeIA[] = [
+  { rol: "sistema", contenido: "Responde en español." },
+  { rol: "usuario", contenido: "¿Quién es el responsable?" },
+  { rol: "asistente", contenido: "Ana Pérez." },
+  { rol: "usuario", contenido: "¿Y la fecha?" },
+];
+
 interface Llamada {
   url: string;
   init: RequestInit;
@@ -72,6 +79,18 @@ describe("proveedor Gemini", () => {
     });
   });
 
+  it("manda los turnos previos del modelo con el rol model", async () => {
+    const { fetch, llamadas } = fetchFalso(200, respuesta);
+
+    await crearProveedorGemini({ ...GEMINI, fetch }).completar(CONVERSACION);
+
+    expect(JSON.parse(String(llamadas[0]?.init.body)).contents).toEqual([
+      { role: "user", parts: [{ text: "¿Quién es el responsable?" }] },
+      { role: "model", parts: [{ text: "Ana Pérez." }] },
+      { role: "user", parts: [{ text: "¿Y la fecha?" }] },
+    ]);
+  });
+
   it("aplica temperatura, longitud máxima y modo JSON", async () => {
     const { fetch, llamadas } = fetchFalso(200, respuesta);
 
@@ -119,6 +138,19 @@ describe("proveedor Azure OpenAI", () => {
         { role: "user", content: "Resume el documento." },
       ],
     });
+  });
+
+  it("manda los turnos previos del modelo con el rol assistant", async () => {
+    const { fetch, llamadas } = fetchFalso(200, { choices: [{ message: { content: "Resumen." } }] });
+
+    await crearProveedorAzureOpenAI({ ...AZURE, fetch }).completar(CONVERSACION);
+
+    expect(JSON.parse(String(llamadas[0]?.init.body)).messages.map((m: { role: string }) => m.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "user",
+    ]);
   });
 
   it("aplica temperatura, longitud máxima y modo JSON", async () => {

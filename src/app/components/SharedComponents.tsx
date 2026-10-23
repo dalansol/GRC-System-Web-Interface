@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 
 import {STATUS_CONFIG} from "../data/mock_data"
-import { consultarVista, type EstadoRespuesta } from "../api/asistente";
+import { consultarControl, consultarVista, type EstadoRespuesta } from "../api/asistente";
 import { ErrorApi } from "../api/cliente";
 import { contextoPorEtiqueta } from "../domain/contextoVista";
 
@@ -521,20 +521,26 @@ function ValidityBadge({ status }: { status: string }) {
 
 // ─── AI Summary Card ──────────────────────────────────────────────────────────
 // Resumen con IA del registro abierto (riesgo, entidad o control), con los mismos datos de la pantalla.
-function AISummaryCard({ entityId, entityType }: { entityId: string; entityType: string }) {
+// Un control abierto desde un plan (planId) se resume con su expediente real del backend;
+// los demás registros, con los datos de la vista.
+function AISummaryCard({ entityId, entityType, planId }: { entityId: string; entityType: string; planId?: string }) {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<{ texto: string; estado: EstadoRespuesta } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [desactivado, setDesactivado] = useState(false);
-  const contexto = contextoPorEtiqueta(entityType, entityId);
+  const controlEnPlan = entityType === "Control" && planId ? planId : null;
+  const contexto = controlEnPlan ? null : contextoPorEtiqueta(entityType, entityId);
+  const tieneDatos = Boolean(controlEnPlan || contexto);
 
   const generate = async () => {
-    if (!contexto) return;
+    if (!tieneDatos) return;
     setLoading(true);
     setSummary(null);
     setError(null);
     try {
-      const respuesta = await consultarVista(contexto.vista, contexto.contexto);
+      const respuesta = controlEnPlan
+        ? await consultarControl(controlEnPlan, entityId)
+        : await consultarVista(contexto!.vista, contexto!.contexto);
       setSummary({ texto: respuesta.texto, estado: respuesta.estado });
     } catch (e) {
       setError(e instanceof ErrorApi ? e.message : "Ocurrió un error inesperado.");
@@ -556,7 +562,7 @@ function AISummaryCard({ entityId, entityType }: { entityId: string; entityType:
         </div>
         <button
           onClick={() => void generate()}
-          disabled={loading || desactivado || !contexto}
+          disabled={loading || desactivado || !tieneDatos}
           className="inline-flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground text-xs font-semibold rounded-md hover:bg-primary/90 transition-colors disabled:opacity-60"
         >
           {loading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
@@ -571,9 +577,11 @@ function AISummaryCard({ entityId, entityType }: { entityId: string; entityType:
       )}
       {!summary && !loading && !error && (
         <p className="text-xs text-muted-foreground bg-secondary/40 rounded-md px-3 py-2.5">
-          {contexto
-            ? `Haz clic en "Generar resumen" para obtener un análisis con IA de este registro y los controles, riesgos y hallazgos relacionados.`
-            : "No hay datos de este registro para el asistente."}
+          {controlEnPlan
+            ? `Haz clic en "Generar resumen" para obtener un análisis con IA de este control en su plan: lo que exige, su avance, la revisión y tus evidencias.`
+            : contexto
+              ? `Haz clic en "Generar resumen" para obtener un análisis con IA de este registro y los controles, riesgos y hallazgos relacionados.`
+              : "No hay datos de este registro para el asistente."}
         </p>
       )}
       {loading && (

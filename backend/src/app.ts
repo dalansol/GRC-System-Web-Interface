@@ -5,6 +5,8 @@ import type { VerificadorToken } from "./auth/verificador.js";
 import { registrarEnConsola, type RegistrarEvento } from "./bitacora.js";
 import { ErrorApi } from "./errores.js";
 import { autenticar } from "./middleware/autenticar.js";
+import type { RepositorioAsistente } from "./repos/asistente.js";
+import { RepositorioAsistenteMemoria } from "./repos/asistenteMemoria.js";
 import type { RepositorioConflictos } from "./repos/conflictos.js";
 import { RepositorioConflictosMemoria } from "./repos/conflictosMemoria.js";
 import type { RepositorioEstructura } from "./repos/estructura.js";
@@ -27,6 +29,8 @@ export interface DependenciasApp {
   repoEvidencias: RepositorioEvidencias;
   /** null si la IA está desactivada (IA_PROVEEDOR=ninguno). */
   proveedorIA: ProveedorIA | null;
+  /** Expedientes y memoria del asistente. Si no se indica se usa el repositorio en memoria. */
+  repoAsistente?: RepositorioAsistente;
   /** Declaraciones de conflictos de interés. Si no se indica se usa el repositorio en memoria. */
   repoConflictos?: RepositorioConflictos;
   repoEstructura?: RepositorioEstructura;
@@ -78,7 +82,12 @@ export function crearApp(deps: DependenciasApp): Express {
     }),
     rutasPlanes({ repo: deps.repoPlanes, usuarios: deps.repo, registrarEvento }),
     rutasPlanesAccion({ repo: deps.repoPlanesAccion, usuarios: deps.repo, registrarEvento }),
-    rutasAsistente({ proveedor: deps.proveedorIA, evidencias: deps.repoEvidencias, registrarEvento }),
+    rutasAsistente({
+      proveedor: deps.proveedorIA,
+      evidencias: deps.repoEvidencias,
+      conversaciones: deps.repoAsistente ?? new RepositorioAsistenteMemoria(),
+      registrarEvento,
+    }),
     rutasConflictos({
       repo: deps.repoConflictos ?? new RepositorioConflictosMemoria(deps.repo, deps.repoPlanes),
       registrarEvento,

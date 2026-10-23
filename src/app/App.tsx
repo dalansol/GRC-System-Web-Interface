@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { toast, Toaster } from "sonner";
 
 import {
@@ -130,10 +130,11 @@ import {
   ROLES
 } from "./data/mock_data";
 
-import VistaHallazgo from "./components/VistaHallazgo";
+import VistaHallazgo, { type HallazgoActivo } from "./components/VistaHallazgo";
 import VistaControles from "./components/VistaControles";
 import EvidenciasSection from "./components/EvidenciasSection";
 import CopilotPanel from "./components/CopilotPanel";
+import { conversacionControl, conversacionHallazgo } from "./domain/conversacionesAsistente";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
 import UsuariosRolesView from "./components/UsuariosRolesView";
 import AuditPlansView from "./components/VistaPlanesAudito";
@@ -3246,6 +3247,8 @@ export default function App() {
   const [navView, setNavView] = useState<NavView>("dashboard");
   const [stack, setStack] = useState<StackEntry[]>([]);
   const [copilotOpen, setCopilotOpen] = useState(false);
+  // Hallazgo expandido en la vista de Hallazgos: el Copilot conversa sobre su expediente.
+  const [hallazgoActivo, setHallazgoActivo] = useState<HallazgoActivo | null>(null);
   const [tourActive, setTourActive] = useState(() => {
     try { return localStorage.getItem("expedite_tour_done") !== "1"; } catch { return true; }
   });
@@ -3253,6 +3256,7 @@ export default function App() {
   const goToNav = (v: NavView) => {
     setNavView(v);
     setStack([]);
+    setHallazgoActivo(null);
   };
   const navigate: Navigate = (type, id, auditId) =>
     setStack((prev) => [...prev, { type, id, auditId }]);
@@ -3261,6 +3265,14 @@ export default function App() {
   const clearStack = () => setStack([]);
 
   const top = stack[stack.length - 1] ?? null;
+
+  // Entidades con expediente en el backend: el Copilot conversa con memoria sobre ellas.
+  const controlEnPlan = top?.type === "control" && top.auditId ? { planId: top.auditId, controlId: top.id } : null;
+  const conversacion = useMemo(() => {
+    if (controlEnPlan) return conversacionControl(controlEnPlan.planId, controlEnPlan.controlId);
+    if (navView === "findings" && !top && hallazgoActivo) return conversacionHallazgo(hallazgoActivo);
+    return null;
+  }, [controlEnPlan?.planId, controlEnPlan?.controlId, navView, top, hallazgoActivo]);
 
   // Build breadcrumb nodes for detail views
   const crumbs = top ? (
@@ -3365,7 +3377,7 @@ export default function App() {
       case "plans":
         return <AuditPlansView canCreate={usuario?.rol === "Jefe de Auditoría"} navigate={navigate} />;
       case "findings":
-        return <VistaHallazgo />;
+        return <VistaHallazgo onHallazgoActivo={setHallazgoActivo} />;
       case "controles":
         return <VistaControles navigate={navigate} />;
       case "auditado":
@@ -3395,7 +3407,7 @@ export default function App() {
         {renderContent()}
       </div>
       <Toaster position="bottom-right" richColors />
-      <CopilotPanel currentView={navView} detalle={top} open={copilotOpen} onToggle={() => setCopilotOpen(o => !o)} />
+      <CopilotPanel currentView={navView} detalle={top} conversacion={conversacion} open={copilotOpen} onToggle={() => setCopilotOpen(o => !o)} />
       {tourActive && <GuidedTour onClose={handleTourClose} />}
       {/* Tour relaunch button */}
       {!tourActive && !copilotOpen && (

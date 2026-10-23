@@ -28,8 +28,8 @@ export function crearProveedorGemini({ apiKey, modelo, tiempoEsperaMs, fetch }: 
       const cuerpo = {
         ...(instrucciones.length > 0 ? { systemInstruction: { parts: instrucciones } } : {}),
         contents: mensajes
-          .filter((m) => m.rol === "usuario")
-          .map((m) => ({ role: "user", parts: [{ text: m.contenido }] })),
+          .filter((m) => m.rol !== "sistema")
+          .map((m) => ({ role: m.rol === "asistente" ? "model" : "user", parts: [{ text: m.contenido }] })),
         ...(Object.keys(generationConfig).length > 0 ? { generationConfig } : {}),
       };
 

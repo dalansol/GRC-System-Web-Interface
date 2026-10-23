@@ -6,6 +6,7 @@ import { poolPromise } from "../db.js";
 import { upload } from "../middleware/upload.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import type { AlmacenamientoArchivos } from "../almacenamiento.js";
+import { condicionControlVisible, condicionHallazgoVisible } from "../repos/evidenciasAcceso.js";
 
 // Los archivos se guardan en el almacenamiento configurado (disco local o Cloudflare R2,
 // SF-08/INT-03); la tabla evidence guarda la clave en storage_path.
@@ -28,7 +29,7 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
       let query = `
         SELECT e.* FROM evidence e
         WHERE e.entity_id = $1
-          AND e.uploaded_by = $2
+          AND ${condicionHallazgoVisible("$2")}
         ORDER BY e.created_at DESC`;
       let params: string[] = [entityId as string, String(usuario.id)];
 
@@ -38,31 +39,14 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
           WHERE e.entity_id = $1
             AND e.entity_type = 'control'
             AND e.audit_id::text = $2
-            AND (
-              ($3 = 'Auditor' AND e.uploaded_by = $4)
-              OR ($3 = 'Auditor Senior' AND EXISTS (
-                SELECT 1 FROM audit_controls ac
-                WHERE ac.control_id = e.entity_id
-                  AND ac.audit_id::text = e.audit_id::text
-                  AND ac.assigned_by = $4::integer
-                  AND ac.auditor_id::text = e.uploaded_by
-              ))
-              OR ($3 = 'Jefe de Auditoría' AND EXISTS (
-                SELECT 1 FROM audit_controls ac
-                JOIN audit_plans ap ON ap.id::text = ac.audit_id::text
-                WHERE ac.control_id = e.entity_id
-                  AND ac.audit_id::text = e.audit_id::text
-                  AND ap.created_by = $4::integer
-                  AND ac.auditor_id::text = e.uploaded_by
-              ))
-            )
+            AND ${condicionControlVisible("$3", "$4")}
           ORDER BY e.created_at DESC`;
         params = [entityId as string, String(auditId ?? ""), usuario.rol, String(usuario.id)];
       } else if (entityType === "hallazgo") {
         query = `
           SELECT e.* FROM evidence e
           WHERE e.finding_id = $1
-            AND e.uploaded_by = $2
+            AND ${condicionHallazgoVisible("$2")}
           ORDER BY e.created_at DESC`;
       }
 

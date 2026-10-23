@@ -1,13 +1,23 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Info, Send, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Info, RotateCcw, Send, Sparkles, X } from "lucide-react";
 
-import { consultarVista, PREGUNTA_MAX, PREGUNTA_MIN, obtenerEstadoAsistente, type EstadoRespuesta } from "../api/asistente";
+import {
+  consultarVista,
+  obtenerEstadoAsistente,
+  PREGUNTA_MAX,
+  PREGUNTA_MIN,
+  type EstadoRespuesta,
+  type MensajeConversacion,
+} from "../api/asistente";
 import { ErrorApi } from "../api/cliente";
 import { contextoDetalle, contextoVista, type TipoDetalle } from "../domain/contextoVista";
+import type { ConversacionAsistente } from "../domain/conversacionesAsistente";
 
 // ─── Copilot Panel ────────────────────────────────────────────────────────────
 // Asistente general: responde con los datos de la vista abierta (UF-16, SF-19).
-// El backend aplica las reglas de contención; cada pregunta es independiente.
+// El backend aplica las reglas de contención. En las vistas cada pregunta es independiente;
+// con un hallazgo o un control de un plan abierto, el backend arma su expediente y recuerda la
+// conversación (ver domain/conversacionesAsistente.ts).
 
 const COPILOT_SUGGESTIONS: Record<string, string[]> = {
   dashboard: ["Resume los hallazgos abiertos", "¿Qué tareas están vencidas?", "Redacta un borrador de informe ejecutivo"],
@@ -28,18 +38,23 @@ const AVISO_NO_DISPONIBLE = "El asistente de IA no está disponible en este mome
 
 type ChatMsg =
   | { role: "user"; content: string }
-  | { role: "ai"; content: string; estado: EstadoRespuesta }
+  | { role: "ai"; content: string; estado: EstadoRespuesta; nota?: string }
   | { role: "error"; content: string };
+
+const aChatMsg = (m: MensajeConversacion): ChatMsg =>
+  m.rol === "usuario" ? { role: "user", content: m.texto } : { role: "ai", content: m.texto, estado: m.estado ?? "respondida" };
 
 interface Props {
   currentView: string;
   /** Registro abierto en detalle, si lo hay. */
   detalle?: { type: TipoDetalle; id: string } | null;
+  /** Entidad con expediente en el backend (hallazgo o control en un plan); activa la conversación con memoria. */
+  conversacion?: ConversacionAsistente | null;
   open: boolean;
   onToggle: () => void;
 }
 
-export default function CopilotPanel({ currentView, detalle, open, onToggle }: Props) {
+export default function CopilotPanel({ currentView, detalle, conversacion, open, onToggle }: Props) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -52,8 +67,43 @@ export default function CopilotPanel({ currentView, detalle, open, onToggle }: P
     () => (detalle ? contextoDetalle(detalle.type, detalle.id) : contextoVista(currentView)),
     [currentView, detalle],
   );
-  const suggestions = COPILOT_SUGGESTIONS[detalle?.type ?? currentView] ?? [];
+  // El objeto puede cambiar en cada render; los efectos dependen solo de su clave.
+  const conversacionRef = useRef(conversacion);
+  conversacionRef.current = conversacion;
+  const claveConversacion = conversacion?.clave ?? null;
+  const suggestions = conversacion ? conversacion.sugerencias : (COPILOT_SUGGESTIONS[detalle?.type ?? currentView] ?? []);
   const hasMessages = messages.length > 0;
+  const etiqueta = conversacion
+    ? conversacion.etiqueta
+    : contexto
+      ? `Datos de la vista: ${contexto.vista}`
+      : "Sin datos de esta vista";
+  const claveContexto = claveConversacion ?? (detalle ? `${detalle.type}:${detalle.id}` : currentView);
+
+  // Al cambiar de vista, de registro o de entidad empieza otra conversación.
+  const claveActual = useRef(claveContexto);
+  useEffect(() => {
+    claveActual.current = claveContexto;
+    setMessages([]);
+  }, [claveContexto]);
+
+  // La conversación de una entidad vive en el backend: se carga al abrir el panel.
+  useEffect(() => {
+    const actual = conversacionRef.current;
+    if (!open || !actual) return;
+    let vigente = true;
+    actual
+      .obtener()
+      .then((mensajes) => {
+        if (vigente) setMessages(mensajes.map(aChatMsg));
+      })
+      .catch((e: unknown) => {
+        if (vigente) setMessages([{ role: "error", content: e instanceof ErrorApi ? e.message : "No se pudo cargar la conversación." }]);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [open, claveConversacion]);
 
   // Se verifica la disponibilidad la primera vez que se abre el panel.
   useEffect(() => {
@@ -86,17 +136,31 @@ export default function CopilotPanel({ currentView, detalle, open, onToggle }: P
     bottomRef.current?.scrollIntoView?.({ behavior: "smooth" });
   }, [messages, loading]);
 
-  const bloqueado = disponible !== true || loading || !contexto;
+  const tieneDatos = Boolean(claveConversacion || contexto);
+  const bloqueado = disponible !== true || loading || !tieneDatos;
+
+  const responder = async (pregunta: string): Promise<ChatMsg> => {
+    if (conversacion) {
+      const respuesta = await conversacion.consultar(pregunta);
+      const recortadas = respuesta.evidenciasRecortadas;
+      const nota = recortadas.length > 0 ? `De ${recortadas.join(", ")} solo se analizó la parte inicial.` : undefined;
+      return { role: "ai", content: respuesta.texto, estado: respuesta.estado, nota };
+    }
+    const respuesta = await consultarVista(contexto!.vista, contexto!.contexto, pregunta);
+    return { role: "ai", content: respuesta.texto, estado: respuesta.estado };
+  };
 
   const sendMessage = async (text: string) => {
     const pregunta = text.trim();
-    if (bloqueado || pregunta.length < PREGUNTA_MIN || !contexto) return;
+    if (bloqueado || pregunta.length < PREGUNTA_MIN) return;
     setMessages((prev) => [...prev, { role: "user", content: pregunta }]);
     setInput("");
     setLoading(true);
+    // Una respuesta que llega después de cambiar de contexto no se mezcla con la nueva conversación.
+    const clave = claveContexto;
     try {
-      const respuesta = await consultarVista(contexto.vista, contexto.contexto, pregunta);
-      setMessages((prev) => [...prev, { role: "ai", content: respuesta.texto, estado: respuesta.estado }]);
+      const mensaje = await responder(pregunta);
+      if (claveActual.current === clave) setMessages((prev) => [...prev, mensaje]);
     } catch (e) {
       if (e instanceof ErrorApi && (e.status === 503 || e.status === 0)) {
         setDisponible(false);
@@ -106,6 +170,16 @@ export default function CopilotPanel({ currentView, detalle, open, onToggle }: P
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const nuevaConversacion = async () => {
+    if (!conversacion || loading) return;
+    try {
+      await conversacion.borrar();
+      setMessages([]);
+    } catch (e) {
+      setMessages((prev) => [...prev, { role: "error", content: e instanceof ErrorApi ? e.message : "No se pudo borrar la conversación." }]);
     }
   };
 
@@ -153,14 +227,23 @@ export default function CopilotPanel({ currentView, detalle, open, onToggle }: P
             </div>
             <div className="min-w-0">
               <div className="text-sm font-bold text-foreground">Asistente Copilot IA</div>
-              <div className="text-[10px] text-muted-foreground truncate">
-                {contexto ? `Datos de la vista: ${contexto.vista}` : "Sin datos de esta vista"}
-              </div>
+              <div className="text-[10px] text-muted-foreground truncate">{etiqueta}</div>
             </div>
+            {conversacion && hasMessages && (
+              <button
+                onClick={() => void nuevaConversacion()}
+                disabled={loading}
+                aria-label="Nueva conversación"
+                title="Nueva conversación"
+                className="ml-auto p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary transition-colors disabled:opacity-40"
+              >
+                <RotateCcw size={14} />
+              </button>
+            )}
             <button
               onClick={onToggle}
               aria-label="Cerrar asistente"
-              className="ml-auto p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary transition-colors"
+              className={`${conversacion && hasMessages ? "" : "ml-auto "}p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary transition-colors`}
             >
               <X size={14} />
             </button>
@@ -183,11 +266,13 @@ export default function CopilotPanel({ currentView, detalle, open, onToggle }: P
                 </div>
                 <div className="text-sm font-bold text-foreground mb-1">¿En qué puedo ayudarte?</div>
                 <p className="text-xs text-muted-foreground leading-relaxed mb-6">
-                  {contexto
-                    ? "Respondo con los datos de la vista que estás viendo: puedo resumir, priorizar, comparar y redactar borradores."
-                    : "El asistente aún no tiene datos de esta vista. Abre Dashboard, Controles, Hallazgos u otra vista con información."}
+                  {conversacion
+                    ? conversacion.mensajeVacio
+                    : contexto
+                      ? "Respondo con los datos de la vista que estás viendo: puedo resumir, priorizar, comparar y redactar borradores."
+                      : "El asistente aún no tiene datos de esta vista. Abre Dashboard, Controles, Hallazgos u otra vista con información."}
                 </p>
-                {contexto && suggestions.length > 0 && (
+                {tieneDatos && suggestions.length > 0 && (
                   <div className="w-full space-y-2">
                     <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-3">
                       Acciones sugeridas
@@ -199,7 +284,7 @@ export default function CopilotPanel({ currentView, detalle, open, onToggle }: P
             ) : (
               /* Conversation messages */
               <div className="px-4 pt-4 pb-2 space-y-3">
-                {contexto && suggestions.length > 0 && (
+                {tieneDatos && suggestions.length > 0 && (
                   <div className="pb-1 border-b border-border mb-1">
                     <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">
                       Acciones sugeridas
@@ -228,6 +313,7 @@ export default function CopilotPanel({ currentView, detalle, open, onToggle }: P
                     >
                       {m.role === "ai" && m.estado !== "respondida" && <Info size={12} className="mr-1 inline-block align-[-2px]" />}
                       {m.content}
+                      {m.role === "ai" && m.nota && <div className="mt-1.5 text-[10px] text-muted-foreground">{m.nota}</div>}
                     </div>
                   </div>
                 ))}
@@ -263,9 +349,9 @@ export default function CopilotPanel({ currentView, detalle, open, onToggle }: P
                   }
                 }}
                 maxLength={PREGUNTA_MAX}
-                disabled={disponible !== true || !contexto}
+                disabled={disponible !== true || !tieneDatos}
                 aria-label="Pregunta para el asistente"
-                placeholder="Pregunta sobre los datos de esta vista…"
+                placeholder={conversacion ? conversacion.placeholder : "Pregunta sobre los datos de esta vista…"}
                 className="flex-1 min-w-0 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground disabled:opacity-50"
               />
               <button
@@ -278,7 +364,9 @@ export default function CopilotPanel({ currentView, detalle, open, onToggle }: P
               </button>
             </div>
             <div className="mt-1.5 text-[10px] text-muted-foreground">
-              Respuestas generadas por IA con los datos de esta vista; verifícalas antes de usarlas.
+              {conversacion
+                ? conversacion.pie
+                : "Respuestas generadas por IA con los datos de esta vista; verifícalas antes de usarlas."}
             </div>
           </div>
         </div>

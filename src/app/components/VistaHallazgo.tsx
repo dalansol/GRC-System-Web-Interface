@@ -1,4 +1,4 @@
-import React, { Fragment } from "react";
+import React, { Fragment, useEffect } from "react";
 import {
   Trash2,
   Edit3,
@@ -29,7 +29,17 @@ import { useHallazgosViewModel, HallazgoViewModel } from "../domain/hallazgos/us
 
 export type Hallazgo = HallazgoViewModel;
 
-export default function VistaHallazgo() {
+export interface HallazgoActivo {
+  id: string;
+  folio: string | null;
+}
+
+interface Props {
+  /** Avisa qué hallazgo está expandido, para que el asistente Copilot use su expediente. */
+  onHallazgoActivo?: (hallazgo: HallazgoActivo | null) => void;
+}
+
+export default function VistaHallazgo({ onHallazgoActivo }: Props = {}) {
   const {
     hallazgos,
     loading,
@@ -57,6 +67,14 @@ export default function VistaHallazgo() {
     handleUpdate,
     handleFindingCreated,
   } = useHallazgosViewModel();
+
+  const activo = hallazgos.find((h) => h.id === expandedFinding);
+  const activoId = activo?.id ?? null;
+  const activoFolio = activo?.folio ?? null;
+  useEffect(() => {
+    onHallazgoActivo?.(activoId ? { id: activoId, folio: activoFolio } : null);
+  }, [onHallazgoActivo, activoId, activoFolio]);
+  useEffect(() => () => onHallazgoActivo?.(null), [onHallazgoActivo]);
 
   // Solo el equipo de auditoría edita planes, y nunca el propio responsable auditado (el backend repite la regla).
   const { usuario } = useSesion();

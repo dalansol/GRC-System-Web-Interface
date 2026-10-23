@@ -14,6 +14,8 @@ interface RespuestaAzure {
   choices?: { message?: { content?: unknown } }[];
 }
 
+const ROLES = { sistema: "system", usuario: "user", asistente: "assistant" } as const;
+
 // Azure OpenAI (Chat Completions sobre un despliegue del recurso).
 export function crearProveedorAzureOpenAI({ endpoint, apiKey, despliegue, versionApi, tiempoEsperaMs, fetch }: OpcionesAzureOpenAI): ProveedorIA {
   const url =
@@ -27,7 +29,7 @@ export function crearProveedorAzureOpenAI({ endpoint, apiKey, despliegue, versio
         url,
         encabezados: { "api-key": apiKey },
         cuerpo: {
-          messages: mensajes.map((m) => ({ role: m.rol === "sistema" ? "system" : "user", content: m.contenido })),
+          messages: mensajes.map((m) => ({ role: ROLES[m.rol], content: m.contenido })),
           ...(temperatura !== undefined ? { temperature: temperatura } : {}),
           ...(maxTokens !== undefined ? { max_tokens: maxTokens } : {}),
           ...(json ? { response_format: { type: "json_object" } } : {}),
