@@ -1,5 +1,6 @@
 import "dotenv/config";
 import type { Router } from "express";
+import { crearAlmacenamiento } from "./almacenamiento.js";
 import { crearApp } from "./app.js";
 import { crearProveedor } from "./asistente/proveedor.js";
 import { crearVerificadorDev, crearVerificadorEntra } from "./auth/verificador.js";
@@ -26,6 +27,7 @@ import { RepositorioEstructuraSql } from "./repos/estructuraSql.js";
 import { RepositorioSql } from "./repos/sql.js";
 
 const config = cargarConfig(process.env);
+const almacenamiento = crearAlmacenamiento(config.almacenamiento);
 
 let repo: RepositorioUsuarios;
 let repoPlanes: RepositorioPlanes;
@@ -41,7 +43,7 @@ if (config.datos.modo === "sql") {
   repoPlanes = new RepositorioPlanesSql(repoSql.pool);
   repoPlanesAccion = new RepositorioPlanesAccionSql(repoSql.pool);
   repoConflictos = new RepositorioConflictosSql(repoSql.pool);
-  repoEvidencias = new RepositorioEvidenciasSql(repoSql.pool);
+  repoEvidencias = new RepositorioEvidenciasSql(repoSql.pool, almacenamiento);
   repoEstructura = new RepositorioEstructuraSql(repoSql.pool);
   // Las rutas de hallazgos y evidencias usan la misma conexión que las de usuarios.
   registrarPool(repoSql.pool);
@@ -72,7 +74,7 @@ const app = crearApp({
   repoConflictos,
   repoEstructura,
   rutasConSesion: config.datos.modo === "sql"
-    ? [(await import("./routes/evidencias.js")).default]
+    ? [(await import("./routes/evidencias.js")).rutasEvidencias(almacenamiento)]
     : [],
   verificador,
   dominiosPermitidos: config.dominiosPermitidos,
@@ -82,6 +84,6 @@ const app = crearApp({
 
 app.listen(config.puerto, () => {
   console.log(
-    `API Expedite en http://localhost:${config.puerto}/api (autenticación: ${config.auth.modo}, datos: ${config.datos.modo}, IA: ${config.ia.proveedor})`,
+    `API Expedite en http://localhost:${config.puerto}/api (autenticación: ${config.auth.modo}, datos: ${config.datos.modo}, archivos: ${config.almacenamiento.proveedor}, IA: ${config.ia.proveedor})`,
   );
 });
