@@ -110,7 +110,7 @@ export function ModalRegistrarNodo({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {conCodigo && codigoProximo && <CampoCodigo codigo={codigoProximo} proximo />}
+          {conCodigo && <CampoCodigo codigo={codigoProximo ?? null} proximo />}
 
           <div>
             <label htmlFor="nodo-nombre" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">

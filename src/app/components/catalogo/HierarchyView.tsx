@@ -3,7 +3,7 @@ import { AlertTriangle, Building2, Calendar, ChevronRight, Pencil, Plus, Refresh
 import { ETIQUETA_NIVEL, NIVELES_RIESGO, type AltaUnidadInput, type NivelRiesgo, type UnidadNegocio } from "../../api/estructura";
 import { clavesAncestros, dependientesDe, resolverRuta, type RutaCatalogo } from "../../domain/estructura/navegacion";
 import { filtrarUnidades, riesgosDeNodo } from "../../domain/estructura/riesgos";
-import { codigoProximo, sugerenciasArea, sugerenciasPais } from "../../domain/estructura/sugerencias";
+import { sugerenciasArea, sugerenciasPais } from "../../domain/estructura/sugerencias";
 import { useEstructuraViewModel, type NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
 import { ArbolCatalogo } from "./ArbolCatalogo";
@@ -42,6 +42,7 @@ export function HierarchyView() {
     cerrarModalPeriodos,
     guardarPeriodo,
     activarPeriodo,
+    codigoProximo,
     modalAltaAbierto,
     errorModalAlta,
     abrirModalAlta,
@@ -67,9 +68,6 @@ export function HierarchyView() {
 
   // Sugerencias de los formularios (catálogo de FEMSA + lo ya registrado).
   const paisesSugeridos = useMemo(() => sugerenciasPais(unidades), [unidades]);
-  // Vista previa del código que asignará el backend; el usuario no lo escribe.
-  const codigoProximoUnidad = useMemo(() => codigoProximo("unidad", unidades), [unidades]);
-  const codigoProximoNodo = altaNodo && altaNodo.nivel !== "area" ? codigoProximo(altaNodo.nivel, unidades) : undefined;
   const areasSugeridas = useMemo(
     () => (altaNodo?.nivel === "area" ? sugerenciasArea(unidades, altaNodo.padreId) : []),
     [altaNodo, unidades],
@@ -388,7 +386,7 @@ export function HierarchyView() {
         errorServidor={errorModalAlta}
         onGuardar={registrarUnidad}
         onCerrar={cerrarModalAlta}
-        codigoProximo={codigoProximoUnidad}
+        codigoProximo={codigoProximo}
       />
 
       {/* ── Modal de Periodos de Auditoría ── */}
@@ -410,7 +408,7 @@ export function HierarchyView() {
         errorServidor={errorModalNodo}
         onGuardar={guardarNuevoNodo}
         onCerrar={cerrarAltaNodo}
-        codigoProximo={codigoProximoNodo}
+        codigoProximo={codigoProximo}
         sugerencias={areasSugeridas}
         sugerenciasPais={paisesSugeridos}
       />

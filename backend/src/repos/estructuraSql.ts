@@ -343,29 +343,34 @@ export class RepositorioEstructuraSql implements RepositorioEstructura {
   }
 
   /**
-   * Siguiente código del nivel, dentro de la transacción del alta. El contador
-   * (`structure_code_counters`, 023) bloquea su fila para que dos altas simultáneas no
-   * tomen el mismo número y no baja al borrar; se compara con el mayor código existente
-   * porque los datos importados o de prueba no pasan por él.
+   * Siguiente código del nivel, dentro de la transacción del alta: el mayor código existente
+   * más uno, así que se reutiliza el de un elemento borrado si era el último (decisión del
+   * 2026-10-28). La fila del nivel en `structure_code_counters` (023) solo se bloquea para que
+   * dos altas simultáneas no tomen el mismo número; su valor ya no se usa.
    */
   private async siguienteCodigo(cliente: pg.PoolClient, nivel: NivelCodigo): Promise<string> {
-    const { tabla, columna } = COLUMNA_CODIGO[nivel];
     await cliente.query(
       "INSERT INTO structure_code_counters (level, last_value) VALUES ($1, 0) ON CONFLICT (level) DO NOTHING",
       [nivel],
     );
-    const contador = await cliente.query<{ last_value: number }>(
-      "SELECT last_value FROM structure_code_counters WHERE level = $1 FOR UPDATE",
-      [nivel],
-    );
+    await cliente.query("SELECT 1 FROM structure_code_counters WHERE level = $1 FOR UPDATE", [nivel]);
+    return formatearCodigo(nivel, (await this.mayorCodigoExistente(cliente, nivel)) + 1);
+  }
+
+  /** Mayor número de código con el prefijo del nivel (0 si no hay). */
+  private async mayorCodigoExistente(cliente: pg.Pool | pg.PoolClient, nivel: NivelCodigo): Promise<number> {
+    const { tabla, columna } = COLUMNA_CODIGO[nivel];
     // La columna usa una intercalación no determinista: las expresiones regulares van en "C".
-    const existente = await cliente.query<{ mayor: number }>(
+    const { rows } = await cliente.query<{ mayor: number }>(
       `SELECT COALESCE(MAX(substring(upper(${columna} COLLATE "C") FROM $1)::int), 0) AS mayor FROM ${tabla}`,
       [`^${PREFIJO_CODIGO[nivel]}-([0-9]+)$`],
     );
-    const numero = Math.max(contador.rows[0]!.last_value, existente.rows[0]!.mayor) + 1;
-    await cliente.query("UPDATE structure_code_counters SET last_value = $2 WHERE level = $1", [nivel, numero]);
-    return formatearCodigo(nivel, numero);
+    return rows[0]!.mayor;
+  }
+
+  /** Misma cuenta que siguienteCodigo, sin bloquear. */
+  async codigoProximo(nivel: NivelCodigo): Promise<string> {
+    return formatearCodigo(nivel, (await this.mayorCodigoExistente(this.pool, nivel)) + 1);
   }
 
   async crearUnidad(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio> {

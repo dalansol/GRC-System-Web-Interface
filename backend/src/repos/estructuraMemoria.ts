@@ -65,7 +65,6 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
   private sigId = { periodo: 3, unidad: 1, division: 1, subdivision: 1, area: 1, riesgo: 1 };
 
   /** Último número de código asignado por nivel; no baja al borrar (igual que en SQL). */
-  private ultimoCodigo: Record<NivelCodigo, number> = { unidad: 0, division: 0, subdivision: 0 };
 
   constructor(private usuarios?: RepositorioUsuarios) {}
 
@@ -226,12 +225,14 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
     };
   }
 
-  /** Siguiente código del nivel: por encima del último asignado y del mayor existente. */
+  /** Siguiente código del nivel: el mayor existente más uno (reutiliza el del último si se borró). */
   private siguienteCodigo(nivel: NivelCodigo): string {
     const existentes = nivel === "unidad" ? this.unidades : this.nodos[nivel];
-    const mayor = Math.max(this.ultimoCodigo[nivel], ...existentes.map((n) => numeroDeCodigo(nivel, n.codigo ?? "")));
-    this.ultimoCodigo[nivel] = mayor + 1;
-    return formatearCodigo(nivel, mayor + 1);
+    return formatearCodigo(nivel, Math.max(0, ...existentes.map((n) => numeroDeCodigo(nivel, n.codigo ?? ""))) + 1);
+  }
+
+  async codigoProximo(nivel: NivelCodigo): Promise<string> {
+    return this.siguienteCodigo(nivel);
   }
 
   async crearUnidad(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio> {

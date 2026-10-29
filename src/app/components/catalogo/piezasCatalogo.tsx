@@ -72,7 +72,7 @@ export function NombreConCodigo({ nodo }: { nodo: ConNombre }) {
  * Código de solo lectura en los formularios: el que ya tiene (edición) o el próximo que
  * asignará el sistema (alta). El usuario nunca lo escribe.
  */
-export function CampoCodigo({ codigo, proximo = false }: { codigo: string; proximo?: boolean }) {
+export function CampoCodigo({ codigo, proximo = false }: { codigo: string | null; proximo?: boolean }) {
   return (
     <div>
       <span className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">Código</span>
@@ -80,7 +80,12 @@ export function CampoCodigo({ codigo, proximo = false }: { codigo: string; proxi
         data-testid="campo-codigo"
         className="flex items-center justify-between gap-2 text-sm px-3.5 py-2.5 rounded-lg border border-border bg-slate-50 text-muted-foreground"
       >
-        <span className="font-mono text-foreground truncate">{codigo}</span>
+        {codigo ? (
+          <span className="font-mono text-foreground truncate">{codigo}</span>
+        ) : (
+          // Vista previa aún sin cargar (o no disponible): el aviso del alta confirma el código.
+          <span className="truncate">Se asigna al guardar</span>
+        )}
         {proximo ? (
           // En el alta solo el candado: el código lo asigna el sistema al guardar.
           <span role="img" aria-label="Se asigna al guardar" title="Se asigna al guardar" className="flex-shrink-0">

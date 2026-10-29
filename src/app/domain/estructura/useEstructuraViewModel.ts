@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   crearNodo as apiCrearNodo,
@@ -14,6 +14,7 @@ import {
   listarPeriodos as apiListarPeriodos,
   listarResponsables as apiListarResponsables,
   listarUnidades as apiListarUnidades,
+  obtenerCodigoProximo as apiObtenerCodigoProximo,
   obtenerPeriodoActivo as apiObtenerPeriodoActivo,
   obtenerUnidadPorId as apiObtenerUnidad,
   ROLES_GESTION_ESTRUCTURA,
@@ -83,6 +84,10 @@ export function useEstructuraViewModel() {
   const [nodoEditando, setNodoEditando] = useState<NodoSeleccionado | null>(null);
   const [errorModalEdicion, setErrorModalEdicion] = useState<string | null>(null);
 
+  /** Código que asignará el backend en el alta abierta; null mientras carga, si falla o en el área. */
+  const [codigoProximo, setCodigoProximo] = useState<string | null>(null);
+  const consultaCodigo = useRef(0);
+
   const [modalPeriodosAbierto, setModalPeriodosAbierto] = useState<boolean>(false);
   const [errorModalPeriodos, setErrorModalPeriodos] = useState<string | null>(null);
 
@@ -123,11 +128,29 @@ export function useEstructuraViewModel() {
     setUnidades((prev) => prev.map((u) => (u.id === unidadId ? actualizada : u)));
   };
 
+  /**
+   * Pide al backend el código de la siguiente alta, para que la vista previa siga su misma
+   * regla (el mayor código existente más uno). Ignora la respuesta si ya se abrió otra alta.
+   */
+  const cargarCodigoProximo = (nivel: "unidad" | "division" | "subdivision" | null) => {
+    const consulta = ++consultaCodigo.current;
+    setCodigoProximo(null);
+    if (!nivel) return;
+    apiObtenerCodigoProximo(nivel)
+      .then(({ codigo }) => {
+        if (consulta === consultaCodigo.current) setCodigoProximo(codigo);
+      })
+      .catch(() => {
+        // Sin vista previa el campo dice "Se asigna al guardar"; el aviso confirma el código.
+      });
+  };
+
   // ── Alta de unidad de negocio ───────────────────────────────────────────────
 
   const abrirModalAlta = () => {
     setErrorModalAlta(null);
     setModalAltaAbierto(true);
+    cargarCodigoProximo("unidad");
   };
 
   const cerrarModalAlta = () => {
@@ -160,6 +183,7 @@ export function useEstructuraViewModel() {
   const abrirAltaNodo = (contexto: AltaNodoContexto) => {
     setErrorModalNodo(null);
     setAltaNodo(contexto);
+    cargarCodigoProximo(contexto.nivel === "area" ? null : contexto.nivel);
   };
 
   const cerrarAltaNodo = () => {
@@ -337,6 +361,8 @@ export function useEstructuraViewModel() {
     cerrarModalPeriodos,
     guardarPeriodo,
     activarPeriodo,
+    // Alta de unidad o nodo
+    codigoProximo,
     // Alta de unidad
     modalAltaAbierto,
     errorModalAlta,

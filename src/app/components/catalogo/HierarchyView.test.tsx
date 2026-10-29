@@ -13,6 +13,7 @@ vi.mock("../../api/estructura", async (original) => ({
   crearPeriodo: vi.fn(),
   editarPeriodo: vi.fn(),
   listarDepartamentos: vi.fn(),
+  obtenerCodigoProximo: vi.fn(),
   listarUnidades: vi.fn(),
   listarResponsables: vi.fn(),
   obtenerUnidadPorId: vi.fn(),
@@ -140,6 +141,9 @@ beforeEach(() => {
   vi.mocked(apiEstructura.listarDepartamentos).mockResolvedValue(DEPARTAMENTOS);
   vi.mocked(apiEstructura.listarUnidades).mockResolvedValue([UNIDAD]);
   vi.mocked(apiEstructura.listarResponsables).mockResolvedValue(RESPONSABLES);
+  vi.mocked(apiEstructura.obtenerCodigoProximo).mockImplementation(async (nivel) => ({
+    codigo: { unidad: "UDN-0002", division: "DIVISION-0002", subdivision: "SUBDIVISION-0002" }[nivel],
+  }));
 });
 
 describe("Catálogo de estructura organizacional (HierarchyView)", () => {
@@ -176,7 +180,8 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     await usuario.click(await screen.findByTestId("btn-nueva-unidad"));
 
     // El código no se escribe: se muestra el próximo y lo asigna el backend.
-    expect(screen.getByTestId("campo-codigo")).toHaveTextContent("UDN-0002");
+    expect(await screen.findByText("UDN-0002")).toBeInTheDocument();
+    expect(apiEstructura.obtenerCodigoProximo).toHaveBeenCalledWith("unidad");
     // En el alta solo el candado (con su descripción accesible), sin texto que se desborde.
     expect(within(screen.getByTestId("campo-codigo")).getByRole("img", { name: "Se asigna al guardar" })).toBeInTheDocument();
     expect(screen.getByTestId("campo-codigo")).not.toHaveTextContent("Se asigna al guardar");
@@ -239,7 +244,7 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     await usuario.click(screen.getByTestId("btn-agregar-hijo"));
 
     expect(screen.getByText("Agregar Subdivisión")).toBeInTheDocument();
-    expect(screen.getByTestId("campo-codigo")).toHaveTextContent("SUBDIVISION-0002");
+    await waitFor(() => expect(screen.getByTestId("campo-codigo")).toHaveTextContent("SUBDIVISION-0002"));
     await usuario.type(screen.getByLabelText(/País o región/i), "KFS RTR");
     await usuario.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -392,7 +397,7 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
     const migas = screen.getByRole("navigation", { name: /Ruta en la jerarquía/i });
     await usuario.click(within(migas).getByRole("button", { name: "DIVISION-0001" }));
     await usuario.click(screen.getByTestId("btn-agregar-hijo"));
-    expect(screen.getByTestId("campo-codigo")).toHaveTextContent("SUBDIVISION-0002");
+    await waitFor(() => expect(screen.getByTestId("campo-codigo")).toHaveTextContent("SUBDIVISION-0002"));
     const pais = screen.getByRole("combobox", { name: /País o región/i });
     await usuario.click(pais);
     expect(sugerencias()).toEqual(expect.arrayContaining(["México", "Brasil", "KFS RTR"]));
@@ -405,7 +410,24 @@ describe("Catálogo de estructura organizacional (HierarchyView)", () => {
 
     // Unidad: siguiente UDN.
     await usuario.click(screen.getByTestId("btn-nueva-unidad"));
-    expect(screen.getByTestId("campo-codigo")).toHaveTextContent("UDN-0002");
+    await waitFor(() => expect(screen.getByTestId("campo-codigo")).toHaveTextContent("UDN-0002"));
+  });
+
+  it("muestra el código que dará el backend, no uno calculado en pantalla, y sin él dice que se asigna al guardar", async () => {
+    const usuario = userEvent.setup();
+    // Solo hay UDN-0001 en pantalla (las demás pueden no estar cargadas): manda el backend.
+    vi.mocked(apiEstructura.obtenerCodigoProximo).mockResolvedValueOnce({ codigo: "UDN-0007" });
+
+    render(<HierarchyView />);
+    await usuario.click(await screen.findByTestId("btn-nueva-unidad"));
+    await waitFor(() => expect(screen.getByTestId("campo-codigo")).toHaveTextContent("UDN-0007"));
+    await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    vi.mocked(apiEstructura.obtenerCodigoProximo).mockRejectedValueOnce(new ErrorApi(500, "ERROR", "Falla"));
+    await usuario.click(screen.getByTestId("btn-nueva-unidad"));
+    await waitFor(() => expect(apiEstructura.obtenerCodigoProximo).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId("campo-codigo")).toHaveTextContent("Se asigna al guardar");
+    expect(screen.getByTestId("campo-codigo")).not.toHaveTextContent("UDN-");
   });
 
   describe("Código y nombre", () => {

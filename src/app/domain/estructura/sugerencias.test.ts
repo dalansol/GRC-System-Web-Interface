@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { UnidadNegocio } from "../../api/estructura";
 import { AREAS_FRECUENTES } from "../../data/catalogoEstructura";
-import { codigoProximo, filtrarSugerencias, siguienteCodigo, sugerenciasArea, sugerenciasPais } from "./sugerencias";
+import { filtrarSugerencias, sugerenciasArea, sugerenciasPais } from "./sugerencias";
 
 const UNIDADES: UnidadNegocio[] = [
   {
@@ -42,20 +42,7 @@ const UNIDADES: UnidadNegocio[] = [
   },
 ];
 
-describe("siguienteCodigo", () => {
-  it("toma el número más alto con ese prefijo e ignora otros nombres", () => {
-    expect(siguienteCodigo("division", ["DIVISION-0009", "DIVISION-0012", "Otra división"])).toBe("DIVISION-0013");
-    expect(siguienteCodigo("unidad", [])).toBe("UDN-0001");
-  });
-});
-
 describe("sugerencias", () => {
-  it("muestra como vista previa el siguiente código de unidades, divisiones y subdivisiones", () => {
-    expect(codigoProximo("unidad", UNIDADES)).toBe("UDN-0005");
-    expect(codigoProximo("division", UNIDADES)).toBe("DIVISION-0010");
-    expect(codigoProximo("subdivision", UNIDADES)).toBe("SUBDIVISION-0033");
-  });
-
   it("para un área ofrece el catálogo de FEMSA y las ya registradas, sin las que ya tiene la subdivisión", () => {
     const enLaMisma = sugerenciasArea(UNIDADES, 100);
     expect(enLaMisma).not.toContain("Nómina");

@@ -14,8 +14,8 @@ interface ModalRegistrarUnidadProps {
   /** Devuelve la unidad creada, o null si el servidor la rechazó (el error llega en errorServidor). */
   onGuardar: (datos: AltaUnidadInput) => Promise<UnidadNegocio | null>;
   onCerrar: () => void;
-  /** Vista previa del código que asignará el sistema (domain/estructura/sugerencias.ts). */
-  codigoProximo: string;
+  /** Vista previa del código que asignará el sistema (la da el backend); null mientras carga o si falló. */
+  codigoProximo: string | null;
 }
 
 export function ModalRegistrarUnidad({

@@ -223,11 +223,39 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
       }
     });
 
-    it("no reutiliza el código de un elemento eliminado", async () => {
+    it("reutiliza el código del último elemento eliminado y deja el hueco de uno intermedio", async () => {
+      const primera = (await altaUnidad()).body.id;
+      await altaUnidad();
+      const tercera = (await altaUnidad()).body.id;
+      // Borrar una intermedia (UDN-0001) deja el hueco: sigue UDN-0004.
+      expect((await como(JEFA).delete(`/api/unidades-negocio/${primera}`)).status).toBe(204);
+      const cuarta = await altaUnidad();
+      expect(cuarta.body.codigo).toBe("UDN-0004");
+      // Borrar la última (UDN-0004) libera su código; la UDN-0003 sigue.
+      expect((await como(JEFA).delete(`/api/unidades-negocio/${cuarta.body.id}`)).status).toBe(204);
+      expect((await altaUnidad()).body.codigo).toBe("UDN-0004");
+      expect((await como(JEFA).get(`/api/unidades-negocio/${tercera}`)).body.codigo).toBe("UDN-0003");
+    });
+
+    it("la vista previa del código coincide con la del alta, también tras borrar, y no lo consume", async () => {
+      const proximo = async (nivel: string) => (await como(JEFA).get(`/api/codigos-proximos/${nivel}`)).body.codigo;
+      expect(await proximo("unidad")).toBe("UDN-0001");
       await altaUnidad();
       const segunda = (await altaUnidad()).body.id;
       expect((await como(JEFA).delete(`/api/unidades-negocio/${segunda}`)).status).toBe(204);
-      expect((await altaUnidad()).body.codigo).toBe("UDN-0003");
+      expect(await proximo("unidad")).toBe("UDN-0002");
+      expect(await proximo("unidad")).toBe("UDN-0002");
+      expect(await proximo("division")).toBe("DIVISION-0001");
+      expect((await altaUnidad()).body.codigo).toBe("UDN-0002");
+    });
+
+    it("la vista previa del código es solo para gestión y valida el nivel", async () => {
+      expect((await como(ADMIN).get("/api/codigos-proximos/subdivision")).status).toBe(200);
+      const auditor = await como(AUDITOR).get("/api/codigos-proximos/unidad");
+      expect(auditor.status).toBe(403);
+      const area = await como(JEFA).get("/api/codigos-proximos/area");
+      expect(area.status).toBe(400);
+      expect(area.body.error.codigo).toBe("DATOS_INVALIDOS");
     });
 
     it("con el Consolidado cargado continúa después del código más alto de cada nivel", async () => {

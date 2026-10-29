@@ -19,6 +19,7 @@ import {
   validarEdicionPeriodo,
   validarEdicionUnidad,
   type AltaPeriodoInput,
+  type NivelCodigo,
   type NivelEstructura,
   type NivelNodo,
 } from "../domain/estructura.js";
@@ -31,6 +32,7 @@ import type { RepositorioUsuarios } from "../repos/repositorio.js";
 
 const ROL_JEFATURA = "Jefe de Auditoría";
 const ROLES_GESTION = [ROL_ADMINISTRADOR, ROL_JEFATURA];
+const NIVELES_CODIGO: NivelCodigo[] = ["unidad", "division", "subdivision"];
 
 /** Ruta y textos de cada nivel. */
 const NIVELES: Record<NivelEstructura, { ruta: string; etiqueta: string; articulo: string }> = {
@@ -165,6 +167,16 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
 
   rutas.get("/departamentos-auditoria", async (_req, res) => {
     res.json(await repo.listarDepartamentos());
+  });
+
+  // Vista previa del código para el formulario de alta: lo calcula el repositorio con la
+  // misma regla que el alta (el mayor código existente más uno) pero sin reservarlo.
+  rutas.get("/codigos-proximos/:nivel", autorizar(...ROLES_GESTION), async (req, res) => {
+    const nivel = req.params.nivel;
+    if (!NIVELES_CODIGO.includes(nivel as NivelCodigo)) {
+      throw new ErrorApi(400, "DATOS_INVALIDOS", "El nivel debe ser unidad, division o subdivision.");
+    }
+    res.json({ codigo: await repo.codigoProximo(nivel as NivelCodigo) });
   });
 
   // ── Unidades de negocio ─────────────────────────────────────────────────────

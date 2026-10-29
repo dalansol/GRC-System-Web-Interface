@@ -191,14 +191,16 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
     await expect(pool.query("INSERT INTO area (area_name) VALUES ('Suelta')")).rejects.toThrow(/null/i);
   });
 
-  it("asigna el siguiente código por encima del Consolidado y no reutiliza el de una unidad borrada", async () => {
+  it("asigna el siguiente código por encima del Consolidado y reutiliza el de la última unidad borrada", async () => {
     const periodo = (await repo.obtenerPeriodoActivo())!.id;
     const alta = () => repo.crearUnidad({ nombre: null, responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId);
+    expect(await repo.codigoProximo("unidad")).toBe("UDN-0007");
     const nueva = await alta();
     expect(nueva.codigo).toBe("UDN-0007");
     await repo.eliminarUnidad(nueva.id);
+    expect(await repo.codigoProximo("unidad")).toBe("UDN-0007");
     const segunda = await alta();
-    expect(segunda.codigo).toBe("UDN-0008");
+    expect(segunda.codigo).toBe("UDN-0007");
 
     // División: después de DIVISION-0012 (el mayor del Consolidado).
     const division = await repo.crearNodo("division", { nombre: null, padreId: segunda.id, pais: null });
