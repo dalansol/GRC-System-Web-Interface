@@ -214,7 +214,7 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
 
       // Fetch the record first to get the storage path
       const lookup = await pool.query(
-        `SELECT e.storage_path, e.control_id, e.entity_type, e.uploaded_by
+        `SELECT e.storage_path, e.control_id, e.entity_type, e.uploaded_by, e.audit_id
          FROM evidence e
          WHERE e.id = $1`,
         [id],
@@ -229,6 +229,7 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
         control_id: string | number | null;
         entity_type: string;
         uploaded_by: string | null;
+        audit_id: string | null;
       };
       if (evidence.entity_type === "hallazgo") {
         // Hallazgo: quien la subió, igual que en la consulta (quién puede subir sigue TBD).
@@ -250,13 +251,15 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
           });
         }
 
+        // La asignación debe ser en el mismo plan de la evidencia; sin plan no se borra.
         const asignacion = await pool.query(
           `SELECT 1
            FROM audit_controls ac
            WHERE ac.control_id = $1
              AND ac.auditor_id = $2
+             AND ac.audit_id::text = $3
            LIMIT 1`,
-          [evidence.control_id, usuario.id],
+          [evidence.control_id, usuario.id, evidence.audit_id ?? ""],
         );
         if (asignacion.rowCount !== 1) {
           return res.status(403).json({
