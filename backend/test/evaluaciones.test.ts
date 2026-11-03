@@ -5,6 +5,7 @@ import { crearApp } from "../src/app.js";
 import { crearVerificadorDev } from "../src/auth/verificador.js";
 import type { EventoBitacora } from "../src/bitacora.js";
 import { RepositorioConflictosMemoria } from "../src/repos/conflictosMemoria.js";
+import type { AsignacionEvaluable } from "../src/repos/evaluaciones.js";
 import { RepositorioEvaluacionesMemoria } from "../src/repos/evaluacionesMemoria.js";
 import { RepositorioEvidenciasMemoria } from "../src/repos/evidenciasMemoria.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
@@ -25,6 +26,8 @@ const RUTA = `/api/planes/${PLAN}/controles/${CONTROL}/evaluacion`;
 let app: Server;
 let eventos: EventoBitacora[];
 let repoEvaluaciones: RepositorioEvaluacionesMemoria;
+let asignaciones: AsignacionEvaluable[];
+let seniorId: number;
 
 beforeEach(async () => {
   eventos = [];
@@ -32,9 +35,11 @@ beforeEach(async () => {
   const planes = new RepositorioPlanesMemoria(usuarios);
   const auditora = (await usuarios.buscarPorCorreo(AUDITORA))!;
   const senior = (await usuarios.buscarPorCorreo(SENIOR))!;
-  repoEvaluaciones = new RepositorioEvaluacionesMemoria(usuarios, [
+  seniorId = senior.id;
+  asignaciones = [
     { planId: PLAN, controlId: CONTROL, codigo: CODIGO, auditorId: auditora.id, asignadoPor: senior.id, status: "En Progreso" },
-  ]);
+  ];
+  repoEvaluaciones = new RepositorioEvaluacionesMemoria(usuarios, asignaciones);
   app = await escuchar(
     crearApp({
       repo: usuarios,
@@ -265,6 +270,27 @@ describe("quién puede evaluar", () => {
 
     expect(respuesta.body.error.codigo).toBe("EVALUACION_CERRADA");
     expect((await como(AUDITORA).get(RUTA)).body.puedeEvaluar).toBe(false);
+  });
+
+  it("si otro auditor ya envió el control a revisión, no se sobrescribe la evaluación", async () => {
+    await declararSinConflicto();
+    const respuestas = await responderTodos(() => 3);
+    asignaciones.push({ ...asignaciones[0]!, auditorId: seniorId, status: "En Revision" });
+
+    const respuesta = await como(AUDITORA).put(RUTA).send({ respuestas }).expect(409);
+
+    expect(respuesta.body.error.codigo).toBe("EVALUACION_CERRADA");
+    expect((await como(AUDITORA).get(RUTA)).body.puedeEvaluar).toBe(false);
+  });
+
+  it("si el id de un control coincide con el código de otro, usa el del id", async () => {
+    await declararSinConflicto();
+    await como(AUDITORA).put(RUTA).send({ respuestas: await responderTodos(() => 2) }).expect(200);
+    asignaciones.push({ planId: PLAN, controlId: CODIGO, codigo: "CP-900", auditorId: seniorId, asignadoPor: seniorId, status: "En Progreso" });
+
+    const respuesta = await como(SENIOR).get(`/api/planes/${PLAN}/controles/${CODIGO}/evaluacion`).expect(200);
+
+    expect(respuesta.body.evaluacion).toBeNull();
   });
 
   it("responde 400 si el plan no es un número", async () => {

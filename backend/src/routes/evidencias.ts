@@ -251,6 +251,16 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
           });
         }
 
+        // Solo quien la subió, igual que en la consulta del Auditor.
+        if (evidence.uploaded_by !== String(usuario.id)) {
+          return res.status(403).json({
+            error: {
+              codigo: "ROL_NO_AUTORIZADO",
+              mensaje: "Solo quien subió la evidencia puede eliminarla.",
+            },
+          });
+        }
+
         // La asignación debe ser en el mismo plan de la evidencia; sin plan no se borra.
         const asignacion = await pool.query(
           `SELECT 1

@@ -28,7 +28,9 @@ diseño 5 y efectividad 1, un promedio simple daría 3 y lo escondería.
 
 - **Quién evalúa:** un auditor con el control asignado en ese plan (`audit_controls`), como pide SF-07.
 - **Declaración de conflictos:** sin ella no se evalúa (historia #96); responde `DECLARACION_PENDIENTE`.
-- **Cuándo se edita:** solo con la asignación `En Progreso`; después responde 409 `EVALUACION_CERRADA`.
+- **Cuándo se edita:** solo mientras todas las asignaciones del control en el plan están `En Progreso`; en cuanto
+  un auditor lo envía a revisión responde 409 `EVALUACION_CERRADA`, para que nadie cambie lo que se está revisando.
+- **Id o código en la ruta:** si el id de un control coincide con el código de otro, se usa el del id.
 - **Una evaluación por control y plan:** si hay varios auditores, volver a guardar la reemplaza y queda
   registrado quién evaluó al último.
 - **Quién consulta:** los auditores asignados, quien asignó el control, Jefe de Auditoría, Supervisor y

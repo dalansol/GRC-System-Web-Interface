@@ -296,6 +296,16 @@ describe.skipIf(!env.SQL_TEST_SERVER)("permisos de controles y evidencias sobre 
       expect(borrados).toEqual([]);
     });
 
+    it("una compañera del mismo control y plan no borra lo que subió otra", async () => {
+      await asignar(plan1, u.companera, u.seniorResponsable);
+      await evidencia("EV-C1", plan1, u.auditora);
+
+      const respuesta = await borrar(u.companera, "EV-C1");
+
+      expect(respuesta.status).toBe(403);
+      expect(await existe("EV-C1")).toBe(true);
+    });
+
     it("una evidencia de control sin plan no se borra", async () => {
       await evidencia("EV-C0", null, u.auditora);
 

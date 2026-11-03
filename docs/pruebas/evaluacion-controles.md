@@ -7,7 +7,7 @@ Historia #98, SF-07. Corridas el 2 de noviembre de 2026 en la rama `Andre`, sobr
 | Tipo | Archivo | Pruebas | Contra qué | Resultado |
 |---|---|---|---|---|
 | Reglas | `backend/test/evaluacionesDominio.test.ts` | 20 | Funciones puras | Aprobadas |
-| API | `backend/test/evaluaciones.test.ts` | 26 | Repositorio en memoria | Aprobadas |
+| API | `backend/test/evaluaciones.test.ts` | 28 | Repositorio en memoria | Aprobadas |
 | Base de datos | `backend/test/evaluaciones.integracion.test.ts` | 9 | PostgreSQL local (`expedite_test`) | Aprobadas |
 | Vista | `src/app/components/EvaluacionControl.test.tsx` | 11 | API simulada | Aprobadas |
 | Formulario de hallazgos | `src/app/components/FormularioHallazgo.test.tsx` | 5 | Componente | Aprobadas |
@@ -57,6 +57,8 @@ Historia #98, SF-07. Corridas el 2 de noviembre de 2026 en la rama `Andre`, sobr
 | EV-20 | Auditora sin declaración de conflictos | Guarda | 403 `DECLARACION_PENDIENTE`; la vista explica el motivo y bloquea |
 | EV-21 | Control `En Revision` o `Completado` | Guarda | 409 `EVALUACION_CERRADA` |
 | EV-22 | Control que no está en el plan | Consulta | 404 |
+| EV-23 | Otro auditor del control ya lo envió a revisión | Guarda | 409 `EVALUACION_CERRADA` |
+| EV-24 | El id de un control es el código de otro | Consulta por ese valor | Recibe la evaluación del control con ese id |
 
 ## Defectos encontrados
 

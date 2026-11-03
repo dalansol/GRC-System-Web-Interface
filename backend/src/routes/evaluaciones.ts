@@ -30,16 +30,26 @@ export function rutasEvaluaciones({ repo, conflictos, registrarEvento }: Depende
     if (!plan || !/^[1-9]\d*$/.test(plan)) {
       throw new ErrorApi(400, "DATOS_INVALIDOS", "El plan no es válido.");
     }
-    const asignaciones = await repo.listarAsignaciones(Number(plan), control ?? "");
+    const encontradas = await repo.listarAsignaciones(Number(plan), control ?? "");
+    // La ruta acepta id o código: si el id de un control es el código de otro, gana el id,
+    // para que todas las asignaciones sean de un solo control.
+    const porId = encontradas.filter((a) => a.controlId === control);
+    const asignaciones = porId.length > 0 ? porId : encontradas;
     if (asignaciones.length === 0) {
       throw new ErrorApi(404, "NO_ENCONTRADO", "El control no está asignado en este plan.");
+    }
+    if (new Set(asignaciones.map((a) => a.controlId)).size > 1) {
+      throw new ErrorApi(400, "DATOS_INVALIDOS", "El código corresponde a más de un control; usa su id.");
     }
     return asignaciones;
   }
 
-  /** Por qué el auditor asignado no puede evaluar ahora; null si puede. */
-  async function bloqueo(asignacion: AsignacionEvaluable) {
-    if (asignacion.status !== "En Progreso") return { codigo: "cerrada", mensaje: MENSAJE_CERRADA };
+  /**
+   * Por qué el auditor asignado no puede evaluar ahora; null si puede. La evaluación es una por
+   * control y plan, así que se cierra en cuanto cualquier auditor del control deja En Progreso.
+   */
+  async function bloqueo(asignacion: AsignacionEvaluable, todas: AsignacionEvaluable[]) {
+    if (todas.some((a) => a.status !== "En Progreso")) return { codigo: "cerrada", mensaje: MENSAJE_CERRADA };
     const declaracion = await conflictos.buscarDeclaracion(asignacion.planId, asignacion.auditorId);
     return declaracion ? null : { codigo: "conflictos", mensaje: MENSAJE_DECLARACION_PENDIENTE };
   }
@@ -53,7 +63,7 @@ export function rutasEvaluaciones({ repo, conflictos, registrarEvento }: Depende
     if (!puedeConsultar) throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "No puedes consultar esta evaluación.");
 
     const { planId, controlId } = asignaciones[0]!;
-    const motivo = mia ? await bloqueo(mia) : null;
+    const motivo = mia ? await bloqueo(mia, asignaciones) : null;
     res.json({
       criterios: await repo.listarCriterios(),
       evaluacion: await repo.buscar(planId, controlId),
@@ -67,7 +77,7 @@ export function rutasEvaluaciones({ repo, conflictos, registrarEvento }: Depende
     const usuario = usuarioEnSesion(res);
     const mia = asignaciones.find((a) => a.auditorId === usuario.id);
     if (!mia) throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "Solo el auditor asignado puede evaluar este control.");
-    const motivo = await bloqueo(mia);
+    const motivo = await bloqueo(mia, asignaciones);
     if (motivo?.codigo === "cerrada") throw new ErrorApi(409, "EVALUACION_CERRADA", motivo.mensaje);
     if (motivo) throw new ErrorApi(403, "DECLARACION_PENDIENTE", motivo.mensaje);
 
