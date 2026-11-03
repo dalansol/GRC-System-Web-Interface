@@ -85,6 +85,7 @@ huella del contenido y fecha) y la siguiente vez solo corre los que faltan.
 | `029_conflictos_por_plan.sql` | `conflict_declarations.audit_id` apunta a `audit_plans` (historia #96) |
 | `030_seed_demo.sql` | Usuarios de "Usar un rol de prueba", planes de auditoría, hallazgos y plan de acción del modo en memoria. Solo con `--datos-prueba` |
 | `031_rls_control_horas.sql` | Activa la seguridad por filas en `control_horas` (012 la creó sin ella y quedaba expuesta en la API de Supabase) |
+| `036_evaluacion_controles.sql` | Criterios, evaluaciones y respuestas de controles (historia #98, SF-07). Los 8 criterios son datos de prueba. 034 y 035 las usa la rama `Integration-AI` |
 
 ### Cómo agregar un cambio al esquema
 
@@ -120,7 +121,7 @@ Cada script corre dentro de una transacción: si falla, no se aplica nada de él
 ### Probar contra un PostgreSQL local
 
 Las pruebas de `test/sql.integracion.test.ts` (repositorios) y de
-`test/esquema.integracion.test.ts` (los scripts completos: las 30 tablas existen, tienen
+`test/esquema.integracion.test.ts` (los scripts completos: las 33 tablas existen, tienen
 la seguridad por filas activada, se pueden consultar y hacen cumplir sus llaves) se
 omiten si no hay conexión. Para
 correrlas hace falta un PostgreSQL con TLS y una base exclusiva de pruebas:

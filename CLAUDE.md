@@ -32,6 +32,7 @@
 - La app exige sesión: sin el backend corriendo muestra un error de conexión. Para desarrollo local hace falta un `.env` en la raíz y otro en `backend/` (variables en el README; modo `dev`, sin Entra ID). Nunca leer ni versionar los `.env`.
 - Diseño y pruebas de usuarios y roles: `docs/diseno/usuarios-roles.md`, `docs/pruebas/usuarios-roles.md`.
 - Diseño y pruebas de la estructura organizacional (Catálogo, SF-03): `docs/diseno/estructura-organizacional.md`, `docs/pruebas/estructura-organizacional.md`.
+- Diseño y pruebas de la evaluación de controles (historia #98, SF-07): `docs/diseno/evaluacion-controles.md`, `docs/pruebas/evaluacion-controles.md`.
 - Alias `@` → `src/`. Plugin `figma:asset/…` → `src/assets/`. **No quitar** los plugins `react()` ni `tailwindcss()` de `vite.config.ts`.
 
 ### Estructura
@@ -42,7 +43,7 @@ src/
   app/App.tsx              ← la mayoría de las vistas (en proceso de refactorización para reducir su tamaño)
   app/api/                 ← cliente HTTP y llamadas a la API
   app/auth/                ← sesión, inicio de sesión (MSAL / modo dev)
-  app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, FormularioPlanAccion, VistaControles, EvidenciasSection, SpreadsheetEditor, PanelAsistenteEvidencia, CopilotPanel, ConflictosPlan
+  app/components/          ← SharedComponents, UsuariosRolesView, VistaHallazgo, FormularioPlanAccion, VistaControles, EvidenciasSection, SpreadsheetEditor, PanelAsistenteEvidencia, CopilotPanel, ConflictosPlan, EvaluacionControl
   app/components/catalogo/ ← Catálogo Organizacional: HierarchyView (explorador), ArbolCatalogo (árbol de navegación), DetalleCatalogo (panel de detalle), modales y piezasCatalogo
   app/components/ui/       ← shadcn/ui (no editar salvo necesidad)
   app/components/figma/    ← ImageWithFallback
@@ -57,10 +58,10 @@ backend/
   src/server.ts            ← único punto de arranque; abre la conexión a la base y monta las rutas
   src/app.ts               ← app Express; recibe repositorio, verificador de tokens y rutas
   src/db.ts                ← conexión compartida (la registra server.ts)
-  src/routes/              ← endpoints: usuarios.ts, planes.ts, planesAccion.ts, estructura.ts, conflictos.ts, asistente.ts, auditControls.ts y evidencias.ts (con sesión); hallazgos.ts (aún sin sesión, solo con DATA_MODE=sql)
+  src/routes/              ← endpoints: usuarios.ts, planes.ts, planesAccion.ts, estructura.ts, conflictos.ts, evaluaciones.ts, asistente.ts, auditControls.ts y evidencias.ts (con sesión); hallazgos.ts (aún sin sesión, solo con DATA_MODE=sql)
   src/asistente/           ← gateway de IA: interfaz ProveedorIA, adaptadores Gemini y Azure OpenAI, extracción de texto, instrucciones y reglas de contención
   src/scripts/             ← ia:probar e ia:evaluar
-  src/domain/              ← tipos y validaciones (planes.ts, planesAccion.ts, estructura.ts, conflictos.ts)
+  src/domain/              ← tipos y validaciones (planes.ts, planesAccion.ts, estructura.ts, conflictos.ts, evaluaciones.ts)
   src/middleware/          ← autenticar (token → usuario), autorizar (por rol) y upload (archivos de evidencia)
   src/repos/               ← repositorio SQL y en memoria (incluye evidencias para el asistente y documentos de ejemplo EV-001…EV-004; semillaEstructura.ts: datos del Consolidado para DATA_MODE=memoria, generado)
   test/                    ← pruebas (las de SQL requieren SQL_TEST_*)
@@ -179,6 +180,8 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 17. **`processes` y `controls.process_id`:** en desuso tras la estructura organizacional; falta decidir si se retiran.
 18. **Periodo de la unidad:** la unidad conserva el periodo activo al darla de alta ("Periodo de alta") aunque después se active otro; falta que FEMSA confirme si debe seguir al periodo activo.
 19. **Quién sube evidencia a un hallazgo:** TBD. Opciones vistas: el Auditor asignado al control del hallazgo, el responsable de su plan de acción (`action_plans.responsible_id`) o `findings."ownerId"` (hoy sin uso en la UI). Mientras tanto, para demostrar el módulo, **cualquier usuario en sesión** puede subir evidencia a un hallazgo (`EvidenciasSection.tsx` y `POST /evidencias/upload`). En controles solo sube el Auditor asignado.
+20. **Modelo de madurez (SF-07, historia #98):** FEMSA no definió los criterios, si todos son obligatorios, la fórmula, qué es madurez baja ni los estatus. Son **datos de prueba**: 8 criterios en `evaluation_criteria`; calificación = el menor de los promedios de diseño y efectividad; 4 o más Efectivo, de 3 a menos de 4 Parcialmente efectivo, menos de 3 Deficiente. Detalle en `docs/diseno/evaluacion-controles.md`.
+21. **Evaluar antes de enviar a revisión:** hoy un control puede enviarse y aprobarse sin evaluación; falta decidir si debe bloquearse (toca el flujo de aprobación de controles).
 
 ### Decisiones tomadas
 
@@ -193,6 +196,7 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 
 - **Asistente de IA (historia #105, tasks #134/#135, SF-19):** el backend es el único que habla con la IA (Copilot API Gateway del SRS); la clave vive en `backend/.env` y nunca llega al frontend. El proveedor queda detrás de la interfaz `ProveedorIA` y se elige con `IA_PROVEEDOR` (`gemini`, `azure` o `ninguno`; sin proveedor la plataforma funciona y la función queda desactivada). Llamadas sin reintentos y con tiempo de espera (`IA_TIEMPO_ESPERA_MS`); cualquier falla responde 503 y el frontend desactiva el panel con un aviso. Rutas `/api/asistente/estado`, `/asistente/evidencias/:id/resumen`, `/asistente/evidencias/:id/preguntas` y `/asistente/consultas` (datos de la vista; acepta hasta 100 kB), para Administrador, Jefe de Auditoría, Auditor Senior y Auditor. Bitácora: `asistente.resumen`, `asistente.pregunta` y `asistente.consulta`, sin guardar preguntas ni respuestas.
 - **Reglas de contención de la IA:** instrucciones del sistema en `backend/src/asistente/instrucciones.ts`; el documento o los datos de la vista van delimitados y se tratan como datos, no instrucciones; temperatura 0.2 y tope de longitud; cada pregunta es independiente (sin historial); pregunta de 5 a 500 caracteres. La IA responde un JSON con `estado` (`respondida`, `fuera_de_tema`, `sin_informacion`) y el backend sustituye los dos últimos por mensajes fijos. Cualquier cambio a las reglas debe pasar `corepack pnpm ia:evaluar` (22/22 al 2026-10-09).
+- **Evaluación de controles (historia #98, SF-07, 2026-11-02):** una evaluación por control y plan; evalúa el auditor asignado, con declaración de conflictos y la asignación en `En Progreso`. La calificación la calcula siempre el backend (`backend/src/domain/evaluaciones.ts`). El resultado (`control_evaluations.result`) es independiente del flujo de revisión (`audit_controls.status`).
 
 ## 8. Referencias
 

@@ -1,4 +1,4 @@
-import React, { Fragment } from "react";
+import React, { Fragment, useEffect, useState } from "react";
 import {
   Trash2,
   Edit3,
@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { CONTROLS } from "../data/mock_data";
 
 import FormularioHallazgo, {
+  controlesConDeficiencia,
   CreatedFinding,
   FindingControlOption,
 } from "./FormularioHallazgo";
@@ -29,7 +30,14 @@ import { useHallazgosViewModel, HallazgoViewModel } from "../domain/hallazgos/us
 
 export type Hallazgo = HallazgoViewModel;
 
-export default function VistaHallazgo() {
+export default function VistaHallazgo({
+  controlInicial,
+  onControlInicialUsado,
+}: {
+  /** Control con deficiencia desde el que se pidió generar el hallazgo (historia #98). */
+  controlInicial?: { id: string; nombre: string } | null;
+  onControlInicialUsado?: () => void;
+} = {}) {
   const {
     hallazgos,
     loading,
@@ -63,11 +71,23 @@ export default function VistaHallazgo() {
   const puedeEditarPlan = (plan: { responsable: { id: number } }) =>
     Boolean(usuario && ROLES_EDICION_PLAN_ACCION.includes(usuario.rol) && plan.responsable.id !== usuario.id);
 
-  const findingControls: FindingControlOption[] = CONTROLS.map((control) => ({
-    id: control.id,
-    name: control.controlProcedureName,
-    vulnerability: control.currentVulnerability as FindingControlOption["vulnerability"],
-  }));
+  const [controlDelFormulario, setControlDelFormulario] = useState<{ id: string; nombre: string } | null>(null);
+
+  useEffect(() => {
+    if (!controlInicial) return;
+    setControlDelFormulario(controlInicial);
+    setShowCreateForm(true);
+    onControlInicialUsado?.();
+  }, [controlInicial]);
+
+  const findingControls = controlesConDeficiencia(
+    CONTROLS.map((control) => ({
+      id: control.id,
+      name: control.controlProcedureName,
+      vulnerability: control.currentVulnerability as FindingControlOption["vulnerability"],
+    })),
+    controlDelFormulario,
+  );
 
   return (
     <div className="w-full space-y-4 p-6">
@@ -90,7 +110,10 @@ export default function VistaHallazgo() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowCreateForm(true)}
+            onClick={() => {
+              setControlDelFormulario(null);
+              setShowCreateForm(true);
+            }}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90"
           >
             <Plus size={14} />
@@ -407,6 +430,7 @@ export default function VistaHallazgo() {
           controls={findingControls}
           nextFolio={nextFolio}
           auditId="AUD-001"
+          controlInicialId={controlDelFormulario?.id}
           onCreated={handleFindingCreated}
           onClose={() => setShowCreateForm(false)}
         />

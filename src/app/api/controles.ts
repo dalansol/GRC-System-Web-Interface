@@ -14,6 +14,7 @@ interface ControlApi {
   hours_spent?: string | number;
   feedback?: string | null;
   audit_ids?: number[];
+  tiene_deficiencia?: boolean;
 }
 
 function convertirControl(control: ControlApi): ControlRecord {
@@ -35,6 +36,7 @@ function convertirControl(control: ControlApi): ControlRecord {
     horasInvertidas: Number(control.hours_spent ?? 0),
     feedback: control.feedback,
     auditIds: control.audit_ids ?? [],
+    tieneDeficiencia: control.tiene_deficiencia ?? false,
   };
 }
 

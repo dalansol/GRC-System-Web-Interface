@@ -41,7 +41,10 @@ router.get("/controles", async (_req, res) => {
             END AS status,
             COALESCE(SUM(COALESCE(ac.hours_spent, 0)), 0) AS hours_spent,
             COALESCE(MAX(ac.feedback), '') AS feedback,
-            COALESCE(array_agg(DISTINCT ac.audit_id) FILTER (WHERE ac.audit_id IS NOT NULL), '{}') AS audit_ids
+            COALESCE(array_agg(DISTINCT ac.audit_id) FILTER (WHERE ac.audit_id IS NOT NULL), '{}') AS audit_ids,
+            EXISTS (
+              SELECT 1 FROM control_evaluations ce WHERE ce.control_id = c.id AND ce.has_deficiency
+            ) AS tiene_deficiencia
      FROM controls c
      LEFT JOIN audit_controls ac ON ac.control_id = c.id
      WHERE CASE

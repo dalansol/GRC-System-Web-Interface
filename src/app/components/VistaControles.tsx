@@ -353,6 +353,11 @@ export default function VistaControles({ navigate }: Props) {
                           <span className="text-[10px] text-muted-foreground">
                             {control.frequency}
                           </span>
+                          {control.tieneDeficiencia && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
+                              Con deficiencia
+                            </span>
+                          )}
                         </div>
                       </td>
 

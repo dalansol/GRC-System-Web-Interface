@@ -43,14 +43,16 @@ const SCRIPTS = [
   "029_conflictos_por_plan.sql",
   "030_seed_demo.sql",
   "031_rls_control_horas.sql",
+  "036_evaluacion_controles.sql",
 ];
 
 // Las tablas del modelo entidad-relación de docs/diseno/base-de-datos.md.
 const TABLAS = [
   "action_plans", "area", "audit_controls", "audit_engagement", "audit_engagement_team", "audit_entity",
   "audit_plans", "audit_procedure_type", "audit_procedures", "audit_status", "audits", "business",
-  "business_units", "catalog_department", "catalog_domain", "catalogs", "conflict_declarations", "control_horas",
-  "control_procedure", "controls", "division", "evidence", "findings", "fiscal_periods", "permissions",
+  "business_units", "catalog_department", "catalog_domain", "catalogs", "conflict_declarations",
+  "control_evaluation_answers", "control_evaluations", "control_horas",
+  "control_procedure", "controls", "division", "evaluation_criteria", "evidence", "findings", "fiscal_periods", "permissions",
   "processes", "risk_library", "risk_register", "role_permissions", "roles", "structure_code_counters", "users",
 ];
 
@@ -84,7 +86,7 @@ describe.skipIf(!env.SQL_TEST_SERVER)("esquema completo sobre PostgreSQL", () =>
     await pool?.end();
   });
 
-  it("los scripts crean las 30 tablas del modelo y ninguna más", async () => {
+  it("los scripts crean las 33 tablas del modelo y ninguna más", async () => {
     const { rows } = await pool.query<{ tablename: string }>(
       "SELECT tablename FROM pg_tables WHERE schemaname = $1 ORDER BY tablename",
       [ESQUEMA],

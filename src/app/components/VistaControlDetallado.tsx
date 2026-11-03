@@ -9,6 +9,7 @@ import {
   ValidityBadge,
 } from "./SharedComponents";
 import type { ControlRecord } from "./SharedComponents";
+import EvaluacionControl from "./EvaluacionControl";
 import EvidenciasSection from "./EvidenciasSection";
 import { listarControles, registrarHoras, actualizarstatusControl } from "../api/controles";
 import { AvisoDeclaracionesPendientes, useDeclaracionesPendientes } from "./ConflictosPlan";
@@ -19,10 +20,12 @@ export default function VistaControlDetallado({
   id,
   auditId,
   crumbs,
+  onGenerarHallazgo,
 }: {
   id: string;
   auditId?: string;
   crumbs: React.ReactNode;
+  onGenerarHallazgo: (control: { id: string; nombre: string }) => void;
 }) {
   const [backendControl, setBackendControl] = useState<ControlRecord | null>(null);
   // Historia #96: sin declaración de conflictos no se evalúan los controles del plan.
@@ -183,6 +186,8 @@ export default function VistaControlDetallado({
     (ctrl?.auditIds ?? []).some((planId) => String(planId) === String(plan.id)),
   );
   const evaluacionBloqueada = pendientesDelControl.length > 0;
+  // Sin plan en la navegación se usa el que resolvió la revisión del control.
+  const planEvaluacion = auditId ?? (revision?.plan_id ? String(revision.plan_id) : null);
   const puedeEnviarARevision =
     puedeSubirEvidencia &&
     !evaluacionBloqueada &&
@@ -392,6 +397,14 @@ export default function VistaControlDetallado({
         businessEntityId={ctrl.auditEntityId}
         puedeSubir={Boolean(auditId) && puedeEnviarARevision}
       />
+      {planEvaluacion && (
+        <EvaluacionControl
+          key={planEvaluacion}
+          planId={planEvaluacion}
+          controlId={ctrl.id}
+          onGenerarHallazgo={() => onGenerarHallazgo({ id: ctrl.id, nombre: ctrl.controlProcedureName })}
+        />
+      )}
       {puedeSubirEvidencia && (
         <Card className="mb-5 p-5">
           {evaluacionBloqueada && (

@@ -3250,6 +3250,7 @@ export default function App() {
     try { return localStorage.getItem("expedite_tour_done") !== "1"; } catch { return true; }
   });
 
+  const [controlParaHallazgo, setControlParaHallazgo] = useState<{ id: string; nombre: string } | null>(null);
   const goToNav = (v: NavView) => {
     setNavView(v);
     setStack([]);
@@ -3339,7 +3340,15 @@ export default function App() {
           );
         case "control":
           return (
-            <VistaControlDetallado id={top.id} auditId={top.auditId} crumbs={crumbs} />
+            <VistaControlDetallado
+              id={top.id}
+              auditId={top.auditId}
+              crumbs={crumbs}
+              onGenerarHallazgo={(control) => {
+                goToNav("findings");
+                setControlParaHallazgo(control);
+              }}
+            />
           );
       }
     }
@@ -3365,7 +3374,12 @@ export default function App() {
       case "plans":
         return <AuditPlansView canCreate={usuario?.rol === "Jefe de Auditoría"} navigate={navigate} />;
       case "findings":
-        return <VistaHallazgo />;
+        return (
+          <VistaHallazgo
+            controlInicial={controlParaHallazgo}
+            onControlInicialUsado={() => setControlParaHallazgo(null)}
+          />
+        );
       case "controles":
         return <VistaControles navigate={navigate} />;
       case "auditado":

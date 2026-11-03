@@ -11,6 +11,7 @@ export interface EventoBitacora {
     | "plan_accion.edicion"
     | "conflicto.declaracion"
     | "conflicto.aviso_jefatura"
+    | "control.evaluacion"
     | "asistente.resumen"
     | "asistente.pregunta"
     | "asistente.consulta"

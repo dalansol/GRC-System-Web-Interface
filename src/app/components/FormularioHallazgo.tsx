@@ -28,6 +28,8 @@ interface FormularioHallazgoProps {
   controls: FindingControlOption[];
   nextFolio: string;
   auditId?: string;
+  /** Control elegido al abrir: el que generó el hallazgo desde su evaluación (historia #98). */
+  controlInicialId?: string;
   onCreated: (finding: CreatedFinding) => void;
   onClose: () => void;
 }
@@ -75,6 +77,22 @@ function calculateResidualRisk(
   return "Bajo";
 }
 
+/**
+ * Lista de controles para un hallazgo que nace de una evaluación (historia #98). Una deficiencia
+ * significa que el control no mitiga el riesgo, así que su vulnerabilidad es alta, sea cual sea la
+ * de la lista; si no está en ella se agrega, porque los controles del backend no vienen ahí.
+ */
+export function controlesConDeficiencia(
+  controles: FindingControlOption[],
+  deficiente: { id: string; nombre: string } | null,
+): FindingControlOption[] {
+  if (!deficiente) return controles;
+  const opcion: FindingControlOption = { id: deficiente.id, name: deficiente.nombre, vulnerability: "Alta" };
+  return controles.some((c) => c.id === deficiente.id)
+    ? controles.map((c) => (c.id === deficiente.id ? opcion : c))
+    : [...controles, opcion];
+}
+
 const metaEnv = (import.meta as any).env;
 const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND !== "false";
 
@@ -82,6 +100,7 @@ export default function FormularioHallazgo({
   controls,
   nextFolio,
   auditId = "AUD-001",
+  controlInicialId = "",
   onCreated,
   onClose,
 }: FormularioHallazgoProps) {
@@ -90,7 +109,7 @@ export default function FormularioHallazgo({
   const [type, setType] = useState("");
   const [severity, setSeverity] =
     useState<CreatedFinding["severity"]>("Medio");
-  const [controlId, setControlId] = useState("");
+  const [controlId, setControlId] = useState(controlInicialId);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 

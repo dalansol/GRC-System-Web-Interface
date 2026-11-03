@@ -9,6 +9,8 @@ import { registrarPool } from "./db.js";
 import type { RepositorioConflictos } from "./repos/conflictos.js";
 import { RepositorioConflictosMemoria } from "./repos/conflictosMemoria.js";
 import { RepositorioConflictosSql } from "./repos/conflictosSql.js";
+import type { RepositorioEvaluaciones } from "./repos/evaluaciones.js";
+import { RepositorioEvaluacionesSql } from "./repos/evaluacionesSql.js";
 import type { RepositorioEvidencias } from "./repos/evidencias.js";
 import { RepositorioEvidenciasMemoria } from "./repos/evidenciasMemoria.js";
 import { RepositorioEvidenciasSql } from "./repos/evidenciasSql.js";
@@ -33,6 +35,7 @@ let repo: RepositorioUsuarios;
 let repoPlanes: RepositorioPlanes;
 let repoPlanesAccion: RepositorioPlanesAccion;
 let repoConflictos: RepositorioConflictos;
+let repoEvaluaciones: RepositorioEvaluaciones | undefined;
 let repoEvidencias: RepositorioEvidencias;
 let repoEstructura: RepositorioEstructura;
 const rutasSinSesion: Router[] = [];
@@ -43,6 +46,7 @@ if (config.datos.modo === "sql") {
   repoPlanes = new RepositorioPlanesSql(repoSql.pool);
   repoPlanesAccion = new RepositorioPlanesAccionSql(repoSql.pool);
   repoConflictos = new RepositorioConflictosSql(repoSql.pool);
+  repoEvaluaciones = new RepositorioEvaluacionesSql(repoSql.pool);
   repoEvidencias = new RepositorioEvidenciasSql(repoSql.pool, almacenamiento);
   repoEstructura = new RepositorioEstructuraSql(repoSql.pool);
   // Las rutas de hallazgos y evidencias usan la misma conexión que las de usuarios.
@@ -72,6 +76,7 @@ const app = crearApp({
   repoEvidencias,
   proveedorIA: crearProveedor(config.ia),
   repoConflictos,
+  repoEvaluaciones,
   repoEstructura,
   rutasConSesion: config.datos.modo === "sql"
     ? [(await import("./routes/evidencias.js")).rutasEvidencias(almacenamiento)]
