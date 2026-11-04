@@ -25,5 +25,6 @@ export interface RepositorioPlanesAccion {
   buscarPorId(id: number): Promise<PlanAccion | null>;
   /** Reemplaza los campos editables del plan. Null si el plan no existe. */
   actualizar(id: number, datos: DatosEdicionPlanAccion): Promise<PlanAccion | null>;
+  aprobar(id: number): Promise<PlanAccion | null>;
   actualizarPaso(planId: number, pasoId: number, completado: boolean): Promise<PasoPlanAccion | null>;
 }

@@ -72,10 +72,12 @@ export default function EvidenciasSection({
   entityId, 
   entityType = "control",
   puedeSubir,
+  onEvidenceCountChange,
 }: { 
   entityId: string; 
   entityType?: EvidenceEntityType;
   puedeSubir?: boolean;
+  onEvidenceCountChange?: (count: number) => void;
 }) {
   const puedeSubirEvidencia = puedeSubir === true;
   const [files, setFiles] = useState<EvidenceFile[]>([]);
@@ -94,9 +96,11 @@ export default function EvidenciasSection({
       const query = new URLSearchParams({ entityId, entityType });
       const data = await pedir<any[]>(`/evidencias?${query.toString()}`);
       setFiles(data.map(mapApiRow));
+      onEvidenceCountChange?.(data.length);
       setUsingFallback(false);
     } catch (reason: unknown) {
       setFiles([]);
+      onEvidenceCountChange?.(0);
       setUsingFallback(false);
       setError(reason instanceof Error ? reason.message : "No se pudieron cargar las evidencias.");
     }
@@ -141,6 +145,7 @@ export default function EvidenciasSection({
         uploadedBy: "M. García", entityId, version: 1,
       };
       setFiles(prev => [newEv, ...prev]);
+      onEvidenceCountChange?.(files.length + 1);
       toast.success(`Evidencia "${file.name}" cargada correctamente`);
       if (inputRef.current) inputRef.current.value = "";
       return;
@@ -169,6 +174,7 @@ export default function EvidenciasSection({
   const removeFile = async (id: string) => {
     if (usingFallback) {
       setFiles(prev => prev.filter(f => f.id !== id));
+      onEvidenceCountChange?.(Math.max(0, files.length - 1));
       return;
     }
 

@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS action_plans (
     due_date       DATE           NOT NULL,
     status         VARCHAR(20)    NOT NULL DEFAULT 'Asignado'
                                   CONSTRAINT ck_action_plans_status
-                                  CHECK (status IN ('Asignado', 'En Progreso', 'Completado')),
+                                  CHECK (status IN ('Asignado', 'En Progreso', 'Completado', 'En Revisión')),
     created_by     INT            NOT NULL CONSTRAINT fk_action_plans_created_by REFERENCES users (id),
     created_at     TIMESTAMPTZ(0) NOT NULL DEFAULT now()
 );

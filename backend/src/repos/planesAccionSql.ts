@@ -219,6 +219,17 @@ export class RepositorioPlanesAccionSql implements RepositorioPlanesAccion {
     return resultado.rowCount === 1 ? this.buscarPorId(id) : null;
   }
 
+  async aprobar(id: number) {
+    const resultado = await this.pool.query(
+      `UPDATE action_plans
+       SET status = 'En Revisión'
+       WHERE id = $1 AND status <> 'En Revisión'
+       RETURNING id`,
+      [id],
+    );
+    return resultado.rowCount === 1 ? this.buscarPorId(id) : null;
+  }
+
   async actualizarPaso(planId: number, pasoId: number, completado: boolean) {
     const resultado = await this.pool.query<FilaPaso>(
       `UPDATE action_plan_steps

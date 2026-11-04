@@ -1,6 +1,6 @@
 // Planes de acción correctivos de un hallazgo (SF-10, SF-11): tipos y validación.
 
-export const ESTADOS_PLAN_ACCION = ["Asignado", "En Progreso", "Completado"] as const;
+export const ESTADOS_PLAN_ACCION = ["Asignado", "En Progreso", "Completado", "En Revisión"] as const;
 export type EstadoPlanAccion = (typeof ESTADOS_PLAN_ACCION)[number];
 
 /** Datos del hallazgo que el plan necesita mostrar y validar. */

@@ -13,7 +13,9 @@ import {
   ShieldAlert,
   UserCheck,
   AlertTriangle,
-  X
+  X,
+  CheckCheck,
+  User
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,6 +24,7 @@ import EvidenciasSection from "./EvidenciasSection";
 import { useSesion } from "../auth/SesionContext";
 import {
   actualizarPasoPlanAccion,
+  aprobarPlanAccion,
   listarMisPlanesAccion,
   type HallazgoResumen,
   type PlanAccion
@@ -30,7 +33,6 @@ import { type HallazgoPortal } from "../api/portalAuditado";
 
 interface PlanAccionConDetalles extends Omit<PlanAccion, "estado" | "status"> {
   finding?: HallazgoPortal;
-  hallazgosRelacionados?: HallazgoResumen[];
   estado?: string;
   status?: string;
 }
@@ -75,17 +77,45 @@ export default function VistaPlanesAccion() {
     cargarPlanes();
   }, [usuario?.id, (usuario as any)?.business_unit_id, usuario?.businessUnitId]);
 
-  // Toggle step completion status
-  const togglePasoCompletado = async (planId: number, pasoId: number, completado: boolean) => {
+  // Toggle step completion status with evidence validation
+  const togglePasoCompletado = async (plan: PlanAccionConDetalles, pasoId: number, completadoDeseado: boolean) => {
+    if ((plan.status || plan.estado) === "En Revisión") {
+      toast.error("El plan de acción está en revisión y ya no puede modificarse.");
+      return;
+    }
+    const paso = plan.pasos?.find((p) => p.id === pasoId);
+    if (!paso) return;
+
+    // Si se quiere marcar como completado, validar que tenga evidencias
+    if (completadoDeseado) {
+      if (paso.evidenciasCount === 0) {
+        toast.error("No se puede aprobar/completar el paso porque no cuenta con evidencias adjuntas.");
+        return;
+      }
+    }
+
     try {
-      const pasoActualizado = await actualizarPasoPlanAccion(planId, pasoId, completado);
-      setPlanes((prev) => prev.map((plan) => plan.id !== planId ? plan : {
-        ...plan,
-        pasos: plan.pasos.map((paso) => paso.id === pasoId ? pasoActualizado : paso),
+      const pasoActualizado = await actualizarPasoPlanAccion(plan.id, pasoId, completadoDeseado);
+      setPlanes((prev) => prev.map((p) => p.id !== plan.id ? p : {
+        ...p,
+        pasos: p.pasos.map((item) => item.id === pasoId ? pasoActualizado : item),
       }));
       toast.success("Estatus de la actividad actualizado.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo actualizar la actividad.");
+    }
+  };
+
+  const aprobarPlanCompleto = async (planId: number) => {
+    try {
+      const planActualizado = await aprobarPlanAccion(planId);
+      setPlanes((prev) => prev.map((plan) => plan.id === planId ? {
+        ...plan,
+        ...planActualizado,
+      } : plan));
+      toast.success("Plan de acción enviado a revisión.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo enviar el plan a revisión.");
     }
   };
 
@@ -147,6 +177,10 @@ export default function VistaPlanesAccion() {
                   
                   const tituloDisplay = plan.titulo || plan.hallazgo?.titulo || plan.finding?.title || "Plan de Acción Correctivo";
                   const responsableNombre = plan.responsable?.nombre || "No asignado";
+
+                  // Calcular si todos los pasos están completados
+                  const todosPasosCompletados = plan.pasos && plan.pasos.length > 0 && plan.pasos.every((p) => p.completado);
+                  const planEnRevision = (plan.status || plan.estado) === "En Revisión";
 
                   return (
                     <Fragment key={plan.id}>
@@ -270,6 +304,11 @@ export default function VistaPlanesAccion() {
                                       const isSplitActive = splitStepKey?.planId === plan.id && splitStepKey?.stepId === paso.id;
 
                                       const evidenciasCount = paso.evidenciasCount;
+                                      const nombreResponsablePaso = 
+                                        paso.usuarioAsignado?.nombre || 
+                                        (paso as any).responsible_name || 
+                                        (paso as any).responsableNombre || 
+                                        "Sin asignar";
 
                                       return (
                                         <div
@@ -290,7 +329,7 @@ export default function VistaPlanesAccion() {
                                                 onClick={(e) => {
                                                   e.stopPropagation();
                                                   if (esAsignadoActual) {
-                                                    void togglePasoCompletado(plan.id, paso.id, !isDone);
+                                                    void togglePasoCompletado(plan, paso.id, !isDone);
                                                   } else {
                                                     toast.error("Solo puedes modificar el estatus de tus propios pasos asignados.");
                                                   }
@@ -318,6 +357,12 @@ export default function VistaPlanesAccion() {
                                             </div>
 
                                             <div className="flex items-center gap-4 text-[11px] text-muted-foreground shrink-0 pl-6 md:pl-0 flex-wrap">
+                                              {/* Nombre del usuario asignado al paso a la izquierda de la fecha límite */}
+                                              <span className="flex items-center gap-1 font-medium text-foreground bg-muted/60 px-2 py-0.5 rounded truncate max-w-[140px]" title={nombreResponsablePaso}>
+                                                <User size={12} className="text-primary shrink-0" />
+                                                <span className="truncate">{nombreResponsablePaso}</span>
+                                              </span>
+
                                               <span className="flex items-center gap-1 font-mono shrink-0">
                                                 <Calendar size={13} />
                                                 {paso.fechaCompromiso || "Sin fecha"}
@@ -362,7 +407,15 @@ export default function VistaPlanesAccion() {
                                                 <EvidenciasSection
                                                   entityId={String(paso.id)}
                                                   entityType="action_plan_step"
-                                                  puedeSubir={esAsignadoActual}
+                                                  puedeSubir={esAsignadoActual && !planEnRevision}
+                                                  onEvidenceCountChange={(count) => {
+                                                    setPlanes((prev) => prev.map((item) => item.id !== plan.id ? item : {
+                                                      ...item,
+                                                      pasos: item.pasos.map((itemPaso) => itemPaso.id === paso.id
+                                                        ? { ...itemPaso, evidenciasCount: count }
+                                                        : itemPaso),
+                                                    }));
+                                                  }}
                                                 />
                                               </div>
                                             </div>
@@ -377,6 +430,21 @@ export default function VistaPlanesAccion() {
                                   )}
                                 </div>
                               </div>
+
+                              {/* Botón para marcar el plan como aprobado (Solo aparece cuando todos los pasos están completados) */}
+                              {todosPasosCompletados && !planEnRevision && (
+                                <div className="pt-4 flex justify-end border-t border-border mt-4">
+                                  <button
+                                    type="button"
+                                    onClick={() => aprobarPlanCompleto(plan.id)}
+                                    className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                                  >
+                                    <CheckCheck size={15} />
+                                    Aprobar Plan de Acción
+                                  </button>
+                                </div>
+                              )}
+
                             </div>
                           </td>
                         </tr>

@@ -100,6 +100,9 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     const id = Number(req.params.id);
     const actual = Number.isInteger(id) && id > 0 ? await repo.buscarPorId(id) : null;
     if (!actual) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de acción no existe.");
+    if (actual.estado === "En Revisión") {
+      throw new ErrorApi(409, "PLAN_EN_REVISION", "El plan de acción está en revisión y ya no puede modificarse.");
+    }
     // El auditado no modifica su plan, aunque su rol pertenezca al equipo de auditoría.
     if (actual.responsable.id === usuarioEnSesion(res).id) {
       throw new ErrorApi(403, "RESPONSABLE_NO_EDITA", "El responsable auditado no puede modificar su propio plan de acción.");
@@ -156,6 +159,27 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     res.json(plan);
   });
 
+  rutas.post("/planes-accion/:id/aprobar", async (req, res) => {
+    const id = Number(req.params.id);
+    const actual = Number.isInteger(id) && id > 0 ? await repo.buscarPorId(id) : null;
+    if (!actual) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de acción no existe.");
+    if (actual.estado === "En Revisión") {
+      throw new ErrorApi(409, "PLAN_EN_REVISION", "El plan de acción ya está en revisión.");
+    }
+    if (actual.pasos.length === 0 || !actual.pasos.every((paso) => paso.completado)) {
+      throw new ErrorApi(400, "PASOS_PENDIENTES", "Todos los pasos deben estar completados antes de enviar el plan a revisión.");
+    }
+
+    const plan = await repo.aprobar(id);
+    if (!plan) throw new ErrorApi(409, "PLAN_EN_REVISION", "El plan de acción ya está en revisión.");
+    registrarEvento({
+      accion: "plan_accion.envio_revision",
+      actor: usuarioEnSesion(res).correo,
+      detalle: { planAccionId: plan.id, hallazgoId: plan.hallazgo.id, folio: plan.hallazgo.folio },
+    });
+    res.json(plan);
+  });
+
   rutas.patch("/planes-accion/:planId/pasos/:pasoId", async (req, res) => {
     const planId = Number(req.params.planId);
     const pasoId = Number(req.params.pasoId);
@@ -166,6 +190,9 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
 
     const plan = await repo.buscarPorId(planId);
     if (!plan) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de acción no existe.");
+    if (plan.estado === "En Revisión") {
+      throw new ErrorApi(409, "PLAN_EN_REVISION", "El plan de acción está en revisión y sus pasos ya no pueden modificarse.");
+    }
     const paso = plan.pasos.find((item) => item.id === pasoId);
     if (!paso || paso.usuarioAsignado?.id !== usuarioEnSesion(res).id) {
       throw new ErrorApi(403, "NO_ASIGNADO", "Solo el responsable asignado puede actualizar este paso.");

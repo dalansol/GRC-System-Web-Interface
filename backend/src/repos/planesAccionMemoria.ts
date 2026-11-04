@@ -105,6 +105,14 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
     return this.aPlan(fila);
   }
 
+  async aprobar(id: number) {
+    await this.listo;
+    const fila = this.filas.find((f) => f.id === id);
+    if (!fila || fila.estado === "En Revisión") return null;
+    fila.estado = "En Revisión";
+    return this.aPlan(fila);
+  }
+
   async actualizarPaso(_planId: number, _pasoId: number, _completado: boolean) {
     return null;
   }

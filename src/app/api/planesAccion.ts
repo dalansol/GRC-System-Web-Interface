@@ -2,7 +2,7 @@ import { pedir } from "./cliente";
 
 // Planes de acción correctivos de un hallazgo (SF-10, SF-11; historia #91).
 
-export type EstadoPlanAccion = "Asignado" | "En Progreso" | "Completado";
+export type EstadoPlanAccion = "Asignado" | "En Progreso" | "Completado" | "En Revisión";
 
 export interface HallazgoResumen {
   id: string;
@@ -98,6 +98,9 @@ export const ROLES_EDICION_PLAN_ACCION = ["Administrador", "Jefe de Auditoría",
 
 export const actualizarPlanAccion = (id: number, cambios: CambiosPlanAccion) =>
   pedir<PlanAccion>(`/planes-accion/${id}`, { metodo: "PATCH", cuerpo: cambios });
+
+export const aprobarPlanAccion = (id: number) =>
+  pedir<PlanAccion>(`/planes-accion/${id}/aprobar`, { metodo: "POST" });
 
 export const actualizarPasoPlanAccion = (planId: number, pasoId: number, completado: boolean) =>
   pedir<PasoPlanAccion>(`/planes-accion/${planId}/pasos/${pasoId}`, {
