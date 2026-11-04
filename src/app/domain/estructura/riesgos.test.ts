@@ -16,7 +16,7 @@ const unidad = (id: number, codigo: string, subdivisiones: Array<[string, Riesgo
   responsableId: 1,
   responsableNombre: "María García",
   periodoFiscalId: 1,
-  periodoFiscalNombre: "2026 Q4",
+  periodoFiscalNombre: "2026 T4",
   departamentoAuditoriaId: null,
   departamentoAuditoriaNombre: null,
   creadoPor: 1,

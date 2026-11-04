@@ -29,6 +29,7 @@ import {
   type UnidadNegocio,
   type DatosNodo,
 } from "../../api/estructura";
+import { listarOpciones as apiListarOpciones } from "../../api/catalogos";
 import { useSesion } from "../../auth/SesionContext";
 import { nombreVisible, tieneNombre, type ConNombre } from "./nombres";
 
@@ -68,6 +69,9 @@ export function useEstructuraViewModel() {
   const [periodos, setPeriodos] = useState<PeriodoFiscal[]>([]);
   const [departamentos, setDepartamentos] = useState<DepartamentoAuditoria[]>([]);
   const [responsables, setResponsables] = useState<Responsable[]>([]);
+  /** Catálogos de Ajustes: las únicas opciones para el nombre del área y el país. */
+  const [opcionesArea, setOpcionesArea] = useState<string[]>([]);
+  const [opcionesPais, setOpcionesPais] = useState<string[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
   /** Mensaje si no se pudo leer el catálogo (para no confundirlo con un catálogo vacío). */
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
@@ -121,6 +125,18 @@ export function useEstructuraViewModel() {
   useEffect(() => {
     cargarDatos();
   }, [cargarDatos]);
+
+  /** Lee los catálogos al abrir un formulario, por si el Administrador los cambió. */
+  const cargarCatalogos = () => {
+    apiListarOpciones("area")
+      .then((opciones) => setOpcionesArea(opciones.map((o) => o.valor)))
+      .catch(() => {
+        // Se conservan las últimas leídas; el backend valida igual.
+      });
+    apiListarOpciones("pais")
+      .then((opciones) => setOpcionesPais(opciones.map((o) => o.valor)))
+      .catch(() => {});
+  };
 
   /** Vuelve a leer una unidad con su jerarquía tras cambiar uno de sus nodos. */
   const refrescarUnidad = async (unidadId: number) => {
@@ -184,6 +200,7 @@ export function useEstructuraViewModel() {
     setErrorModalNodo(null);
     setAltaNodo(contexto);
     cargarCodigoProximo(contexto.nivel === "area" ? null : contexto.nivel);
+    if (contexto.nivel !== "division") cargarCatalogos();
   };
 
   const cerrarAltaNodo = () => {
@@ -221,6 +238,7 @@ export function useEstructuraViewModel() {
   const abrirEditarNodo = (nodo: NodoSeleccionado) => {
     setErrorModalEdicion(null);
     setNodoEditando(nodo);
+    if (nodo.nivel !== "division") cargarCatalogos();
   };
 
   const cerrarEdicion = () => {
@@ -350,6 +368,8 @@ export function useEstructuraViewModel() {
     periodos,
     departamentos,
     responsables,
+    opcionesArea,
+    opcionesPais,
     cargando,
     errorCarga,
     guardando,

@@ -77,32 +77,32 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
     it("consulta el periodo trimestral activo", async () => {
       const res = await como(AUDITOR).get("/api/periodos/activo");
       expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ nombre: "2026 Q4", activo: true });
+      expect(res.body).toMatchObject({ nombre: "2026 T4", activo: true });
     });
 
     it("al activar un periodo nuevo desactiva el anterior y lo registra en bitácora", async () => {
       const res = await como(ADMIN).post("/api/periodos").send({
-        nombre: "2027 Q1",
+        nombre: "2027 T1",
         fechaInicio: "2027-01-01",
         fechaFin: "2027-03-31",
         activo: true,
       });
       expect(res.status).toBe(201);
       const periodos = (await como(JEFA).get("/api/periodos")).body as Array<{ nombre: string; activo: boolean }>;
-      expect(periodos.filter((p) => p.activo).map((p) => p.nombre)).toEqual(["2027 Q1"]);
+      expect(periodos.filter((p) => p.activo).map((p) => p.nombre)).toEqual(["2027 T1"]);
       expect(eventos.some((e) => e.accion === "periodo.alta")).toBe(true);
     });
 
     it("rechaza fechas invertidas y nombres de periodo repetidos", async () => {
       const invertido = await como(JEFA).post("/api/periodos").send({
-        nombre: "2027 Q2",
+        nombre: "2027 T2",
         fechaInicio: "2027-06-30",
         fechaFin: "2027-04-01",
       });
       expect(invertido.status).toBe(400);
 
       const repetido = await como(JEFA).post("/api/periodos").send({
-        nombre: "2026 q4",
+        nombre: "2026 t4",
         fechaInicio: "2026-10-01",
         fechaFin: "2026-12-31",
       });
@@ -124,7 +124,7 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
         codigo: "UDN-0001",
         nombre: null,
         responsableId: await idDe(JEFA),
-        periodoFiscalNombre: "2026 Q4",
+        periodoFiscalNombre: "2026 T4",
         departamentoAuditoriaNombre: "Retail & Spin",
         divisiones: [],
       });

@@ -10,7 +10,7 @@ import {
 } from "../../domain/estructura/periodos";
 import { Card } from "../SharedComponents";
 
-// Periodos de auditoría (SF-03): cada año se divide en cuatro trimestres ("2027 Q1"…) más el
+// Periodos de auditoría (SF-03): cada año se divide en cuatro trimestres ("2027 T1"…) más el
 // año fiscal completo ("2027 Fiscal"); se crean con un botón, sin capturar fechas. Uno activo
 // a la vez: la unidad nueva toma el activo y activar uno desactiva el anterior (lo hace el
 // backend). Solo para Administrador y Jefe de Auditoría.

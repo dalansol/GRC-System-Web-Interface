@@ -1,6 +1,7 @@
 // Implementación en memoria del repositorio de estructura organizacional (SF-03).
 // Útil para modo DATA_MODE=memoria y pruebas unitarias rápidas.
 
+import type { TipoCatalogo } from "../domain/catalogos.js";
 import {
   claveNombre,
   ESTADOS_PLAN_ACTIVOS,
@@ -22,6 +23,7 @@ import {
   type Riesgo,
   type UnidadNegocio,
 } from "../domain/estructura.js";
+import type { UsosCatalogo } from "./catalogos.js";
 import { ErrorNombreDuplicado, type RepositorioEstructura } from "./estructura.js";
 import type { SemillaUnidad } from "./semillaEstructura.js";
 import type { RepositorioUsuarios } from "./repositorio.js";
@@ -32,10 +34,10 @@ interface FilaNodo extends NodoPlano {
 
 const plano = (n: FilaNodo): NodoPlano => ({ id: n.id, codigo: n.codigo, nombre: n.nombre, padreId: n.padreId });
 
-export class RepositorioEstructuraMemoria implements RepositorioEstructura {
+export class RepositorioEstructuraMemoria implements RepositorioEstructura, UsosCatalogo {
   private periodos: PeriodoFiscal[] = [
-    { id: 1, nombre: "2026 Q3", fechaInicio: "2026-07-01", fechaFin: "2026-09-30", activo: false },
-    { id: 2, nombre: "2026 Q4", fechaInicio: "2026-10-01", fechaFin: "2026-12-31", activo: true },
+    { id: 1, nombre: "2026 T3", fechaInicio: "2026-07-01", fechaFin: "2026-09-30", activo: false },
+    { id: 2, nombre: "2026 T4", fechaInicio: "2026-10-01", fechaFin: "2026-12-31", activo: true },
   ];
 
   private departamentos: DepartamentoAuditoria[] = [
@@ -341,5 +343,31 @@ export class RepositorioEstructuraMemoria implements RepositorioEstructura {
     };
     if (nivel === "subdivision" && this.riesgos.some((r) => r.subdivisionId === id)) return true;
     return hijos[nivel]?.some((n) => n.padreId === id) ?? false;
+  }
+
+  // ── Catálogos (UsosCatalogo) ───────────────────────────────────────────────
+  // El nombre del área y el país de la subdivisión salen de los catálogos (catalogosMemoria.ts).
+
+  private filasDeCatalogo(tipo: TipoCatalogo): Array<{ fila: FilaNodo; campo: "nombre" | "pais" }> {
+    return tipo === "area"
+      ? this.nodos.area.map((fila) => ({ fila, campo: "nombre" as const }))
+      : this.nodos.subdivision.map((fila) => ({ fila, campo: "pais" as const }));
+  }
+
+  valoresEnUso(tipo: TipoCatalogo): string[] {
+    return this.filasDeCatalogo(tipo)
+      .map(({ fila, campo }) => fila[campo])
+      .filter((v): v is string => v !== null);
+  }
+
+  renombrarValor(tipo: TipoCatalogo, anterior: string, nuevo: string): number {
+    let cambiados = 0;
+    for (const { fila, campo } of this.filasDeCatalogo(tipo)) {
+      if (fila[campo] !== null && claveNombre(fila[campo]!) === claveNombre(anterior)) {
+        fila[campo] = nuevo;
+        cambiados++;
+      }
+    }
+    return cambiados;
   }
 }

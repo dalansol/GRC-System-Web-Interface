@@ -1,5 +1,5 @@
 -- Datos iniciales de la estructura organizacional (SF-03): el año fiscal 2026.
--- Se crea inactivo: 017 activa 2026 Q4 si no hay ningún periodo activo, y después lo elige
+-- Se crea inactivo: 017 activa 2026 T4 si no hay ningún periodo activo, y después lo elige
 -- quien gestiona el Catálogo (repetir los scripts no le cambia el periodo activo).
 -- Se puede ejecutar más de una vez sin efecto: no inserta si ya hay un periodo con esas
 -- fechas (con el nombre anterior, "Fiscal 2026", o el actual, "2026 Fiscal"; ver 026).

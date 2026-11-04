@@ -20,14 +20,14 @@ navegador.
 ## Cómo ejecutar
 
 ```bash
-# Backend (37 pruebas de estructura; las 16 de base de datos se omiten sin conexión)
+# Backend (39 pruebas de estructura y 10 de catálogos; las 16 de base de datos se omiten sin conexión)
 cd backend && corepack pnpm test
 
 # Incluyendo la base de datos: aplica los scripts dos veces en el esquema prueba_estructura
 SQL_TEST_SERVER=<servidor> SQL_TEST_DATABASE=<base> SQL_TEST_USER=<usuario> \
 SQL_TEST_PASSWORD=<contraseña> corepack pnpm test
 
-# Frontend (28 de la vista, 7 de riesgos, 8 de navegación, 6 de sugerencias, 5 de periodos y 2 de nombres)
+# Frontend (29 de la vista, 6 de catálogos en Ajustes, 7 de riesgos, 8 de navegación, 6 de sugerencias, 5 de periodos y 2 de nombres)
 npm test
 ```
 
@@ -35,9 +35,11 @@ npm test
 
 | Suite | Pruebas | Resultado |
 |---|---|---|
-| Backend: `test/estructura.test.ts` | 37 | 37 aprobadas |
+| Backend: `test/estructura.test.ts` | 39 | 39 aprobadas |
+| Backend: `test/catalogos.test.ts` | 10 | 10 aprobadas |
 | Base de datos: `test/estructura.integracion.test.ts` | 16 | Omitidas (sin conexión) |
-| Frontend: `HierarchyView.test.tsx` | 28 | 28 aprobadas |
+| Frontend: `HierarchyView.test.tsx` | 29 | 29 aprobadas |
+| Frontend: `CatalogosEstructuraSection.test.tsx` | 6 | 6 aprobadas |
 | Frontend: `domain/estructura/nombres.test.ts` | 2 | 2 aprobadas |
 | Frontend: `domain/estructura/riesgos.test.ts` | 7 | 7 aprobadas |
 | Frontend: `domain/estructura/navegacion.test.ts` | 8 | 8 aprobadas |
@@ -48,7 +50,7 @@ npm test
 
 | ID | Criterio | Caso | Esperado | Capa |
 |---|---|---|---|---|
-| CP-EST-01 | AC1 | Jefe de Auditoría o Administrador crea una unidad con gerente y departamento | `201`; periodo activo `2026Q4` asignado; evento `estructura.alta` | API, vista |
+| CP-EST-01 | AC1 | Jefe de Auditoría o Administrador crea una unidad con gerente y departamento | `201`; periodo activo `2026 T4` asignado; evento `estructura.alta` | API, vista |
 | CP-EST-01 | AC1 | Se agrega división → subdivisión (con país) → área | La rama completa aparece en `GET /unidades-negocio` y en el árbol del catálogo | API, vista |
 | CP-EST-01 | AC1 | Alta de un nodo con padre inexistente | `404` | API |
 | CP-EST-02 | SNF-05 | Auditor o Auditor Senior intenta crear o eliminar | `403 ROL_NO_AUTORIZADO`; la vista oculta las acciones de gestión | API, vista |
@@ -65,8 +67,8 @@ npm test
 | CP-EST-06 | AC3 | El servidor rechaza la eliminación | El mensaje aparece una sola vez, en el diálogo (sin aviso repetido) | Vista |
 | — | Bitácora | Alta, edición y baja | Eventos `estructura.alta`, `estructura.edicion`, `estructura.baja`, `periodo.alta` | API |
 | — | Periodos | Activar un periodo nuevo; fechas invertidas; nombre repetido | Queda un solo activo; `400`; `409` | API, BD |
-| CP-EST-11 | Periodos | Desde la insignia del encabezado: elegir el año y agregar un trimestre o el año fiscal con su botón; activar otro periodo | Se crea "2027 Q1" (01-01 a 03-31) o "2027 Fiscal" (01-01 a 12-31) sin capturar fechas, opcionalmente ya activo; los ya registrados (por fechas) quedan deshabilitados; la lista ordena por año con el fiscal al final; el encabezado muestra el nuevo activo; el error del servidor se muestra en el modal; sin periodo activo la insignia ofrece "Configurar periodo" | Vista |
-| CP-EST-11 | BD | Base con periodos de formato anterior ("2031Q2", "Fiscal 2031") | 026 los renombra ("2031 Q2", "2031 Fiscal"); repetir 015 y 017 no duplica los de 2026 (5 periodos: 4 trimestres y el fiscal) ni cambia el periodo activo elegido en el Catálogo | BD |
+| CP-EST-11 | Periodos | Desde la insignia del encabezado: elegir el año y agregar un trimestre o el año fiscal con su botón; activar otro periodo | Se crea "2027 T1" (01-01 a 03-31) o "2027 Fiscal" (01-01 a 12-31) sin capturar fechas, opcionalmente ya activo; los ya registrados (por fechas) quedan deshabilitados; la lista ordena por año con el fiscal al final; el encabezado muestra el nuevo activo; el error del servidor se muestra en el modal; sin periodo activo la insignia ofrece "Configurar periodo" | Vista |
+| CP-EST-11 | BD | Base con periodos de formato anterior ("2031Q2", "Fiscal 2031") | 026 y 035 los renombran ("2031 T2", "2031 Fiscal"; "2031 Q3" pasa a "2031 T3"); repetir 015 y 017 no duplica los de 2026 (5 periodos: 4 trimestres y el fiscal) ni cambia el periodo activo elegido en el Catálogo | BD |
 | CP-EST-11 | SNF-05 | Auditor en el encabezado | Ve el periodo activo, pero no abre la gestión de periodos | Vista |
 | CP-EST-11 | Periodos | Unidad registrada en un periodo anterior | El detalle muestra "Periodo de alta" con su periodo, distinto del activo | Vista |
 | CP-EST-07 | Catálogo | Riesgos registrados en una subdivisión | Aparecen bajo su subdivisión con nivel y control; la división y la unidad muestran el total y el color del peor nivel | API, BD, vista |
@@ -79,7 +81,12 @@ npm test
 | CP-EST-12 | Catálogo | Editar una unidad cuyo gerente ya no está activo | El selector lo conserva y la edición no lo reenvía | Vista |
 | CP-EST-08 | SNF-05 | Usuario sin rol de gestión en las tarjetas | Navega, pero no ve agregar, editar ni eliminar | Vista |
 | — | Navegación | Ruta con un nodo eliminado | Cae al ancestro más profundo que existe; si se elimina la unidad, vuelve al catálogo | Vista |
-| CP-EST-09 | Catálogo | Alta de unidad, nodo o país | Los campos sugieren el siguiente código libre (UDN-, DIVISION-, SUBDIVISION-), las áreas y los países del Consolidado: al enfocar el campo vacío se ven todos, al escribir se filtran sin importar acentos y se eligen con clic o con flechas y Enter (sin enviar el formulario); se puede escribir otro valor | Vista |
+| CP-EST-09 | Catálogo | Alta de unidad, nodo o país | Los campos muestran el siguiente código libre (UDN-, DIVISION-, SUBDIVISION-) y ofrecen las áreas y los países del catálogo de Ajustes (en el alta de área, sin las que ya tiene la subdivisión): al enfocar el campo vacío se ven todas, al escribir se filtran sin importar acentos y se eligen con clic o con flechas y Enter (sin enviar el formulario). Un valor que no está en el catálogo se borra al salir del campo y no se envía | Vista |
+| CP-EST-13 | Catálogos | Alta o edición de área o subdivisión con un área o país fuera del catálogo | `400 OPCION_NO_VALIDA`; con otras mayúsculas se guarda la grafía del catálogo | API |
+| CP-EST-13 | SNF-05 | Jefe de Auditoría o Auditor intenta agregar, renombrar o eliminar una opción | `403`; la tarjeta de Ajustes solo se muestra al Administrador | API, vista |
+| CP-EST-13 | Catálogos | Administrador agrega una opción repetida (otras mayúsculas) | `409 NOMBRE_DUPLICADO`; el mensaje se ve en la tarjeta | API, vista |
+| CP-EST-13 | Catálogos | Administrador renombra un área y un país en uso | Las áreas y subdivisiones que los usaban muestran el valor nuevo; evento `catalogo.edicion` con el anterior; el aviso dice cuántos registros se actualizaron | API, vista |
+| CP-EST-13 | Catálogos | Eliminar una opción en uso / libre | `409 OPCION_EN_USO` (el botón aparece deshabilitado) / `204` tras confirmar, con evento `catalogo.baja` | API, vista |
 | CP-EST-10 | Catálogo | Código asignado por el sistema y nombre editable en unidad, división y subdivisión | El backend asigna el siguiente código del nivel (después del mayor del Consolidado), reutiliza el del último elemento borrado (mayor código existente más uno) y dos altas simultáneas reciben códigos distintos; enviar o editar el código responde 400. El formulario de alta muestra el próximo código con un candado (descripción "Se asigna al guardar", sin texto) y el de edición el actual ("No se puede cambiar"); el aviso de alta confirma el código. El nombre es opcional, se edita, vacío lo quita y se muestra en lugar del código con el código aparte; la búsqueda encuentra por ambos. El área solo pide nombre | API, BD, vista |
 | — | Datos de prueba | Semilla del Consolidado en memoria y en la base | 6 unidades, 39 subdivisiones, 338 áreas y 249 riesgos; todos los códigos con el formato del nivel y los nombres inferidos de 022; 024 quita la subdivisión sin código de una base con los datos anteriores sin tocar los nombres | API, BD |
 | — | BD | Nivel de riesgo fuera de la escala | La base lo rechaza (`ck_risk_library_level`) | BD |

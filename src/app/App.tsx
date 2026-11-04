@@ -140,6 +140,7 @@ import AuditPlansView from "./components/VistaPlanesAudito";
 import VistaControlDetallado from "./components/VistaControlDetallado";
 import { HierarchyView } from "./components/catalogo/HierarchyView";
 import { useSesion } from "./auth/SesionContext";
+import { CatalogosEstructuraSection } from "./components/CatalogosEstructuraSection";
 import { listarMisPlanesAccion, type PlanAccion } from "./api/planesAccion";
 
 const NAV_ITEMS: NavItem[] = [
@@ -2423,6 +2424,7 @@ function SettingsView({
 }: {
   onOpenEditor: () => void;
 }) {
+  const { esAdministrador } = useSesion();
   const [avatarSrc, setAvatarSrc] = useState<string | null>(
     null,
   );
@@ -2642,6 +2644,8 @@ function SettingsView({
         </div>
       </section>
 
+      {/* Catálogos de área y país del Catálogo organizacional (SF-03): solo Administrador */}
+      {esAdministrador && <CatalogosEstructuraSection />}
     </div>
   );
 }

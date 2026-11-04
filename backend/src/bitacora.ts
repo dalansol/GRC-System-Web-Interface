@@ -18,7 +18,10 @@ export interface EventoBitacora {
     | "estructura.edicion"
     | "estructura.baja"
     | "periodo.alta"
-    | "periodo.edicion";
+    | "periodo.edicion"
+    | "catalogo.alta"
+    | "catalogo.edicion"
+    | "catalogo.baja";
   actor: string;
   detalle: Record<string, unknown>;
 }

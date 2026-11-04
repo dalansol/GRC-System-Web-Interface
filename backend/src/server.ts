@@ -6,6 +6,9 @@ import { crearProveedor } from "./asistente/proveedor.js";
 import { crearVerificadorDev, crearVerificadorEntra } from "./auth/verificador.js";
 import { cargarConfig } from "./config.js";
 import { registrarPool } from "./db.js";
+import type { RepositorioCatalogos } from "./repos/catalogos.js";
+import { RepositorioCatalogosMemoria } from "./repos/catalogosMemoria.js";
+import { RepositorioCatalogosSql } from "./repos/catalogosSql.js";
 import type { RepositorioConflictos } from "./repos/conflictos.js";
 import { RepositorioConflictosMemoria } from "./repos/conflictosMemoria.js";
 import { RepositorioConflictosSql } from "./repos/conflictosSql.js";
@@ -35,6 +38,7 @@ let repoPlanesAccion: RepositorioPlanesAccion;
 let repoConflictos: RepositorioConflictos;
 let repoEvidencias: RepositorioEvidencias;
 let repoEstructura: RepositorioEstructura;
+let repoCatalogos: RepositorioCatalogos;
 const rutasSinSesion: Router[] = [];
 
 if (config.datos.modo === "sql") {
@@ -45,6 +49,7 @@ if (config.datos.modo === "sql") {
   repoConflictos = new RepositorioConflictosSql(repoSql.pool);
   repoEvidencias = new RepositorioEvidenciasSql(repoSql.pool, almacenamiento);
   repoEstructura = new RepositorioEstructuraSql(repoSql.pool);
+  repoCatalogos = new RepositorioCatalogosSql(repoSql.pool);
   // Las rutas de hallazgos y evidencias usan la misma conexión que las de usuarios.
   registrarPool(repoSql.pool);
   rutasSinSesion.push((await import("./routes/hallazgos.js")).default);
@@ -61,6 +66,8 @@ if (config.datos.modo === "sql") {
   const jefe = (await repo.listarUsuarios()).find((u) => u.rol === "Jefe de Auditoría" && u.estado === "active");
   if (jefe) estructuraMemoria.sembrar(SEMILLA_ESTRUCTURA, jefe.id);
   repoEstructura = estructuraMemoria;
+  // Después de sembrar: las áreas y los países de la semilla también quedan en el catálogo.
+  repoCatalogos = new RepositorioCatalogosMemoria(estructuraMemoria);
 }
 
 const verificador = config.auth.modo === "entra" ? crearVerificadorEntra(config.auth) : crearVerificadorDev();
@@ -73,6 +80,7 @@ const app = crearApp({
   proveedorIA: crearProveedor(config.ia),
   repoConflictos,
   repoEstructura,
+  repoCatalogos,
   rutasConSesion: config.datos.modo === "sql"
     ? [(await import("./routes/evidencias.js")).rutasEvidencias(almacenamiento)]
     : [],

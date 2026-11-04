@@ -11,12 +11,12 @@ const periodo = (id: number, nombre: string, fechaInicio: string, fechaFin: stri
 });
 
 describe("periodosDelAnio", () => {
-  it("divide el año en cuatro trimestres más el año fiscal, con el formato '2027 Q1' y '2027 Fiscal'", () => {
+  it("divide el año en cuatro trimestres más el año fiscal, con el formato '2027 T1' y '2027 Fiscal'", () => {
     expect(periodosDelAnio(2027)).toEqual([
-      { clave: "Q1", nombre: "2027 Q1", fechaInicio: "2027-01-01", fechaFin: "2027-03-31" },
-      { clave: "Q2", nombre: "2027 Q2", fechaInicio: "2027-04-01", fechaFin: "2027-06-30" },
-      { clave: "Q3", nombre: "2027 Q3", fechaInicio: "2027-07-01", fechaFin: "2027-09-30" },
-      { clave: "Q4", nombre: "2027 Q4", fechaInicio: "2027-10-01", fechaFin: "2027-12-31" },
+      { clave: "T1", nombre: "2027 T1", fechaInicio: "2027-01-01", fechaFin: "2027-03-31" },
+      { clave: "T2", nombre: "2027 T2", fechaInicio: "2027-04-01", fechaFin: "2027-06-30" },
+      { clave: "T3", nombre: "2027 T3", fechaInicio: "2027-07-01", fechaFin: "2027-09-30" },
+      { clave: "T4", nombre: "2027 T4", fechaInicio: "2027-10-01", fechaFin: "2027-12-31" },
       { clave: "Fiscal", nombre: "2027 Fiscal", fechaInicio: "2027-01-01", fechaFin: "2027-12-31" },
     ]);
   });
@@ -42,7 +42,7 @@ describe("periodoRegistrado", () => {
 
 describe("anioInicial", () => {
   it("usa el año del periodo activo o, sin él, el año actual", () => {
-    expect(anioInicial(periodo(1, "2026 Q4", "2026-10-01", "2026-12-31", true))).toBe(2026);
+    expect(anioInicial(periodo(1, "2026 T4", "2026-10-01", "2026-12-31", true))).toBe(2026);
     expect(anioInicial(null, new Date(2030, 5, 1))).toBe(2030);
   });
 });
@@ -50,11 +50,11 @@ describe("anioInicial", () => {
 describe("compararPeriodos", () => {
   it("ordena por año, los trimestres en orden y el año fiscal al final de su año", () => {
     const lista = [
-      periodo(1, "2027 Q1", "2027-01-01", "2027-03-31"),
+      periodo(1, "2027 T1", "2027-01-01", "2027-03-31"),
       periodo(2, "2026 Fiscal", "2026-01-01", "2026-12-31"),
-      periodo(3, "2026 Q4", "2026-10-01", "2026-12-31"),
-      periodo(4, "2026 Q1", "2026-01-01", "2026-03-31"),
+      periodo(3, "2026 T4", "2026-10-01", "2026-12-31"),
+      periodo(4, "2026 T1", "2026-01-01", "2026-03-31"),
     ];
-    expect([...lista].sort(compararPeriodos).map((p) => p.nombre)).toEqual(["2026 Q1", "2026 Q4", "2026 Fiscal", "2027 Q1"]);
+    expect([...lista].sort(compararPeriodos).map((p) => p.nombre)).toEqual(["2026 T1", "2026 T4", "2026 Fiscal", "2027 T1"]);
   });
 });

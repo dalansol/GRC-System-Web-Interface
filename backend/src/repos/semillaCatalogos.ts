@@ -1,9 +1,8 @@
-// Sugerencias para los formularios del catálogo organizacional (SF-03).
-// GENERADO de la hoja Catalogs de 00_Consolidado_2026Q1.xlsx, ordenado por frecuencia.
-// Son sugerencias: los nombres de área y el país siguen siendo texto libre.
+// Opciones iniciales de los catálogos de la estructura (SF-03), de la hoja Catalogs de
+// 00_Consolidado_2026Q1.xlsx, ordenadas por frecuencia. Las mismas que precarga 034_catalogos_estructura.sql.
 
 /** Nombres de área ("proceso") que usa FEMSA. */
-export const AREAS_FRECUENTES: readonly string[] = [
+export const AREAS_INICIALES: readonly string[] = [
   "Administración y Finanzas",
   "Tecnología de la Información",
   "Recursos Humanos",
@@ -47,11 +46,11 @@ export const AREAS_FRECUENTES: readonly string[] = [
   "Tecnología de Información",
   "Gestión de combustible",
   "Gestión de Terceros",
-  "Compras"
+  "Compras",
 ];
 
 /** Países o regiones de las subdivisiones (incluye valores como "Corporativo" o "KFS RTR"). */
-export const PAISES_FRECUENTES: readonly string[] = [
+export const PAISES_INICIALES: readonly string[] = [
   "México",
   "Brasil",
   "Colombia",
@@ -72,5 +71,5 @@ export const PAISES_FRECUENTES: readonly string[] = [
   "Estados Unidos",
   "KFS RTR",
   "KFS CM",
-  "KFS PF&R"
+  "KFS PF&R",
 ];

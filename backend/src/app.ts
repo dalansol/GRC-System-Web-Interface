@@ -5,14 +5,18 @@ import type { VerificadorToken } from "./auth/verificador.js";
 import { registrarEnConsola, type RegistrarEvento } from "./bitacora.js";
 import { ErrorApi } from "./errores.js";
 import { autenticar } from "./middleware/autenticar.js";
+import type { RepositorioCatalogos } from "./repos/catalogos.js";
+import { RepositorioCatalogosMemoria } from "./repos/catalogosMemoria.js";
 import type { RepositorioConflictos } from "./repos/conflictos.js";
 import { RepositorioConflictosMemoria } from "./repos/conflictosMemoria.js";
 import type { RepositorioEstructura } from "./repos/estructura.js";
+import { RepositorioEstructuraMemoria } from "./repos/estructuraMemoria.js";
 import type { RepositorioEvidencias } from "./repos/evidencias.js";
 import type { RepositorioPlanes } from "./repos/planes.js";
 import type { RepositorioPlanesAccion } from "./repos/planesAccion.js";
 import type { RepositorioUsuarios } from "./repos/repositorio.js";
 import { rutasAsistente } from "./routes/asistente.js";
+import { rutasCatalogos } from "./routes/catalogos.js";
 import { rutasConflictos } from "./routes/conflictos.js";
 import { rutasEstructura } from "./routes/estructura.js";
 import { rutasPlanes } from "./routes/planes.js";
@@ -30,6 +34,11 @@ export interface DependenciasApp {
   /** Declaraciones de conflictos de interés. Si no se indica se usa el repositorio en memoria. */
   repoConflictos?: RepositorioConflictos;
   repoEstructura?: RepositorioEstructura;
+  /**
+   * Catálogos de área y país (SF-03). Si no se indica se usan en memoria, con los usos de
+   * `repoEstructura` cuando también está en memoria.
+   */
+  repoCatalogos?: RepositorioCatalogos;
   verificador: VerificadorToken;
   dominiosPermitidos: readonly string[];
   corsOrigin: string | string[];
@@ -57,6 +66,11 @@ const manejarErrores: ErrorRequestHandler = (error, _req, res, _next) => {
 
 export function crearApp(deps: DependenciasApp): Express {
   const registrarEvento = deps.registrarEvento ?? registrarEnConsola;
+  const repoCatalogos =
+    deps.repoCatalogos ??
+    new RepositorioCatalogosMemoria(
+      deps.repoEstructura instanceof RepositorioEstructuraMemoria ? deps.repoEstructura : undefined,
+    );
   const app = express();
   app.disable("x-powered-by");
   app.use(cors({ origin: deps.corsOrigin }));
@@ -84,7 +98,10 @@ export function crearApp(deps: DependenciasApp): Express {
       registrarEvento,
     }),
     ...(deps.repoEstructura
-      ? [rutasEstructura({ repo: deps.repoEstructura, usuarios: deps.repo, registrarEvento })]
+      ? [
+          rutasEstructura({ repo: deps.repoEstructura, usuarios: deps.repo, catalogos: repoCatalogos, registrarEvento }),
+          rutasCatalogos({ repo: repoCatalogos, registrarEvento }),
+        ]
       : []),
     auditControls,
     ...(deps.rutasConSesion ?? []),
