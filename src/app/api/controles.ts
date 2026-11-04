@@ -43,7 +43,7 @@ export async function listarControles(): Promise<ControlRecord[]> {
   return controles.map(convertirControl);
 }
 
-export const registrarHoras = (controlId: string, datos: { horas: number }) =>
+export const registrarHoras = (controlId: string, datos: { horas: number; planId?: string | number }) =>
   pedir<{ id: string; hours_spent: string }>(`/controles/${encodeURIComponent(controlId)}/horas`, {
     metodo: "POST",
     cuerpo: datos,

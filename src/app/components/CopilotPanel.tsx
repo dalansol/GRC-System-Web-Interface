@@ -22,6 +22,7 @@ const COPILOT_SUGGESTIONS: Record<string, string[]> = {
   specific_risk: ["Analiza los controles de este riesgo", "¿Cuál es su riesgo residual?", "Redacta un borrador de hallazgo"],
   audit_entity: ["Resume el perfil de riesgo de esta entidad", "¿Qué hallazgos tiene asociados?", "¿Qué controles tiene?"],
   control: ["Evalúa la efectividad de este control", "Sugiere mejoras al control", "Redacta una conclusión de prueba del control"],
+  finding: ["Resume este hallazgo", "¿Qué prioridad tiene este hallazgo?", "Sugiere acciones de remediación"],
 };
 
 const AVISO_NO_DISPONIBLE = "El asistente de IA no está disponible en este momento. El resto de la plataforma sigue funcionando.";

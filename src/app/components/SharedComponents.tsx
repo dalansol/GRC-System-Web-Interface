@@ -63,7 +63,7 @@ export type {
 type Navigate = (type: DetailType, id: string, auditId?: string) => void;
 
 type DetailType =
-  "general_risk" | "specific_risk" | "audit_entity" | "control";
+  "general_risk" | "specific_risk" | "audit_entity" | "control" | "finding";
 
 type StatusKey =
   "completed" | "in_progress" | "overdue" | "pending";

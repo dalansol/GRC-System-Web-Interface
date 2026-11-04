@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS processes (
 ALTER TABLE processes ENABLE ROW LEVEL SECURITY;
 
 -- Controles. El id es de texto (CTR-001) porque así lo guardan ya findings."controlId"
--- y evidence.control_id.
+-- y evidence.entity_id cuando entity_type = 'control'.
 CREATE TABLE IF NOT EXISTS controls (
     id          VARCHAR(100)   NOT NULL CONSTRAINT pk_controls PRIMARY KEY,
     code        VARCHAR(30)    COLLATE sin_mayusculas NOT NULL CONSTRAINT uq_controls_code UNIQUE,

@@ -1,12 +1,11 @@
 -- Planes de acción correctivos de un hallazgo (SF-10, SF-11; historia #91).
--- Un hallazgo tiene a lo más un plan. El responsable es un usuario registrado.
+-- Un hallazgo puede tener varios planes. El responsable es un usuario registrado.
 -- PostgreSQL (Supabase). Se puede ejecutar más de una vez sin efecto.
 
 CREATE TABLE IF NOT EXISTS action_plans (
     id             INT GENERATED ALWAYS AS IDENTITY CONSTRAINT pk_action_plans PRIMARY KEY,
-    finding_id     VARCHAR(100)   NOT NULL CONSTRAINT fk_action_plans_finding REFERENCES findings (id)
-                                  CONSTRAINT uq_action_plans_finding UNIQUE,
-    description    VARCHAR(2000)  NOT NULL,
+    public_id      VARCHAR(20) UNIQUE,
+    root_cause     VARCHAR(2000) NOT NULL,
     responsible_id INT            NOT NULL CONSTRAINT fk_action_plans_responsible REFERENCES users (id),
     due_date       DATE           NOT NULL,
     status         VARCHAR(20)    NOT NULL DEFAULT 'Asignado'

@@ -9,6 +9,8 @@ export const PERMISOS = [
   "Ver Auditorías",
   "Crear Auditorías",
   "Eliminar Registros",
+  "Ver Hallazgos", 
+  "Ver Plan de Accion"
 ] as const;
 
 export const ROLES_PERMISOS: Record<string, readonly string[]> = {
@@ -18,6 +20,8 @@ export const ROLES_PERMISOS: Record<string, readonly string[]> = {
   "Auditor": ["Ver Dashboard", "Ver Auditorías"],
   "Consultor": ["Ver Dashboard", "Ver Auditorías"],
   "Solo Lectura": ["Ver Dashboard", "Ver Auditorías"],
+  "Jefe Auditado":["Ver Hallazgos", "Ver Plan de Accion"],
+  "Empleado Auditado":["Ver Hallazgos", "Ver Plan de Accion"]
 };
 
 // Usuarios de prueba para el modo de datos en memoria.
@@ -29,6 +33,8 @@ export const USUARIOS_DEMO = [
   { nombre: "Pedro Sánchez", correo: "p.sanchez@expedite.com", rol: "Consultor", estado: "inactive" },
   { nombre: "Laura Fernández", correo: "l.fernandez@expedite.com", rol: "Auditor", estado: "active" },
   { nombre: "Diego Torres", correo: "d.torres@expedite.com", rol: "Solo Lectura", estado: "active" },
+  { nombre: "Javier Ejemplo", correo: "j.ejemplo@expedite.com", rol: "Jefe Auditado", estado: "active" },
+  { nombre: "Charlie Ejemplo", correo: "c.ejemplo@expedite.com", rol: "Empleado Auditado", estado: "active" }
 ] as const;
 
 // Planes de prueba para el modo de datos en memoria (los mismos que mock_data.tsx).

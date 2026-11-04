@@ -13,7 +13,6 @@ import { crearApp } from "../src/app.js";
 import { crearVerificadorDev } from "../src/auth/verificador.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
 import { ErrorCodigoDuplicado } from "../src/repos/planes.js";
-import { ErrorPlanDuplicado } from "../src/repos/planesAccion.js";
 import { RepositorioEvidenciasMemoria } from "../src/repos/evidenciasMemoria.js";
 import { RepositorioPlanesAccionMemoria } from "../src/repos/planesAccionMemoria.js";
 import { RepositorioPlanesAccionSql } from "../src/repos/planesAccionSql.js";
@@ -294,7 +293,8 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
       estado: "Asignado",
     });
     expect((await pool.query("SELECT status FROM findings WHERE id = 'HAL-P-1'")).rows[0].status).toBe("Asignado");
-    await expect(planesAccion.crear(datos, admin.id)).rejects.toBeInstanceOf(ErrorPlanDuplicado);
+    const segundo = await planesAccion.crear(datos, admin.id);
+    expect(segundo.id).not.toBe(creado.id);
 
     const editado = await planesAccion.actualizar(creado.id, {
       descripcion: "Corregir accesos y revisar roles", responsableId: admin.id, fechaCompromiso: "2026-12-15", estado: "En Progreso",

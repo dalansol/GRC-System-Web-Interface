@@ -26,7 +26,7 @@ export interface ContextoAsistente {
   contexto: string;
 }
 
-export type TipoDetalle = "general_risk" | "specific_risk" | "audit_entity" | "control";
+export type TipoDetalle = "general_risk" | "specific_risk" | "audit_entity" | "control" | "finding";
 
 const VISTAS: Record<string, { nombre: string; datos: () => Record<string, unknown> }> = {
   dashboard: {
@@ -53,6 +53,7 @@ const DETALLES: Record<TipoDetalle, { nombre: string; registros: { id: string }[
   specific_risk: { nombre: "Riesgo específico", registros: SPECIFIC_RISKS },
   audit_entity: { nombre: "Entidad auditora", registros: AUDIT_ENTITIES },
   control: { nombre: "Control", registros: CONTROLS },
+  finding: { nombre: "Hallazgo", registros: INITIAL_FINDINGS },
 };
 
 /** Etiquetas que usa AISummaryCard. */
@@ -86,7 +87,9 @@ export function contextoVista(vista: string): ContextoAsistente | null {
 
 /** Contexto de un registro (riesgo, entidad o control) con los registros que lo mencionan. */
 export function contextoDetalle(tipo: TipoDetalle, id: string): ContextoAsistente | null {
-  const { nombre, registros } = DETALLES[tipo];
+  const definicion = DETALLES[tipo];
+  if (!definicion) return null;
+  const { nombre, registros } = definicion;
   const registro = registros.find((r) => r.id === id);
   if (!registro) return null;
 

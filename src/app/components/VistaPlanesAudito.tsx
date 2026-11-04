@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ArrowRight, ChevronDown, Plus, Loader2, RefreshCw, Users, X } from "lucide-react";
+import { ArrowRight, ChevronDown, Plus, Loader2, RefreshCw, Users, X, Clock } from "lucide-react";
 
 import { Breadcrumbs, Card, PageHeader, PrimaryBtn } from "./SharedComponents";
 import type { Navigate } from "./SharedComponents";
@@ -13,6 +13,14 @@ import type { DatosFormularioPlanAudito } from "./FormularioPlanAudito";
 import FormularioAsignarControl from "./FormularioAsignarControl";
 import { listarAsignacionesControl, type AsignacionControl } from "../api/auditControls";
 import { EtiquetaConflictoPlan, SeccionConflictosPlan } from "./ConflictosPlan";
+import { registrarHoras } from "../api/controles";
+
+// Extension type to satisfy TS checks for process attributes returned by backend JOIN
+type AsignacionControlConProceso = AsignacionControl & {
+  process_id?: number;
+  process_title?: string;
+  business_unit_name?: string;
+};
 
 const PLAN_STATUS_CFG: Record<AuditPlan["status"], { label: string; cls: string }> = {
   "Borrador": { label: "Borrador", cls: "bg-slate-50 text-slate-600 border border-slate-200" },
@@ -29,11 +37,59 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
 
   const [showForm, setShowForm] = useState(false);
   const [expandedPlanCode, setExpandedPlanCode] = useState<string | null>(null);
-  const [controlAssignments, setControlAssignments] = useState<Record<string, AsignacionControl[]>>({});
+  const [controlAssignments, setControlAssignments] = useState<Record<string, AsignacionControlConProceso[]>>({});
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [assigningPlanId, setAssigningPlanId] = useState<string | null>(null);
-  const [selectedAuditors, setSelectedAuditors] = useState<AsignacionControl[] | null>(null);
+  const [selectedAuditors, setSelectedAuditors] = useState<AsignacionControlConProceso[] | null>(null);
   const [empleadosAsignados, setEmpleadosAsignados] = useState<{ id: string; name: string }[]>([]);
+  const [planHoras, setPlanHoras] = useState<Record<string, string>>({});
+  const [selectedControlForPlan, setSelectedControlForPlan] = useState<Record<string, string>>({});
+  const [guardandoHoras, setGuardandoHoras] = useState<string | null>(null);
+
+  const guardarHoras = async (planId: string) => {
+    const horasValor = Number(planHoras[planId]);
+    if (!Number.isFinite(horasValor) || horasValor <= 0 || horasValor >= 24) {
+      toast.error("Las horas deben ser mayores que 0 y menores que 24.");
+      return;
+    }
+
+    const assigned = controlAssignments[planId] ?? [];
+    const selectedRawValue = selectedControlForPlan[planId];
+
+    // Extract control_id if selected value is a composite key "CTR-001_15"
+    const targetControlId = selectedRawValue
+      ? selectedRawValue.split("_")[0]
+      : assigned[0]?.control_id;
+
+    if (!targetControlId) {
+      toast.error("El plan no tiene controles asignados para registrar horas.");
+      return;
+    }
+
+    setGuardandoHoras(planId);
+    try {
+      if (USE_REAL_BACKEND) {
+        await registrarHoras(targetControlId, { horas: horasValor, planId });
+      }
+      setControlAssignments((current) => {
+        const planList = current[planId] ?? [];
+        return {
+          ...current,
+          [planId]: planList.map((item) =>
+            String(item.control_id) === String(targetControlId) || item.control_code === targetControlId
+              ? { ...item, hours_spent: Number(item.hours_spent ?? 0) + horasValor }
+              : item,
+          ),
+        };
+      });
+      setPlanHoras((prev) => ({ ...prev, [planId]: "" }));
+      toast.success("Horas registradas correctamente.");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "No se pudieron registrar las horas.");
+    } finally {
+      setGuardandoHoras(null);
+    }
+  };
 
   useEffect(() => {
     if (!canCreate || !["Administrador", "Jefe de Auditoría"].includes(usuario?.rol ?? "")) return;
@@ -49,7 +105,7 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
         toast.error(error instanceof Error ? error.message : "No se pudieron cargar los responsables.");
       });
   }, [canCreate, usuario?.rol]);
-  
+
   const responsableInicial = empleadosAsignados[0]?.name ?? "";
 
   useEffect(() => {
@@ -60,7 +116,7 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
     setAssignmentsLoading(true);
     listarAsignacionesControl(plan.id)
       .then((assignments) => {
-        setControlAssignments((current) => ({ ...current, [plan.id]: assignments }));
+        setControlAssignments((current) => ({ ...current, [plan.id]: assignments as AsignacionControlConProceso[] }));
       })
       .catch((error: unknown) => {
         toast.error(error instanceof Error ? error.message : "No se pudieron cargar las asignaciones.");
@@ -136,7 +192,6 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
       {/* Table Section */}
       <Card>
         <div className="overflow-x-auto">
-          {/* Table content remains exactly the same */}
           {loading ? (
             <div className="flex items-center justify-center p-12 text-muted-foreground">
               <Loader2 className="mr-2 animate-spin" size={20} />
@@ -169,18 +224,19 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                     const assignedControls = controlAssignments[plan.id] ?? [];
                     const groupedControls = Array.from(
                       assignedControls.reduce((groups, assignment) => {
-                        const current = groups.get(String(assignment.control_id)) ?? [];
+                        const key = `${assignment.control_id}_${assignment.process_id ?? "default"}`;
+                        const current = groups.get(key) ?? [];
                         current.push(assignment);
-                        groups.set(String(assignment.control_id), current);
+                        groups.set(key, current);
                         return groups;
-                      }, new Map<string, AsignacionControl[]>()),
+                      }, new Map<string, AsignacionControlConProceso[]>()),
                     ).map(([, assignments]) => assignments);
                     const horasTotales = assignedControls.reduce(
                       (total, assignment) => total + Number(assignment.hours_spent ?? 0),
                       0,
                     );
                     const horasEstimadas = Number(plan.estimatedHours ?? 0);
-                      
+
                     return (
                       <Fragment key={plan.id}>
                         <tr className="border-b border-border hover:bg-muted/20">
@@ -236,7 +292,7 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                                 <p className="text-sm text-muted-foreground">Este plan no tiene controles asignados.</p>
                               ) : (
                                 <div className="space-y-2">
-                                  {groupedControls.map((assignments) => {
+                                  {groupedControls.map((assignments, index) => {
                                     const assignment = assignments[0];
                                     const variosAuditores = assignments.length > 1;
                                     const status = assignments.every((item) => item.status === "En Revision")
@@ -251,27 +307,31 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                                       (tieneSenior
                                         ? esJefatura && assignments.every((item) => item.plan_created_by === Number(usuario?.id))
                                         : tieneAuditor &&
-                                          esAuditorSenior &&
-                                          assignments.every((item) => item.plan_responsible_id === Number(usuario?.id)));
+                                        esAuditorSenior &&
+                                        assignments.every((item) => item.plan_responsible_id === Number(usuario?.id)));
+
+                                    const procesoNombre = assignment.process_title ?? "Proceso no especificado";
+                                    const negocioNombre = assignment.business_unit_name ?? "Unidad de negocio N/A";
+
                                     return (
-                                    <div key={assignment.control_id} className="flex items-center justify-between gap-4 rounded-md border border-border bg-card px-3 py-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => navigate("control", assignment.control_id, String(plan.id))}
-                                        aria-label={`Abrir detalle del control ${assignment.control_code}`}
-                                        title="Abrir detalle del control"
-                                        className="group flex min-w-0 items-center gap-3 rounded-md px-2 py-1 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                                      >
-                                        <div className="min-w-0">
-                                          <div className="text-sm font-medium text-foreground group-hover:text-primary">
-                                            {assignment.control_code} · {assignment.control_name}
+                                      <div key={`${assignment.control_id}_${assignment.process_id ?? index}`} className="flex items-center justify-between gap-4 rounded-md border border-border bg-card px-3 py-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => navigate("control", assignment.control_id, String(plan.id))}
+                                          aria-label={`Abrir detalle del control ${assignment.control_code}`}
+                                          title="Abrir detalle del control"
+                                          className="group flex min-w-0 items-center gap-3 rounded-md px-2 py-1 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                        >
+                                          <div className="min-w-0">
+                                            <div className="text-sm font-medium text-foreground group-hover:text-primary">
+                                              {assignment.control_code} · {assignment.control_name}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground">
+                                              Proceso: <span className="font-medium text-foreground">{procesoNombre}</span> ({negocioNombre}) · {assignments.reduce((total, item) => total + Number(item.hours_spent ?? 0), 0)} h · {status}
+                                            </div>
                                           </div>
-                                          <div className="text-xs text-muted-foreground">
-                                              {variosAuditores ? "Varios auditores asignados" : assignment.is_lead ? "Auditor líder" : "Auditor asignado"} · {assignments.reduce((total, item) => total + Number(item.hours_spent ?? 0), 0)} horas · {status}
-                                          </div>
-                                        </div>
-                                        <ArrowRight size={15} className="shrink-0 text-primary opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100" />
-                                      </button>
+                                          <ArrowRight size={15} className="shrink-0 text-primary opacity-60 transition-transform group-hover:translate-x-0.5 group-hover:opacity-100" />
+                                        </button>
                                         <div className="flex items-center gap-3">
                                           {puedeAprobar && (
                                             <button
@@ -282,6 +342,14 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                                               Revisar
                                             </button>
                                           )}
+                                          <button
+                                            type="button"
+                                            onClick={() => setSelectedControlForPlan((prev) => ({ ...prev, [plan.id]: assignment.control_id }))}
+                                            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                            title="Seleccionar control para registrar horas"
+                                          >
+                                            <Clock size={13} /> Registrar horas
+                                          </button>
                                           {variosAuditores ? (
                                             <button
                                               type="button"
@@ -294,11 +362,89 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                                             <span className="text-sm font-medium text-foreground">{assignment.auditor_name}</span>
                                           )}
                                         </div>
-                                    </div>
+                                      </div>
                                     );
                                   })}
                                 </div>
                               )}
+                              <div className="mt-4 rounded-lg border border-border bg-card p-4">
+                                <div className="mb-3">
+                                  <div className="flex items-center gap-2">
+                                    <Clock size={16} className="text-primary" />
+                                    <h4 className="text-sm font-semibold text-foreground">Registro de horas</h4>
+                                  </div>
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    Registra las horas trabajadas en este plan de auditoría.
+                                  </p>
+                                </div>
+                                {assignedControls.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    Este plan no tiene controles asignados aún. Asigna un control para poder registrar horas.
+                                  </p>
+                                ) : (
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                                    {groupedControls.length > 1 && (
+                                      <label className="block text-xs font-semibold text-foreground">
+                                        Control / Proceso
+                                        <select
+                                          value={
+                                            selectedControlForPlan[plan.id] ||
+                                            `${groupedControls[0][0].control_id}_${groupedControls[0][0].process_id ?? "default"}`
+                                          }
+                                          onChange={(e) =>
+                                            setSelectedControlForPlan((prev) => ({
+                                              ...prev,
+                                              [plan.id]: e.target.value,
+                                            }))
+                                          }
+                                          className="mt-1.5 block w-full rounded-md border border-border bg-white px-3 py-2 text-xs font-normal sm:w-80"
+                                        >
+                                          {groupedControls.map((assignments) => {
+                                            const item = assignments[0];
+                                            const processTitle = item.process_title;
+                                            const optionKey = `${item.control_id}_${item.process_id ?? "default"}`;
+
+                                            return (
+                                              <option key={optionKey} value={optionKey}>
+                                                {item.control_code} · {item.control_name} {processTitle ? `(${processTitle})` : ""}
+                                              </option>
+                                            );
+                                          })}
+                                        </select>
+                                      </label>
+                                    )}
+                                    <label className="block text-xs font-semibold text-foreground">
+                                      Horas trabajadas
+                                      <div className="mt-1.5 flex items-center gap-2">
+                                        <input
+                                          type="number"
+                                          min="0.01"
+                                          max="23.99"
+                                          step="0.01"
+                                          value={planHoras[plan.id] ?? ""}
+                                          onChange={(e) =>
+                                            setPlanHoras((prev) => ({ ...prev, [plan.id]: e.target.value }))
+                                          }
+                                          disabled={guardandoHoras === plan.id}
+                                          className="w-32 rounded-md border border-border bg-white px-3 py-2 text-sm font-normal"
+                                          placeholder="Ej. 2.5"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => guardarHoras(plan.id)}
+                                          disabled={guardandoHoras === plan.id}
+                                          className="rounded-md border border-primary px-3 py-2 text-xs font-semibold text-primary hover:bg-primary/5 disabled:opacity-50"
+                                        >
+                                          {guardandoHoras === plan.id ? "Guardando..." : "Registrar horas"}
+                                        </button>
+                                      </div>
+                                    </label>
+                                    <span className="text-xs text-muted-foreground sm:pb-2">
+                                      Total registrado: {horasTotales} h / {horasEstimadas} h
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         )}
@@ -328,13 +474,12 @@ export default function VistaPlanesAudito({ canCreate, navigate }: { canCreate: 
                     <div className="text-xs text-muted-foreground">{auditor.auditor_role}{auditor.is_lead ? " · Líder" : ""}</div>
                   </div>
                   <span
-                    className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${
-                      auditor.status === "En Revision"
+                    className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-semibold ${auditor.status === "En Revision"
                         ? "bg-emerald-100 text-emerald-700"
                         : auditor.status === "Completado"
                           ? "bg-blue-100 text-blue-700"
                           : "bg-slate-100 text-slate-600"
-                    }`}
+                      }`}
                   >
                     {auditor.status === "En Revision"
                       ? "En revisión"

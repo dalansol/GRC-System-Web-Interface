@@ -22,7 +22,7 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 
 // ─── GET: Fetch evidences for an entity ──────────────────────────────────────
 router.get("/evidencias", async (req: Request, res: Response) => {
-  const { entityId, entityType, auditId } = req.query;
+  const { entityId, entityType } = req.query;
 
   if (!entityId) {
     return res.status(400).json({ error: "entityId query parameter is required." });
@@ -31,8 +31,6 @@ router.get("/evidencias", async (req: Request, res: Response) => {
   try {
     const pool = await poolPromise;
     const usuario = usuarioEnSesion(res);
-    // Each query receives only the parameters it uses: PostgreSQL rejects a parameter
-    // it never sees ("could not determine data type of parameter").
     let query = `
       SELECT e.* FROM evidence e
       WHERE e.entity_id = $1
@@ -45,33 +43,49 @@ router.get("/evidencias", async (req: Request, res: Response) => {
         SELECT e.* FROM evidence e
         WHERE e.entity_id = $1
           AND e.entity_type = 'control'
-          AND e.audit_id::text = $2
           AND (
-            ($3 = 'Auditor' AND e.uploaded_by = $4)
-            OR ($3 = 'Auditor Senior' AND EXISTS (
+            ($2 = 'Auditor' AND e.uploaded_by = $3)
+            OR ($2 = 'Auditor Senior' AND EXISTS (
               SELECT 1 FROM audit_controls ac
-              WHERE ac.control_id = e.entity_id
-                AND ac.audit_id::text = e.audit_id::text
-                AND ac.assigned_by = $4::integer
+              WHERE ac.id::text = e.entity_id
+              AND ac.assigned_by = $3::integer
                 AND ac.auditor_id::text = e.uploaded_by
             ))
-            OR ($3 = 'Jefe de Auditoría' AND EXISTS (
+            OR ($2 = 'Jefe de Auditoría' AND EXISTS (
               SELECT 1 FROM audit_controls ac
               JOIN audit_plans ap ON ap.id::text = ac.audit_id::text
-              WHERE ac.control_id = e.entity_id
-                AND ac.audit_id::text = e.audit_id::text
-                AND ap.created_by = $4::integer
+              WHERE ac.id::text = e.entity_id
+              AND ap.created_by = $3::integer
                 AND ac.auditor_id::text = e.uploaded_by
             ))
           )
         ORDER BY e.created_at DESC`;
-      params = [entityId as string, String(auditId ?? ""), usuario.rol, String(usuario.id)];
+      params = [entityId as string, usuario.rol, String(usuario.id)];
     } else if (entityType === "hallazgo") {
       query = `
         SELECT e.* FROM evidence e
-        WHERE e.finding_id = $1
+        WHERE e.entity_id = $1
+          AND e.entity_type = 'hallazgo'
           AND e.uploaded_by = $2
         ORDER BY e.created_at DESC`;
+      params = [entityId as string, String(usuario.id)];
+    } else if (entityType === "action_plan_step") {
+      query = `
+        SELECT e.* FROM evidence e
+        WHERE e.entity_id = $1
+          AND e.entity_type = 'action_plan_step'
+          AND EXISTS (
+            SELECT 1
+            FROM action_plan_steps target_step
+            JOIN action_plans target_plan ON target_plan.id = target_step.action_plan_id
+            WHERE target_step.id::text = $1
+              AND (
+                target_plan.responsible_id = $2::integer
+                OR target_step.assigned_user_id = $2::integer
+              )
+          )
+        ORDER BY e.created_at DESC`;
+      params = [entityId as string, String(usuario.id)];
     }
 
     const result = await pool.query(query, params);
@@ -115,8 +129,9 @@ router.post(
       return res.status(400).json({ error: "No file provided." });
     }
 
-    const { entityId, entityType, controlId, findingId, auditId, businessEntityId } = req.body;
+    const { entityId, entityType } = req.body;
     const usuario = usuarioEnSesion(res);
+    let storagePath: string | null = null;
 
     if (!entityId || !entityType) {
       return res
@@ -124,31 +139,23 @@ router.post(
         .json({ error: "entityId and entityType are required." });
     }
 
-    if (!["control", "hallazgo"].includes(entityType)) {
+    if (!["control", "hallazgo", "action_plan_step"].includes(entityType)) {
       return res
         .status(400)
-        .json({ error: "entityType must be 'control' or 'hallazgo'." });
+        .json({ error: "entityType must be 'control', 'hallazgo' or 'action_plan_step'." });
     }
 
     try {
       // Control: only the Auditor assigned to it.
-      // Hallazgo: TBD who may upload (CLAUDE.md §7 #19); for now any signed-in user.
       if (entityType === "control") {
-        if (!auditId) {
-          return res.status(400).json({
-            error: "auditId es obligatorio para evidencias de controles.",
-          });
-        }
         const pool = await poolPromise;
         const asignacion = await pool.query(
           `SELECT 1
            FROM audit_controls ac
-           JOIN controls c ON c.id = ac.control_id
-           WHERE (c.id::text = $1 OR c.code = $1)
-             AND ac.audit_id::text = $2
-             AND ac.auditor_id = $3
+           WHERE ac.id::text = $1
+             AND ac.auditor_id = $2
            LIMIT 1`,
-          [controlId || entityId, String(auditId ?? ""), usuario.id],
+          [entityId, usuario.id],
         );
         if (asignacion.rowCount !== 1) {
           return res.status(403).json({
@@ -157,6 +164,33 @@ router.post(
               mensaje: "Solo el Auditor asignado puede enviar evidencia para este control.",
             },
           });
+        }
+      } else if (entityType === "action_plan_step") {
+        const pool = await poolPromise;
+        const asignacion = await pool.query(
+          `SELECT 1
+           FROM action_plan_steps step
+           WHERE step.id::text = $1
+             AND step.assigned_user_id = $2
+           LIMIT 1`,
+          [entityId, usuario.id],
+        );
+        if (asignacion.rowCount !== 1) {
+          return res.status(403).json({
+            error: {
+              codigo: "ROL_NO_AUTORIZADO",
+              mensaje: "Solo puedes enviar evidencia al paso de acción que tienes asignado.",
+            },
+          });
+        }
+      } else {
+        const pool = await poolPromise;
+        const hallazgo = await pool.query(
+          "SELECT 1 FROM findings WHERE id::text = $1 LIMIT 1",
+          [entityId],
+        );
+        if (hallazgo.rowCount !== 1) {
+          return res.status(404).json({ error: "El hallazgo no existe." });
         }
       }
 
@@ -170,7 +204,7 @@ router.post(
       const ext = path.extname(file.originalname).toLowerCase();
       const id = `EV-${crypto.randomUUID()}`;
       const storedName = `${id}${ext}`;
-      const storagePath = path.join(UPLOADS_DIR, storedName);
+      storagePath = path.join(UPLOADS_DIR, storedName);
 
       // Write file to disk
       fs.writeFileSync(storagePath, file.buffer);
@@ -182,17 +216,14 @@ router.post(
       const pool = await poolPromise;
       const result = await pool.query(
         `
-          INSERT INTO evidence (id, file_name, control_id, finding_id, audit_id, entity_id, entity_type, mime_type, file_size, file_hash, storage_path, uploaded_by)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          INSERT INTO evidence (id, file_name, entity_id, entity_type, mime_type, file_size, file_hash, storage_path, uploaded_by)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           RETURNING *;
         `,
         [
           id,
           file.originalname,
-          controlId || (entityType === "control" ? entityId : null),
-          findingId || (entityType === "hallazgo" ? entityId : null),
-          auditId || null,
-          entityType === "control" ? controlId || entityId : businessEntityId || null,
+          entityId,
           entityType,
           mimeType,
           file.size,
@@ -205,7 +236,15 @@ router.post(
       res.status(201).json(result.rows[0]);
     } catch (error) {
       console.error("Error uploading evidence:", error);
-      res.status(500).json({ error: "Error saving evidence." });
+      if (storagePath && fs.existsSync(storagePath)) {
+        fs.unlinkSync(storagePath);
+      }
+      res.status(500).json({
+        error: {
+          codigo: "ERROR_INTERNO",
+          mensaje: "No se pudo guardar la evidencia. Verifica que la migración de evidencias esté aplicada.",
+        },
+      });
     }
   }
 );
@@ -220,7 +259,7 @@ router.delete("/evidencias/:id", async (req: Request, res: Response) => {
 
     // Fetch the record first to get the storage path
     const lookup = await pool.query(
-      `SELECT e.storage_path, e.control_id, e.entity_type, e.uploaded_by
+      `SELECT e.storage_path, e.entity_id, e.entity_type, e.uploaded_by
        FROM evidence e
        WHERE e.id = $1`,
       [id],
@@ -232,11 +271,11 @@ router.delete("/evidencias/:id", async (req: Request, res: Response) => {
 
     const evidence = lookup.rows[0] as {
       storage_path: string;
-      control_id: string | number | null;
+      entity_id: string;
       entity_type: string;
       uploaded_by: string | null;
     };
-    if (evidence.entity_type === "hallazgo") {
+    if (evidence.entity_type !== "control") {
       // Hallazgo: quien la subió, igual que en la consulta (quién puede subir sigue TBD).
       if (evidence.uploaded_by !== String(usuario.id)) {
         return res.status(403).json({
@@ -247,22 +286,13 @@ router.delete("/evidencias/:id", async (req: Request, res: Response) => {
         });
       }
     } else {
-      if (evidence.control_id === null) {
-        return res.status(403).json({
-          error: {
-            codigo: "ROL_NO_AUTORIZADO",
-            mensaje: "Solo el auditor asignado puede eliminar evidencia de un control.",
-          },
-        });
-      }
-
       const asignacion = await pool.query(
         `SELECT 1
          FROM audit_controls ac
-         WHERE ac.control_id = $1
+         WHERE ac.id::text = $1
            AND ac.auditor_id = $2
          LIMIT 1`,
-        [evidence.control_id, usuario.id],
+        [evidence.entity_id, usuario.id],
       );
       if (asignacion.rowCount !== 1) {
         return res.status(403).json({

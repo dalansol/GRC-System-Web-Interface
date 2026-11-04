@@ -1,5 +1,5 @@
 import type { DatosEdicionPlanAccion, DatosPlanAccion, HallazgoResumen, PlanAccion } from "../domain/planesAccion.js";
-import { ErrorPlanDuplicado, type RepositorioPlanesAccion } from "./planesAccion.js";
+import type { RepositorioPlanesAccion } from "./planesAccion.js";
 import type { RepositorioUsuarios } from "./repositorio.js";
 import { AUDITORIAS_DEMO, HALLAZGOS_DEMO, PLANES_ACCION_DEMO } from "./semilla.js";
 
@@ -24,17 +24,33 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
     for (const { responsable, ...plan } of PLANES_ACCION_DEMO) {
       const usuario = await this.usuarios.buscarPorCorreo(responsable);
       if (usuario) {
-        this.filas.push({ ...plan, responsableId: usuario.id, id: this.siguienteId++, estado: "Asignado", creadoEn: "2025-07-12T10:00:00.000Z" });
+        this.filas.push({
+          ...plan,
+          titulo: "Plan de acción",
+          causaRaiz: plan.descripcion,
+          pasos: [],
+          responsableId: usuario.id,
+          id: this.siguienteId++,
+          estado: "Asignado",
+          creadoEn: "2025-07-12T10:00:00.000Z",
+        });
       }
     }
   }
 
-  private async aPlan({ responsableId, hallazgoId, ...fila }: Fila): Promise<PlanAccion> {
+  private async aPlan({ responsableId, hallazgoId, pasos: _pasos, ...fila }: Fila): Promise<PlanAccion> {
     const usuario = await this.usuarios.buscarPorId(responsableId);
+    const hallazgo = await this.buscarHallazgo(hallazgoId);
     return {
       ...fila,
-      hallazgo: (await this.buscarHallazgo(hallazgoId))!,
+      publicId: `PACC-${new Date(fila.creadoEn).getUTCFullYear()}-${String(fila.id).padStart(3, "0")}`,
+      hallazgo: hallazgo!,
       responsable: { id: responsableId, nombre: usuario?.nombre ?? "" },
+      titulo: fila.titulo ?? fila.descripcion,
+      causaRaiz: fila.causaRaiz ?? fila.descripcion,
+      status: fila.estado,
+      hallazgosRelacionados: hallazgo ? [hallazgo] : [],
+      pasos: [],
     };
   }
 
@@ -52,7 +68,14 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
 
   async listarPorResponsable(usuarioId: number) {
     await this.listo;
-    return Promise.all(this.filas.filter((f) => f.responsableId === usuarioId).map((f) => this.aPlan(f)));
+    return Promise.all(
+      this.filas
+        .filter((f) =>
+          f.responsableId === usuarioId ||
+          f.pasos?.some((paso) => paso.usuarioAsignadoId === usuarioId),
+        )
+        .map((f) => this.aPlan(f)),
+    );
   }
 
   async buscarPorHallazgo(hallazgoId: string) {
@@ -63,7 +86,6 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
 
   async crear(datos: DatosPlanAccion) {
     await this.listo;
-    if (this.filas.some((f) => f.hallazgoId === datos.hallazgoId)) throw new ErrorPlanDuplicado(datos.hallazgoId);
     const fila: Fila = { ...datos, id: this.siguienteId++, estado: "Asignado", creadoEn: new Date().toISOString() };
     this.filas.push(fila);
     return this.aPlan(fila);
@@ -81,5 +103,9 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
     if (!fila) return null;
     Object.assign(fila, datos);
     return this.aPlan(fila);
+  }
+
+  async actualizarPaso(_planId: number, _pasoId: number, _completado: boolean) {
+    return null;
   }
 }

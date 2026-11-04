@@ -12,7 +12,7 @@ import { ROL_ADMINISTRADOR } from "../domain/tipos.js";
 import { ErrorApi } from "../errores.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import { autorizar } from "../middleware/autorizar.js";
-import { ErrorPlanDuplicado, type RepositorioPlanesAccion } from "../repos/planesAccion.js";
+import type { RepositorioPlanesAccion } from "../repos/planesAccion.js";
 import type { RepositorioUsuarios } from "../repos/repositorio.js";
 
 // Roles que crean planes de acción (el equipo de auditoría). Todos los usuarios con sesión los consultan.
@@ -41,7 +41,7 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
   });
 
   // Usuarios activos que pueden ser responsables de un plan. Solo los datos necesarios para elegirlos.
-  rutas.get("/planes-accion/responsables", autorizar(...ROLES_EDICION), async (_req, res) => {
+  rutas.get("/planes-accion/responsables", async (_req, res) => {
     const activos = (await usuarios.listarUsuarios()).filter((u) => u.estado === "active");
     res.json(activos.map(({ id, nombre, correo }) => ({ id, nombre, correo })));
   });
@@ -53,14 +53,17 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     res.json(hallazgo);
   });
 
-  rutas.post("/planes-accion", autorizar(...ROLES_EDICION), async (req, res) => {
+  // Temporalmente cualquier usuario autenticado puede crear un plan de acción.
+  rutas.post("/planes-accion", async (req, res) => {
     const datos = campos(req.body);
     const error = validarPlanAccion(datos);
     if (error) throw new ErrorApi(400, "DATOS_INVALIDOS", error);
     const plan = normalizarPlanAccion(datos);
 
-    const hallazgo = await repo.buscarHallazgo(plan.hallazgoId);
-    if (!hallazgo) throw new ErrorApi(404, "NO_ENCONTRADO", "El hallazgo no existe.");
+    const hallazgoIds = plan.hallazgoIds?.length ? plan.hallazgoIds : [plan.hallazgoId];
+    const hallazgos = await Promise.all(hallazgoIds.map((id) => repo.buscarHallazgo(id)));
+    if (hallazgos.some((item) => !item)) throw new ErrorApi(404, "NO_ENCONTRADO", "Uno de los hallazgos no existe.");
+    const hallazgo = hallazgos[0]!;
 
     const errorFecha = validarFechaCompromiso(plan.fechaCompromiso, hallazgo.fechaCierreAuditoria);
     if (errorFecha) throw new ErrorApi(400, "DATOS_INVALIDOS", errorFecha);
@@ -69,14 +72,14 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     if (!responsable || responsable.estado !== "active") {
       throw new ErrorApi(400, "DATOS_INVALIDOS", "El responsable auditado no existe o está inactivo.");
     }
-
-    let creado;
-    try {
-      creado = await repo.crear(plan, usuarioEnSesion(res).id);
-    } catch (e) {
-      if (e instanceof ErrorPlanDuplicado) throw new ErrorApi(409, "PLAN_DUPLICADO", "Este hallazgo ya tiene un plan de acción.");
-      throw e;
+    for (const paso of plan.pasos ?? []) {
+      const usuarioPaso = await usuarios.buscarPorId(paso.usuarioAsignadoId);
+      if (!usuarioPaso || usuarioPaso.estado !== "active") {
+        throw new ErrorApi(400, "DATOS_INVALIDOS", "Uno de los responsables de los pasos no existe o está inactivo.");
+      }
     }
+
+    const creado = await repo.crear(plan, usuarioEnSesion(res).id);
 
     registrarEvento({
       accion: "plan_accion.alta",
@@ -107,12 +110,13 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     if (recibidos.length === 0) throw new ErrorApi(400, "DATOS_INVALIDOS", "No se indicó ningún campo a modificar.");
 
     const anterior = {
+      titulo: actual.titulo,
       descripcion: actual.descripcion,
       responsableId: actual.responsable.id,
       fechaCompromiso: actual.fechaCompromiso,
       estado: actual.estado,
     };
-    const combinado: Record<string, unknown> = { hallazgoId: actual.hallazgo.id, ...anterior };
+    const combinado: Record<string, unknown> = { hallazgoId: actual.hallazgo.id, pasos: [], ...anterior };
     for (const c of recibidos) combinado[c] = cuerpo[c];
 
     const error = validarEdicionPlanAccion(combinado);
@@ -150,6 +154,26 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
       },
     });
     res.json(plan);
+  });
+
+  rutas.patch("/planes-accion/:planId/pasos/:pasoId", async (req, res) => {
+    const planId = Number(req.params.planId);
+    const pasoId = Number(req.params.pasoId);
+    const completado = campos(req.body).completado;
+    if (!Number.isInteger(planId) || !Number.isInteger(pasoId) || typeof completado !== "boolean") {
+      throw new ErrorApi(400, "DATOS_INVALIDOS", "El paso y su estado de completado son obligatorios.");
+    }
+
+    const plan = await repo.buscarPorId(planId);
+    if (!plan) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de acción no existe.");
+    const paso = plan.pasos.find((item) => item.id === pasoId);
+    if (!paso || paso.usuarioAsignado?.id !== usuarioEnSesion(res).id) {
+      throw new ErrorApi(403, "NO_ASIGNADO", "Solo el responsable asignado puede actualizar este paso.");
+    }
+
+    const actualizado = await repo.actualizarPaso(planId, pasoId, completado);
+    if (!actualizado) throw new ErrorApi(404, "NO_ENCONTRADO", "El paso de acción no existe.");
+    res.json(actualizado);
   });
 
   return rutas;

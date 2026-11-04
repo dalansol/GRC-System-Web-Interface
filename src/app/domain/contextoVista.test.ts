@@ -35,6 +35,10 @@ describe("contextoDetalle", () => {
     expect(contextoDetalle("control", "CTR-999")).toBeNull();
   });
 
+  it("incluye el contexto de un hallazgo", () => {
+    expect(contextoDetalle("finding", "HAL-2025-001")?.vista).toBe("Hallazgo HAL-2025-001");
+  });
+
   it("traduce las etiquetas de la tarjeta de resumen", () => {
     expect(contextoPorEtiqueta("Control", "CTR-001")?.vista).toBe("Control CTR-001");
     expect(contextoPorEtiqueta("Otra cosa", "CTR-001")).toBeNull();
