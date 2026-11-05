@@ -76,6 +76,7 @@ describe("proveedor Gemini", () => {
     expect(JSON.parse(String(llamada?.init.body))).toEqual({
       systemInstruction: { parts: [{ text: "Responde en español." }] },
       contents: [{ role: "user", parts: [{ text: "Resume el documento." }] }],
+      generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
     });
   });
 
@@ -100,6 +101,7 @@ describe("proveedor Gemini", () => {
       temperature: 0.2,
       maxOutputTokens: 100,
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingBudget: 0 },
     });
   });
 

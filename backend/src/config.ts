@@ -64,7 +64,7 @@ function variableRequerida(env: Entorno) {
 export function cargarConfigIA(env: Entorno): ConfigIA {
   const requerida = variableRequerida(env);
 
-  const tiempoEsperaMs = Number(env.IA_TIEMPO_ESPERA_MS ?? 30000);
+  const tiempoEsperaMs = Number(env.IA_TIEMPO_ESPERA_MS ?? 60000);
   if (!Number.isInteger(tiempoEsperaMs) || tiempoEsperaMs < 1) {
     throw new Error("IA_TIEMPO_ESPERA_MS debe ser un número entero de milisegundos mayor que cero.");
   }

@@ -24,6 +24,10 @@ export function crearProveedorGemini({ apiKey, modelo, tiempoEsperaMs, fetch }: 
         ...(temperatura !== undefined ? { temperature: temperatura } : {}),
         ...(maxTokens !== undefined ? { maxOutputTokens: maxTokens } : {}),
         ...(json ? { responseMimeType: "application/json" } : {}),
+        // Los modelos 2.5 "piensan" antes de responder: ese razonamiento consume el tiempo de
+        // espera y los tokens de salida (con expedientes largos devolvía vacío o se agotaba).
+        // El asistente solo lee documentos y responde en JSON; no necesita razonamiento extendido.
+        thinkingConfig: { thinkingBudget: 0 },
       };
       const cuerpo = {
         ...(instrucciones.length > 0 ? { systemInstruction: { parts: instrucciones } } : {}),
