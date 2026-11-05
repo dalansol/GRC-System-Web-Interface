@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { esFormula } from "../../domain/hoja/calculo";
+import { combinadaEn } from "../../domain/hoja/combinadas";
 import { MAX_COLUMNAS, MAX_FILAS, puedeSenalar, rangoSeleccion } from "../../domain/hoja/estadoHoja";
 import { alineacionEfectiva, formatearValor } from "../../domain/hoja/formato";
 import { cambiarTamano, rellenar, ultimaCeldaUsada } from "../../domain/hoja/operaciones";
@@ -473,25 +474,49 @@ export default function CuadriculaHoja({ vm, entradaRef, onTecla, onCopiar, onCo
       }
     }
 
-    for (let f = oy.desde; f <= oy.hasta; f++) {
-      for (let c = ox.desde; c <= ox.hasta; c++) {
+    // Celdas combinadas: una sola caja que tapa las líneas interiores de la cuadrícula.
+    // Se pintan las que tocan el panel (las que empiezan fuera pero asoman también).
+    const combinadasVisibles = hoja.combinadas.filter((m) => visibleEn(m, ox, oy));
+    for (const m of combinadasVisibles) {
+      const r = rect(m, ox, oy);
+      elementos.push(
+        <div
+          key={`m${m.f1},${m.c1}`}
+          data-combinada={`${letraColumna(m.c1)}${m.f1 + 1}:${letraColumna(m.c2)}${m.f2 + 1}`}
+          className="absolute pointer-events-none"
+          style={{ left: r.left, top: r.top, width: r.width - 1, height: r.height - 1, background: "var(--hoja-fondo)" }}
+        />,
+      );
+    }
+
+    const primeraF = Math.min(oy.desde, ...combinadasVisibles.map((m) => m.f1));
+    const primeraC = Math.min(ox.desde, ...combinadasVisibles.map((m) => m.c1));
+    for (let f = primeraF; f <= oy.hasta; f++) {
+      for (let c = primeraC; c <= ox.hasta; c++) {
         const celda = hoja.celdas[claveCelda(f, c)];
         if (!celda) continue;
+        const combinada = combinadaEn(hoja, f, c);
+        // Fuera del panel solo interesan las principales de una combinación que asoma.
+        if (combinada ? combinada.f1 !== f || combinada.c1 !== c || !visibleEn(combinada, ox, oy) : f < oy.desde || c < ox.desde) continue;
         const estilo = celda.estilo;
         const valor = celda.entrada ? calc.valor(hojaActiva, f, c) : null;
         let texto = celda.entrada ? formatearValor(valor, estilo) : "";
         const alineacion = alineacionEfectiva(valor, estilo);
         const fuente = fuenteCelda(estilo?.negrita, estilo?.cursiva, zoom);
-        let ancho = xs[c + 1] - xs[c];
+        const finC = combinada ? combinada.c2 : c;
+        const finF = combinada ? combinada.f2 : f;
+        let ancho = xs[Math.min(finC, nCols - 1) + 1] - xs[c];
+        const alto = ys[Math.min(finF, nFilas - 1) + 1] - ys[f];
         const anchoTexto = texto ? medirTexto(texto, fuente) : 0;
         let desborda = false;
         if (anchoTexto > ancho - 4) {
           if (typeof valor === "number") {
             // Un número que no cabe se muestra como ####, como en Excel.
             texto = "#".repeat(Math.max(1, Math.floor((ancho - 4) / medirTexto("#", fuente))));
-          } else if (alineacion === "izquierda") {
+          } else if (alineacion === "izquierda" && !combinada) {
+            // El texto se desborda sobre vecinas vacías, pero nunca sobre una combinación.
             let fin = c;
-            while (fin + 1 < nCols && fin < ox.hasta + 8 && !hoja.celdas[claveCelda(f, fin + 1)]?.entrada && xs[fin + 1] - xs[c] < anchoTexto + 6) fin++;
+            while (fin + 1 < nCols && fin < ox.hasta + 8 && !hoja.celdas[claveCelda(f, fin + 1)]?.entrada && !combinadaEn(hoja, f, fin + 1) && xs[fin + 1] - xs[c] < anchoTexto + 6) fin++;
             ancho = xs[fin + 1] - xs[c];
             desborda = fin > c;
           }
@@ -508,7 +533,7 @@ export default function CuadriculaHoja({ vm, entradaRef, onTecla, onCopiar, onCo
               left: xs[c] - ox.origen,
               top: ys[f] - oy.origen,
               width: ancho - (desborda || !estado.cuadricula ? 0 : 1),
-              height: ys[f + 1] - ys[f] - 1,
+              height: alto - 1,
               padding: `0 ${3 * zoom}px ${1 * zoom}px`,
               justifyContent: alineacion === "centro" ? "center" : alineacion === "derecha" ? "flex-end" : "flex-start",
               ...estiloFuente(estilo?.negrita, estilo?.cursiva, zoom),
@@ -553,14 +578,14 @@ export default function CuadriculaHoja({ vm, entradaRef, onTecla, onCopiar, onCo
 
     // Selección: relleno tenue salvo la celda activa, borde verde y controlador de relleno.
     if (mostrarSeleccion && visibleEn(rango, ox, oy)) {
-      const a = sel.activa;
-      const esUnica = rango.f1 === rango.f2 && rango.c1 === rango.c2;
+      const a = combinadaEn(hoja, sel.activa.f, sel.activa.c) ?? { f1: sel.activa.f, f2: sel.activa.f, c1: sel.activa.c, c2: sel.activa.c };
+      const esUnica = rango.f1 === a.f1 && rango.f2 === a.f2 && rango.c1 === a.c1 && rango.c2 === a.c2;
       if (!esUnica) {
         const tiras: Rango[] = [
-          { f1: rango.f1, f2: a.f - 1, c1: rango.c1, c2: rango.c2 },
-          { f1: a.f + 1, f2: rango.f2, c1: rango.c1, c2: rango.c2 },
-          { f1: a.f, f2: a.f, c1: rango.c1, c2: a.c - 1 },
-          { f1: a.f, f2: a.f, c1: a.c + 1, c2: rango.c2 },
+          { f1: rango.f1, f2: a.f1 - 1, c1: rango.c1, c2: rango.c2 },
+          { f1: a.f2 + 1, f2: rango.f2, c1: rango.c1, c2: rango.c2 },
+          { f1: a.f1, f2: a.f2, c1: rango.c1, c2: a.c1 - 1 },
+          { f1: a.f1, f2: a.f2, c1: a.c2 + 1, c2: rango.c2 },
         ].filter((t) => t.f1 <= t.f2 && t.c1 <= t.c2);
         tiras.forEach((t, i) =>
           elementos.push(<div key={`s${i}`} className="absolute pointer-events-none" style={{ ...rect(t, ox, oy), background: "var(--hoja-seleccion)", zIndex: 2 }} />),
@@ -743,6 +768,8 @@ export default function CuadriculaHoja({ vm, entradaRef, onTecla, onCopiar, onCo
   // ─── Entrada de texto (siempre enfocada, como en Excel Online) ─────────────
   const idxEdicion = edicion?.hoja ?? hojaActiva;
   const celdaEdicion = sel.activa;
+  const combinadaEdicion = combinadaEn(estado.libro.hojas[idxEdicion], celdaEdicion.f, celdaEdicion.c);
+  const finEdicion = combinadaEdicion ? { f: Math.min(combinadaEdicion.f2, nFilas - 1), c: Math.min(combinadaEdicion.c2, nCols - 1) } : celdaEdicion;
   const estiloEdicion = estado.libro.hojas[idxEdicion].celdas[claveCelda(celdaEdicion.f, celdaEdicion.c)]?.estilo;
   const editandoAqui = !!edicion && idxEdicion === hojaActiva;
   const izqEntrada = pantallaDe(celdaEdicion.c, xs, fc, scroll.x, encW);
@@ -750,10 +777,10 @@ export default function CuadriculaHoja({ vm, entradaRef, onTecla, onCopiar, onCo
   const fuenteEntrada = fuenteCelda(estiloEdicion?.negrita, estiloEdicion?.cursiva, zoom);
   const lineas = edicion ? edicion.texto.split("\n") : [""];
   const anchoEntrada = Math.min(
-    Math.max(xs[celdaEdicion.c + 1] - xs[celdaEdicion.c], Math.max(...lineas.map((l) => medirTexto(l, fuenteEntrada))) + 14 * zoom),
+    Math.max(xs[finEdicion.c + 1] - xs[celdaEdicion.c], Math.max(...lineas.map((l) => medirTexto(l, fuenteEntrada))) + 14 * zoom),
     Math.max(40, tam.w - izqEntrada - 4),
   );
-  const altoEntrada = Math.max(ys[celdaEdicion.f + 1] - ys[celdaEdicion.f], lineas.length * 15 * zoom * 1.25 + 4);
+  const altoEntrada = Math.max(ys[finEdicion.f + 1] - ys[celdaEdicion.f], lineas.length * 15 * zoom * 1.25 + 4);
 
   useEffect(() => {
     if (!onPosicionEditor) return;

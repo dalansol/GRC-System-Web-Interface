@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useReducer } from "react";
 
 import { Calculadora } from "./calculo";
+import { combinadaEn } from "./combinadas";
 import { estadoInicial, rangoSeleccion, reducirHoja, type Seleccion } from "./estadoHoja";
 import { formatearValor } from "./formato";
 import { aplicarEstilo, ultimaCeldaUsada } from "./operaciones";
@@ -43,6 +44,8 @@ export function useHojaCalculo(libroInicial: Libro, soloLectura: boolean) {
   );
 
   const estiloActivo: EstiloCelda = hoja.celdas[claveCelda(estado.sel.activa.f, estado.sel.activa.c)]?.estilo ?? {};
+  /** Rango combinado al que pertenece la celda activa (la cinta marca "Combinar y centrar"). */
+  const combinadaActiva = combinadaEn(hoja, estado.sel.activa.f, estado.sel.activa.c);
 
   /** Cambia el estilo del rango; los interruptores (negrita…) siguen a la celda activa, como Excel. */
   const cambiarEstilo = useCallback(
@@ -89,7 +92,7 @@ export function useHojaCalculo(libroInicial: Libro, soloLectura: boolean) {
     [calc, estado.libro],
   );
 
-  return { estado, despachar, calc, hoja, rango, rangoUtil, usada, aplicar, estiloActivo, cambiarEstilo, alternar, resumen, textoCelda };
+  return { estado, despachar, calc, hoja, rango, rangoUtil, usada, aplicar, estiloActivo, combinadaActiva, cambiarEstilo, alternar, resumen, textoCelda };
 }
 
 export type VistaModeloHoja = ReturnType<typeof useHojaCalculo>;

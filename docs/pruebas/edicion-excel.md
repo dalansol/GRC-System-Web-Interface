@@ -6,10 +6,11 @@
 |---|---|
 | `src/app/domain/hoja/formulas.test.ts` | Referencias (columnas > Z, `$`, rangos), interpretación de lo tecleado (miles, moneda, %, fechas, apóstrofo), precedencia, funciones en español/inglés, errores, ciclos, otras hojas |
 | `src/app/domain/hoja/operaciones.test.ts` | Desplazar y traducir fórmulas, insertar/eliminar filas, pegar bloques, relleno, renombrar hojas, ordenar, Ctrl+flecha, TSV, formato es-MX |
-| `src/app/domain/hoja/xlsx.test.ts` | Ida y vuelta `.xlsx` (valores, fórmulas, estilos, fechas, paneles, anchos), fórmula guardada en inglés con resultado, avisos, formatos numéricos, libro con macros (aviso y resto del contenido) |
+| `src/app/domain/hoja/xlsx.test.ts` | Ida y vuelta `.xlsx` (valores, fórmulas, estilos, fechas, paneles, anchos, celdas combinadas), fórmula guardada en inglés con resultado, avisos, formatos numéricos, libro con macros (aviso y resto del contenido) |
+| `src/app/domain/hoja/combinadas.test.ts` | Combinar (y centrar, horizontalmente, celdas) conserva solo la celda superior izquierda, separar, Borrar todo separa, la selección abarca la combinación y las flechas/Enter la saltan, reubicación al insertar o eliminar filas y columnas |
 | `src/app/domain/hoja/estadoHoja.test.ts` | Enter/Escape, deshacer/rehacer, modo Señalar (también en otra hoja), Ctrl+Enter, recorrido dentro del rango, solo lectura |
 | `src/app/domain/hoja/funciones.test.ts` | Sugerencias de funciones por prefijo, firma y argumento actual, búsqueda en el libro sin acentos y por hojas |
-| `src/app/components/hoja/EditorHojaCalculo.test.tsx` | Flujo en la interfaz: escribir y recalcular, Ctrl+Z, barra de estado, señalar con flechas, solo lectura, abrir el archivo del servidor y guardar con Ctrl+S, respaldo de ejemplo, diálogo de cambios sin guardar, autocompletado con Tab, Ctrl+F y recorrido de coincidencias |
+| `src/app/components/hoja/EditorHojaCalculo.test.tsx` | Flujo en la interfaz: escribir y recalcular, Combinar y centrar desde la cinta (aviso de pérdida de datos, salto con flechas, Separar celdas desde el menú), Ctrl+Z, barra de estado, señalar con flechas, solo lectura, abrir el archivo del servidor y guardar con Ctrl+S, respaldo de ejemplo, diálogo de cambios sin guardar, autocompletado con Tab, Ctrl+F y recorrido de coincidencias |
 
 ## Backend (`corepack pnpm test`, requiere `SQL_TEST_*`)
 
@@ -41,4 +42,5 @@ Con `npm run dev` y el backend con `DATA_MODE=sql` (tras `corepack pnpm db:migra
 15. **Relleno rápido**: con datos en la columna vecina, doble clic en el cuadro de relleno llena hasta la última fila con datos.
 16. **Cerrar con cambios**: aparece "¿Desea guardar los cambios…?"; recargar la página muestra el aviso del navegador.
 17. **Macros**: subir un `.xlsm` con una macro como evidencia (se acepta) y abrirlo: aparece el aviso "El archivo contiene macros, que no son compatibles…" y se ven las hojas y fórmulas. Guardar crea la versión como `.xlsx`; al abrirla en Excel no tiene macros.
-18. **Permisos en servidor**: con un usuario que no es el auditor asignado al control, pedir `POST /api/evidencias/:id/versiones` responde 403 y la versión no cambia.
+18. **Combinar celdas**: escribir "Título" en A2 y algo en B2, seleccionar A2:C2 e Inicio › Combinar y centrar: aparece el aviso de que solo se conserva A2, el texto queda centrado en una celda ancha y las flechas la saltan. Con la flecha del botón, "Combinar horizontalmente" sobre A3:C4 crea dos combinaciones (una por fila) y "Separar celdas" las deshace. Insertar una columna en B parte la combinación más ancha; eliminarla la recorta. Guardar, descargar la copia y abrirla en Excel: las celdas siguen combinadas.
+19. **Permisos en servidor**: con un usuario que no es el auditor asignado al control, pedir `POST /api/evidencias/:id/versiones` responde 403 y la versión no cambia.

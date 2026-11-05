@@ -9,6 +9,8 @@ import {
   Copy,
   Eraser,
   Scissors,
+  TableCellsMerge,
+  TableCellsSplit,
   Trash2,
   CheckCircle2,
   Download, Eye, FileSpreadsheet, History, Loader2, Lock, PencilLine, Redo2, Save, Undo2, X } from "lucide-react";
@@ -24,14 +26,17 @@ import {
   type VersionEvidencia,
 } from "../../api/evidencias";
 import { fechaASerial } from "../../domain/hoja/calculo";
+import { AVISO_COMBINAR, combinarPierdeDatos, rangosACombinar } from "../../domain/hoja/combinadas";
 import { libroDeEjemplo } from "../../domain/hoja/ejemplos";
 import { celdaUnica, haySinGuardar, MAX_COLUMNAS, MAX_FILAS, puedeSenalar } from "../../domain/hoja/estadoHoja";
 import { formatearValor } from "../../domain/hoja/formato";
 import {
   aplicarEstilo,
   cambiarEstructura,
+  combinarCeldas,
   copiarBloque,
   inmovilizar,
+  separarCeldas,
   limpiarRango,
   ordenarRango,
   pegarBloque,
@@ -52,7 +57,7 @@ import AyudaAtajos from "./AyudaAtajos";
 import BarraBuscar from "./BarraBuscar";
 import BarraEstado from "./BarraEstado";
 import BarraFormulas from "./BarraFormulas";
-import CintaOpciones, { type AccionesCinta } from "./CintaOpciones";
+import CintaOpciones, { type AccionesCinta, type ModoCombinar } from "./CintaOpciones";
 import CuadriculaHoja, { type VistaCuadricula } from "./CuadriculaHoja";
 import MenuContextual, { type OpcionMenu } from "./MenuContextual";
 import PestanasHojas from "./PestanasHojas";
@@ -562,6 +567,20 @@ function EditorCargado({
   const borrar = (que: "todo" | "contenido" | "formato") =>
     aplicar((l, i, r) => (que === "formato" ? aplicarEstilo(l, i, r, () => ({})) : limpiarRango(l, i, r, que === "todo")));
 
+  /** Combinar y centrar / horizontalmente / celdas / separar (menú de la cinta y contextual). */
+  const combinar = (modo: ModoCombinar) => {
+    if (soloLectura) return;
+    const r = rangoUtil;
+    if (modo === "separar") {
+      aplicar((l, i) => separarCeldas(l, i, r), celdaUnica({ f: r.f1, c: r.c1 }));
+      return;
+    }
+    const rangos = rangosACombinar(r, modo === "horizontal" ? "horizontal" : "todo");
+    if (!rangos.length) return;
+    if (combinarPierdeDatos(hoja, rangos)) toast.warning(AVISO_COMBINAR);
+    aplicar((l, i) => combinarCeldas(l, i, r, modo === "horizontal" ? "horizontal" : "todo", modo === "centrar"), celdaUnica({ f: r.f1, c: r.c1 }));
+  };
+
   const irA = (texto: string): boolean => {
     const limpio = texto.trim();
     const bang = limpio.lastIndexOf("!");
@@ -631,6 +650,7 @@ function EditorCargado({
     insertarHoja: () => aplicar((l) => agregarHoja(l, idx), celdaUnica({ f: 0, c: 0 }), idx + 1),
     ordenar,
     inmovilizar: fijarPaneles,
+    combinar,
   };
 
   // ─── Teclado ───────────────────────────────────────────────────────────────
@@ -775,6 +795,9 @@ function EditorCargado({
     null,
     { etiqueta: "Borrar contenido", icono: <Eraser size={13} />, atajo: "Supr", accion: () => borrar("contenido"), deshabilitada: soloLectura },
     { etiqueta: "Borrar formatos", accion: () => borrar("formato"), deshabilitada: soloLectura },
+    null,
+    { etiqueta: "Combinar y centrar", icono: <TableCellsMerge size={13} />, accion: () => combinar("centrar"), deshabilitada: soloLectura || (rango.f1 === rango.f2 && rango.c1 === rango.c2) },
+    { etiqueta: "Separar celdas", icono: <TableCellsSplit size={13} />, accion: () => combinar("separar"), deshabilitada: soloLectura || !vm.hoja.combinadas.some((m) => m.f1 <= rango.f2 && m.f2 >= rango.f1 && m.c1 <= rango.c2 && m.c2 >= rango.c1) },
     null,
     { etiqueta: "Ordenar de A a Z", icono: <ArrowDownAZ size={13} />, accion: () => ordenar(true), deshabilitada: soloLectura },
     { etiqueta: "Ordenar de Z a A", icono: <ArrowDownZA size={13} />, accion: () => ordenar(false), deshabilitada: soloLectura },

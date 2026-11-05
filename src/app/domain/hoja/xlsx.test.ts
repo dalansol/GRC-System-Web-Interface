@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import ExcelJS from "exceljs";
 import { Calculadora } from "./calculo";
 import { libroDeEjemplo } from "./ejemplos";
-import { aplicarEstilo, escribir } from "./operaciones";
+import { aplicarEstilo, combinarCeldas, escribir } from "./operaciones";
 import { claveCelda, hojaVacia, type Libro } from "./tipos";
 import JSZip from "jszip";
 import { AVISO_MACROS, contieneMacros, escribirXlsx, formatoDesdeNumFmt, leerXlsx } from "./xlsx";
@@ -65,15 +65,32 @@ describe("xlsx", () => {
     expect(total.result).toBe(123250);
   });
 
-  it("avisa lo que no se conserva y respeta textos que parecen números", async () => {
+  it("lee las celdas combinadas y respeta textos que parecen números", async () => {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("H");
     ws.getCell("A1").value = "00123";
     ws.getCell("B1").value = "x";
-    ws.mergeCells("B1:C1");
+    ws.mergeCells("B1:C2");
     const { libro, avisos } = await leerXlsx((await wb.xlsx.writeBuffer()) as ArrayBuffer);
     expect(libro.hojas[0].celdas[claveCelda(0, 0)].entrada).toBe("'00123");
-    expect(avisos.some((a) => a.includes("combinadas"))).toBe(true);
+    expect(libro.hojas[0].celdas[claveCelda(0, 1)].entrada).toBe("x");
+    expect(libro.hojas[0].combinadas).toEqual([{ f1: 0, c1: 1, f2: 1, c2: 2 }]);
+    expect(avisos).toEqual([]);
+  });
+
+  it("guarda las celdas combinadas y las vuelve a leer", async () => {
+    let libro: Libro = { hojas: [hojaVacia("H")] };
+    libro = escribir(libro, 0, 0, 0, "Encabezado");
+    libro = combinarCeldas(libro, 0, { f1: 0, c1: 0, f2: 0, c2: 3 }, "todo", true);
+    const wb = new ExcelJS.Workbook();
+    const datos = await aBuffer(await escribirXlsx(libro));
+    await wb.xlsx.load(datos);
+    const ws = wb.getWorksheet("H")!;
+    expect(ws.getCell("A1").isMerged).toBe(true);
+    expect(ws.getCell("D1").master.address).toBe("A1");
+    const { libro: leido } = await leerXlsx(datos);
+    expect(leido.hojas[0].combinadas).toEqual([{ f1: 0, c1: 0, f2: 0, c2: 3 }]);
+    expect(leido.hojas[0].celdas[claveCelda(0, 0)]).toEqual({ entrada: "Encabezado", estilo: { alineacion: "centro" } });
   });
 
   it("reconoce los formatos numéricos más comunes", () => {
