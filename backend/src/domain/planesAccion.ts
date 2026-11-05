@@ -1,7 +1,10 @@
 // Planes de acción correctivos de un hallazgo (SF-10, SF-11): tipos y validación.
 
-export const ESTADOS_PLAN_ACCION = ["Asignado", "En Progreso", "Completado", "Pendiente", "En Revisión", "Aprobado", "Rechazado"] as const;
+export const ESTADOS_PLAN_ACCION = ["Borrador", "Asignado", "En Progreso", "Completado", "Pendiente", "En Revisión", "Aprobado", "Rechazado"] as const;
 export type EstadoPlanAccion = (typeof ESTADOS_PLAN_ACCION)[number];
+
+/** En `definicion` el plan aún no se valida y el auditado no lo ve; en `cierre` se trabaja y se revisa su evidencia. */
+export type EtapaPlanAccion = "definicion" | "cierre";
 
 /** Datos del hallazgo que el plan necesita mostrar y validar. */
 export interface HallazgoResumen {
@@ -30,6 +33,7 @@ export interface PlanAccion {
   estado: EstadoPlanAccion;
   creadoEn: string;
   creadoPorId: number;
+  etapa: EtapaPlanAccion;
   hallazgosRelacionados: HallazgoResumen[];
   pasos: PasoPlanAccion[];
 }

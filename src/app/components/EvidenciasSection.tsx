@@ -276,7 +276,7 @@ export default function EvidenciasSection({
                   </button>
                 )}
                 {puedeSubirEvidencia && (
-                  <button onClick={() => removeFile(f.id)} className="p-1 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0">
+                  <button onClick={() => removeFile(f.id)} aria-label={`Eliminar ${f.name}`} className="p-1 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0">
                     <Trash2 size={12} />
                   </button>
                 )}

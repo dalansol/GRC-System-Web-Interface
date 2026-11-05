@@ -50,6 +50,8 @@ export default function FormularioPlanAccion({
 }: Props) {
   const { usuario } = useSesion();
   const edicion = Boolean(plan);
+  // Lo que el Jefe de Auditoría validó no cambia: solo se reasigna el responsable y la fecha se mueve con una prórroga.
+  const validado = plan?.etapa === "cierre";
 
   // Normalizar lista de hallazgos (si viene solo uno por props individuales, agregarlo)
   const listaHallazgos: HallazgoSeleccionado[] =
@@ -68,7 +70,7 @@ export default function FormularioPlanAccion({
   // Estados del formulario (incluyendo el nuevo campo para el título del plan)
   const [tituloPlan, setTituloPlan] = useState((plan as any)?.titulo ?? "");
   const [descripcion, setDescripcion] = useState(plan?.descripcion ?? "");
-  const [responsableId, setResponsableId] = useState(plan ? String(plan.responsable.id) : String(usuario?.id ?? ""));
+  const [responsableId, setResponsableId] = useState(plan ? String(plan.responsable.id) : "");
   const [fechaCompromiso, setFechaCompromiso] = useState(plan?.fechaCompromiso ?? "");
   const [estado, setEstado] = useState<EstadoPlanAccion>(plan?.estado ?? "Asignado");
   // Los estados del flujo de aprobación no se fijan a mano: se muestran, pero no se envían.
@@ -101,10 +103,6 @@ export default function FormularioPlanAccion({
         if (!vigente) return;
         setHallazgoPrincipal(h);
         setResponsables(r);
-
-        if (!plan && !responsableId && usuario?.id) {
-          setResponsableId(String(usuario.id));
-        }
       })
       .catch((e: unknown) => {
         if (vigente) setError(e instanceof Error ? e.message : "No se pudo cargar la información del hallazgo.");
@@ -115,18 +113,18 @@ export default function FormularioPlanAccion({
     return () => {
       vigente = false;
     };
-  }, [primerId, hallazgoId, usuario, plan, responsableId]);
+  }, [primerId, hallazgoId]);
 
   // Actualizar automáticamente la fecha de compromiso del plan basada en la fecha máxima de los pasos
   useEffect(() => {
-    if (pasos.length > 0) {
+    if (!validado && pasos.length > 0) {
       const fechasValidas = pasos.map((p) => p.fechaCompromiso).filter(Boolean);
       if (fechasValidas.length > 0) {
         const fechaMaxima = fechasValidas.reduce((max, actual) => (actual > max ? actual : max));
         setFechaCompromiso(fechaMaxima);
       }
     }
-  }, [pasos]);
+  }, [pasos, validado]);
 
   const fechaCierre = hallazgoPrincipal?.fechaCierreAuditoria ?? null;
   const fechaCambiada = !plan || fechaCompromiso !== plan.fechaCompromiso;
@@ -136,7 +134,7 @@ export default function FormularioPlanAccion({
   const agregarPaso = () => {
     setPasos((prev) => [
       ...prev,
-      { descripcion: "", usuarioAsignadoId: usuario?.id ? String(usuario.id) : "", fechaCompromiso: "" },
+      { descripcion: "", usuarioAsignadoId: "", fechaCompromiso: "" },
     ]);
   };
 
@@ -157,17 +155,20 @@ export default function FormularioPlanAccion({
     setError(null);
 
     if (listaHallazgos.length === 0) return setError("Debe haber al menos un hallazgo asociado.");
-    if (!tituloPlan.trim()) return setError("El título del plan de acción es obligatorio.");
-    if (!descripcion.trim()) return setError("El análisis de causa raíz es obligatorio.");
     if (!responsableId) return setError("Selecciona al responsable asignado.");
-    if (!fechaCompromiso) return setError("Indica la fecha de compromiso.");
-    if (fechaAnteriorAlCierre) return setError(MENSAJE_FECHA_ANTERIOR_AL_CIERRE);
+    // Un plan validado no cambia de contenido: lo demás no se edita, y los planes anteriores pueden no tenerlo.
+    if (!validado) {
+      if (!tituloPlan.trim()) return setError("El título del plan de acción es obligatorio.");
+      if (!descripcion.trim()) return setError("El análisis de causa raíz es obligatorio.");
+      if (!fechaCompromiso) return setError("Indica la fecha de compromiso.");
+      if (fechaAnteriorAlCierre) return setError(MENSAJE_FECHA_ANTERIOR_AL_CIERRE);
 
-    // Validar que cada paso esté completo si se han agregado
-    for (let i = 0; i < pasos.length; i++) {
-      if (!pasos[i].descripcion.trim()) return setError(`El paso #${i + 1} requiere una descripción.`);
-      if (!pasos[i].usuarioAsignadoId) return setError(`Selecciona un responsable para el paso #${i + 1}.`);
-      if (!pasos[i].fechaCompromiso) return setError(`Indica la fecha de compromiso para el paso #${i + 1}.`);
+      // Validar que cada paso esté completo si se han agregado
+      for (let i = 0; i < pasos.length; i++) {
+        if (!pasos[i].descripcion.trim()) return setError(`El paso #${i + 1} requiere una descripción.`);
+        if (!pasos[i].usuarioAsignadoId) return setError(`Selecciona un responsable para el paso #${i + 1}.`);
+        if (!pasos[i].fechaCompromiso) return setError(`Indica la fecha de compromiso para el paso #${i + 1}.`);
+      }
     }
 
     setGuardando(true);
@@ -190,10 +191,10 @@ export default function FormularioPlanAccion({
 
       if (plan) {
         const actualizado = await actualizarPlanAccion(plan.id, {
-          titulo: datos.titulo,
-          descripcion: datos.descripcion,
+          ...(validado
+            ? {}
+            : { titulo: datos.titulo, descripcion: datos.descripcion, fechaCompromiso: datos.fechaCompromiso, pasos: datos.pasos }),
           responsableId: datos.responsableId,
-          fechaCompromiso: datos.fechaCompromiso,
           ...(estadoEditable ? { estado } : {}),
         });
         toast.success(`Plan de acción actualizado. Estado: ${actualizado.estado}.`);
@@ -246,6 +247,11 @@ export default function FormularioPlanAccion({
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto space-y-4 my-3 pr-1">
+            {validado && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Este plan ya fue validado: solo se puede cambiar su responsable, y la fecha se mueve con una prórroga.
+              </p>
+            )}
             <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
               <CalendarClock size={14} className="flex-shrink-0" />
               {fechaCierre ? (
@@ -270,7 +276,8 @@ export default function FormularioPlanAccion({
                 onChange={(e) => setTituloPlan(e.target.value)}
                 maxLength={150}
                 required
-                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+                disabled={validado}
+                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm disabled:bg-muted disabled:opacity-80"
                 placeholder="Ej. Mitigación de riesgos de acceso..."
               />
             </div>
@@ -286,7 +293,8 @@ export default function FormularioPlanAccion({
                 rows={4}
                 maxLength={2000}
                 required
-                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+                disabled={validado}
+                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm disabled:bg-muted disabled:opacity-80"
                 placeholder="Describe el análisis de causa raíz que originó el hallazgo..."
               />
             </div>
@@ -325,7 +333,7 @@ export default function FormularioPlanAccion({
                   min={fechaCambiada ? fechaCierre ?? undefined : undefined}
                   onChange={(e) => setFechaCompromiso(e.target.value)}
                   required
-                  disabled={pasos.length > 0}
+                  disabled={validado || pasos.length > 0}
                   className={`w-full rounded-md border bg-white px-3 py-2 text-sm disabled:bg-muted disabled:opacity-80 ${
                     fechaAnteriorAlCierre ? "border-red-400" : "border-border"
                   }`}
@@ -363,6 +371,7 @@ export default function FormularioPlanAccion({
             )}
 
             {/* SECCIÓN DE PASOS / SUB-TAREAS */}
+            {!validado && (
             <div className="border-t border-border pt-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -435,6 +444,7 @@ export default function FormularioPlanAccion({
                 </div>
               )}
             </div>
+            )}
 
             {(error || fechaAnteriorAlCierre) && (
               <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">

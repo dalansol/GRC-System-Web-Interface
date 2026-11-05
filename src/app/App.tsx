@@ -134,6 +134,7 @@ import VistaControles from "./components/VistaControles";
 import EvidenciasSection from "./components/EvidenciasSection";
 import VistaPlanesAccion from "./components/VistaPlanesAccion";
 import CampanaNotificaciones from "./components/CampanaNotificaciones";
+import { destinoDeNotificacion, type Notificacion } from "./api/notificaciones";
 import CopilotPanel from "./components/CopilotPanel";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
 import UsuariosRolesView from "./components/UsuariosRolesView";
@@ -143,7 +144,7 @@ import VistaHallazgoDetallado from "./components/VistaHallazgoDetallado";
 import { HierarchyView } from "./components/catalogo/HierarchyView";
 import { useSesion } from "./auth/SesionContext";
 import { CatalogosEstructuraSection } from "./components/CatalogosEstructuraSection";
-import { listarMisPlanesAccion, type PlanAccion } from "./api/planesAccion";
+import { listarMisPlanesAccion, type PlanAccion, type SolicitudDestinoPlan } from "./api/planesAccion";
 import VistaDashboard from "./components/VistaDashboard";
 
 const NAV_ITEMS: NavItem[] = [
@@ -336,7 +337,7 @@ function Sidebar({
 }
 
 // ─── Top Bar ────────────────────────────────────────────────────────────────
-function TopBar({ viewLabel }: { viewLabel: string }) {
+function TopBar({ viewLabel, onAbrirNotificacion }: { viewLabel: string; onAbrirNotificacion: (aviso: Notificacion) => void }) {
   return (
     <header className="h-12 bg-card border-b border-border flex items-center px-6 gap-4 flex-shrink-0">
       <div className="relative flex-1 max-w-sm">
@@ -351,7 +352,7 @@ function TopBar({ viewLabel }: { viewLabel: string }) {
       </div>
       <div className="flex-1" />
       <div className="flex items-center gap-3">
-        <CampanaNotificaciones />
+        <CampanaNotificaciones onAbrir={onAbrirNotificacion} />
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <CalendarDays size={14} />
           <span className="font-mono text-xs">
@@ -2532,6 +2533,7 @@ export default function App() {
   const esEquipoAuditados = usuario?.rol === "Jefe Auditado" || usuario?.rol === "Empleado Auditado";
   const [navView, setNavView] = useState<NavView>("dashboard");
   const [stack, setStack] = useState<StackEntry[]>([]);
+  const [destinoPlan, setDestinoPlan] = useState<SolicitudDestinoPlan | null>(null);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [tourActive, setTourActive] = useState(() => {
     try { return localStorage.getItem("expedite_tour_done") !== "1"; } catch { return true; }
@@ -2543,6 +2545,14 @@ export default function App() {
     }
     setNavView(v);
     setStack([]);
+    setDestinoPlan(null);
+  };
+  // Una notificación lleva a la pestaña y al plan que menciona.
+  const abrirNotificacion = (aviso: Notificacion) => {
+    const destino = destinoDeNotificacion(aviso, usuario?.rol);
+    if (!destino) return;
+    goToNav("auditado");
+    setDestinoPlan({ ...destino, solicitud: Date.now() });
   };
   const navigate: Navigate = (type, id, auditId) =>
     setStack((prev) => [...prev, { type, id, auditId }]);
@@ -2667,7 +2677,7 @@ export default function App() {
       case "controles":
         return <VistaControles navigate={navigate} />;
       case "auditado":
-        return <VistaPlanesAccion />;
+        return <VistaPlanesAccion destino={destinoPlan} />;
     }
   };
 
@@ -2689,7 +2699,7 @@ export default function App() {
     >
       <Sidebar active={navView} onNav={goToNav} />
       <div className={`flex flex-col flex-1 overflow-hidden transition-all ${copilotOpen ? "mr-96" : ""}`}>
-        <TopBar viewLabel={topLabel} />
+        <TopBar viewLabel={topLabel} onAbrirNotificacion={abrirNotificacion} />
         {renderContent()}
       </div>
       <Toaster position="bottom-right" richColors />

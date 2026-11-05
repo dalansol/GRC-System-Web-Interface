@@ -9,6 +9,13 @@ const ETIQUETA_ACCION: Record<AccionFlujoPlan, string> = {
   rechazo: "Rechazado",
 };
 
+const ETIQUETA_DEFINICION: Partial<Record<AccionFlujoPlan, string>> = {
+  envio: "Enviado a validación",
+  apertura: "Abierto para validación",
+  aprobacion: "Plan validado",
+  rechazo: "Validación rechazada",
+};
+
 const formatearFecha = (iso: string) =>
   new Date(iso).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" });
 
@@ -43,7 +50,9 @@ export default function HistorialFlujoPlan({ planId, recarga }: { planId: number
       {flujo.eventos.map((evento) => (
         <li key={evento.id} className="rounded-md border border-border bg-card p-3 text-xs space-y-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-semibold text-foreground">{ETIQUETA_ACCION[evento.accion]}</span>
+            <span className="font-semibold text-foreground">
+              {(evento.etapa === "definicion" && ETIQUETA_DEFINICION[evento.accion]) || ETIQUETA_ACCION[evento.accion]}
+            </span>
             <span className="font-mono text-muted-foreground">{formatearFecha(evento.fecha)}</span>
           </div>
           {evento.firmaHash ? (
@@ -57,13 +66,13 @@ export default function HistorialFlujoPlan({ planId, recarga }: { planId: number
                   {evento.firmaHash.slice(0, 12)}
                 </span>
               </p>
-              {flujo.firmaIntegra === true && (
+              {evento.etapa !== "definicion" && flujo.firmaIntegra === true && (
                 <p className="flex items-center gap-1 font-medium text-emerald-700">
                   <ShieldCheck size={13} />
                   <span>Integridad verificada</span>
                 </p>
               )}
-              {flujo.firmaIntegra === false && (
+              {evento.etapa !== "definicion" && flujo.firmaIntegra === false && (
                 <p role="alert" className="flex items-center gap-1 font-medium text-destructive">
                   <AlertTriangle size={13} />
                   El contenido cambió después de la firma
@@ -76,6 +85,11 @@ export default function HistorialFlujoPlan({ planId, recarga }: { planId: number
             </p>
           )}
           {evento.motivo && <p className="break-words text-foreground">Motivo: {evento.motivo}</p>}
+          {Boolean(evento.evidenciasObservadas?.length) && (
+            <p className="break-words text-foreground">
+              Archivos señalados: {evento.evidenciasObservadas!.map((evidencia) => evidencia.nombre).join(", ")}
+            </p>
+          )}
         </li>
       ))}
     </ol>

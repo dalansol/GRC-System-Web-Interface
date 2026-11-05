@@ -13,7 +13,7 @@ import { ROLES_EDICION } from "./planesAccion.js";
 const RESPUESTA_PLAN_BLOQUEADO = {
   error: {
     codigo: "PLAN_BLOQUEADO",
-    mensaje: "El plan de acción está en revisión o aprobado y su evidencia no puede modificarse.",
+    mensaje: "El plan de acción aún no se valida, está en revisión o ya se aprobó, y su evidencia no puede modificarse.",
   },
 };
 
@@ -23,7 +23,7 @@ async function pasoEnPlanBloqueado(pasoId: string): Promise<boolean> {
     `SELECT 1
      FROM action_plan_steps step
      JOIN action_plans plan ON plan.id = step.action_plan_id
-     WHERE step.id::text = $1 AND plan.status = ANY($2::varchar[])
+     WHERE step.id::text = $1 AND (plan.status = ANY($2::varchar[]) OR plan.review_stage = 'definicion')
      LIMIT 1`,
     [pasoId, [...ESTADOS_BLOQUEADOS]],
   );

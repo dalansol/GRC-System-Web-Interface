@@ -1,13 +1,28 @@
-import { ESTADOS_BANDEJA, ESTADOS_BLOQUEADOS, type EventoFlujoPlan } from "../domain/flujoPlanAccion.js";
+import {
+  ESTADOS_BANDEJA,
+  ESTADOS_BLOQUEADOS,
+  type EventoFlujoPlan,
+  type EvidenciaPlan,
+  type RechazoPlan,
+  type SolicitudProrroga,
+} from "../domain/flujoPlanAccion.js";
 import type {
   DatosEdicionPlanAccion,
+  DatosPasoPlanAccion,
   DatosPlanAccion,
+  EtapaPlanAccion,
   HallazgoResumen,
   PasoPlanAccion,
   PlanAccion,
 } from "../domain/planesAccion.js";
 import type { Notificacion } from "./notificaciones.js";
-import type { RepositorioPlanesAccion, TransicionPlan } from "./planesAccion.js";
+import type {
+  AvisoPlan,
+  DatosSolicitudProrroga,
+  DecisionProrroga,
+  RepositorioPlanesAccion,
+  TransicionPlan,
+} from "./planesAccion.js";
 import type { RepositorioUsuarios } from "./repositorio.js";
 import { AUDITORIAS_DEMO, HALLAZGOS_DEMO, PLANES_ACCION_DEMO } from "./semilla.js";
 
@@ -26,6 +41,7 @@ interface Fila extends Omit<DatosPlanAccion, "pasos"> {
   estado: PlanAccion["estado"];
   creadoEn: string;
   creadoPorId: number;
+  etapa: EtapaPlanAccion;
   pasos: FilaPaso[];
 }
 
@@ -35,6 +51,8 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
   private filas: Fila[] = [];
   private eventos: EventoFlujoPlan[] = [];
   private notificaciones: (Notificacion & { usuarioId: number })[] = [];
+  private evidencias: EvidenciaPlan[] = [];
+  private prorrogas: SolicitudProrroga[] = [];
   private siguienteId = 1;
   private siguientePasoId = 1;
   private siguienteEventoId = 1;
@@ -59,6 +77,7 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
           estado: "Asignado",
           creadoEn: "2025-07-12T10:00:00.000Z",
           creadoPorId: usuario.id,
+          etapa: "cierre",
         });
       }
     }
@@ -75,7 +94,7 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
       fechaCompromiso: paso.fechaCompromiso,
       completado: paso.completado,
       creadoEn: paso.creadoEn,
-      evidenciasCount: 0,
+      evidenciasCount: this.evidencias.filter((evidencia) => evidencia.pasoId === paso.id).length,
     };
   }
 
@@ -107,13 +126,13 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
     return Promise.all(this.filas.map((f) => this.aPlan(f)));
   }
 
-  async listarPorResponsable(usuarioId: number) {
+  async listarPorResponsable(usuarioId: number, opciones: { soloValidados?: boolean } = {}) {
     await this.listo;
     return Promise.all(
       this.filas
         .filter((f) =>
-          f.responsableId === usuarioId ||
-          f.pasos.some((paso) => paso.usuarioAsignadoId === usuarioId),
+          (f.responsableId === usuarioId || f.pasos.some((paso) => paso.usuarioAsignadoId === usuarioId)) &&
+          (!opciones.soloValidados || f.etapa === "cierre"),
         )
         .map((f) => this.aPlan(f)),
     );
@@ -132,18 +151,11 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
     const fila: Fila = {
       ...datos,
       id,
-      estado: "Asignado",
+      estado: "Borrador",
       creadoEn,
       creadoPorId,
-      pasos: (datos.pasos ?? []).map((paso) => ({
-        id: this.siguientePasoId++,
-        planAccionId: id,
-        usuarioAsignadoId: paso.usuarioAsignadoId,
-        descripcion: paso.descripcion,
-        fechaCompromiso: paso.fechaCompromiso,
-        completado: false,
-        creadoEn,
-      })),
+      etapa: "definicion",
+      pasos: this.filasPaso(id, datos.pasos ?? [], creadoEn),
     };
     this.filas.push(fila);
     return this.aPlan(fila);
@@ -155,12 +167,26 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
     return fila ? this.aPlan(fila) : null;
   }
 
-  async actualizar(id: number, datos: DatosEdicionPlanAccion) {
+  async actualizar(id: number, datos: DatosEdicionPlanAccion, pasos?: readonly DatosPasoPlanAccion[]) {
     await this.listo;
     const fila = this.filas.find((f) => f.id === id);
     if (!fila || ESTADOS_BLOQUEADOS.includes(fila.estado)) return null;
+    if (pasos && fila.etapa !== "definicion") return null;
     Object.assign(fila, datos);
+    if (pasos) fila.pasos = this.filasPaso(id, pasos, new Date().toISOString());
     return this.aPlan(fila);
+  }
+
+  private filasPaso(planAccionId: number, pasos: readonly DatosPasoPlanAccion[], creadoEn: string): FilaPaso[] {
+    return pasos.map((paso) => ({
+      id: this.siguientePasoId++,
+      planAccionId,
+      usuarioAsignadoId: paso.usuarioAsignadoId,
+      descripcion: paso.descripcion,
+      fechaCompromiso: paso.fechaCompromiso,
+      completado: false,
+      creadoEn,
+    }));
   }
 
   async transicionar(id: number, t: TransicionPlan) {
@@ -171,6 +197,7 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
     this.eventos.push({
       id: this.siguienteEventoId++,
       planAccionId: id,
+      etapa: fila.etapa,
       accion: t.accion,
       estadoAnterior: fila.estado,
       estadoNuevo: t.hacia,
@@ -178,21 +205,36 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
       motivo: t.motivo ?? null,
       firmaHash: t.firmaHash ?? null,
       fecha,
+      evidenciasObservadas: (t.evidenciasObservadas ?? []).map((evidencia) => ({
+        evidenciaId: evidencia.id,
+        pasoId: evidencia.pasoId,
+        nombre: evidencia.nombre,
+      })),
     });
-    for (const usuarioId of t.notificar?.usuarioIds ?? []) {
+    await this.crearNotificaciones(t.notificar?.usuarioIds ?? [], `plan_accion.${t.accion}`, t.notificar?.mensaje ?? "", id);
+    fila.estado = t.hacia;
+    if (t.etapaNueva) fila.etapa = t.etapaNueva;
+    const pasosReabiertos = new Set((t.evidenciasObservadas ?? []).map((evidencia) => evidencia.pasoId));
+    for (const paso of fila.pasos) {
+      if (pasosReabiertos.has(paso.id)) paso.completado = false;
+    }
+    return this.aPlan(fila);
+  }
+
+  async crearNotificaciones(usuarioIds: readonly number[], tipo: string, mensaje: string, planId: number) {
+    const fecha = new Date().toISOString();
+    for (const usuarioId of usuarioIds) {
       this.notificaciones.push({
         id: this.siguienteNotificacionId++,
         usuarioId,
-        tipo: `plan_accion.${t.accion}`,
-        mensaje: t.notificar!.mensaje,
+        tipo,
+        mensaje,
         entidadTipo: "action_plan",
-        entidadId: String(id),
+        entidadId: String(planId),
         leida: false,
         fecha,
       });
     }
-    fila.estado = t.hacia;
-    return this.aPlan(fila);
   }
 
   async listarRevision() {
@@ -204,16 +246,82 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
     return this.eventos.filter((evento) => evento.planAccionId === id);
   }
 
-  // La evidencia en memoria no se liga a los pasos de un plan.
-  async hashesEvidenciaPlan(_id: number): Promise<Record<number, string[]>> {
-    return {};
+  async hashesEvidenciaPlan(id: number): Promise<Record<number, string[]>> {
+    const porPaso: Record<number, string[]> = {};
+    for (const evidencia of await this.evidenciasPlan(id)) {
+      (porPaso[evidencia.pasoId] ??= []).push(evidencia.hash);
+    }
+    return porPaso;
+  }
+
+  async evidenciasPlan(id: number): Promise<EvidenciaPlan[]> {
+    const pasos = new Set(this.filas.find((f) => f.id === id)?.pasos.map((paso) => paso.id) ?? []);
+    return this.evidencias.filter((evidencia) => pasos.has(evidencia.pasoId));
+  }
+
+  /** Las rutas de evidencia no existen en este modo: las pruebas registran los archivos directamente. */
+  registrarEvidencia(evidencia: EvidenciaPlan) {
+    this.evidencias.push(evidencia);
+  }
+
+  async ultimoRechazo(id: number): Promise<RechazoPlan | null> {
+    const evento = [...this.eventos].reverse().find((item) => item.planAccionId === id && item.accion === "rechazo");
+    return evento ? { motivo: evento.motivo ?? "", fecha: evento.fecha, evidenciasObservadas: evento.evidenciasObservadas } : null;
+  }
+
+  async solicitarProrroga(datos: DatosSolicitudProrroga, notificar?: AvisoPlan) {
+    await this.listo;
+    const abierta = this.prorrogas.some((item) => item.planAccionId === datos.planAccionId && item.estado === "Pendiente");
+    const fila = this.filas.find((f) => f.id === datos.planAccionId);
+    if (abierta || !fila) return null;
+    const usuario = await this.usuarios.buscarPorId(datos.solicitadaPorId);
+    const solicitud: SolicitudProrroga = {
+      id: this.prorrogas.length + 1,
+      planAccionId: datos.planAccionId,
+      folioPlan: (await this.aPlan(fila)).publicId,
+      solicitadaPor: { id: datos.solicitadaPorId, nombre: usuario?.nombre ?? "" },
+      fechaActual: datos.fechaActual,
+      fechaPropuesta: datos.fechaPropuesta,
+      justificacion: datos.justificacion,
+      estado: "Pendiente",
+      motivoDecision: null,
+      creadaEn: new Date().toISOString(),
+    };
+    this.prorrogas.push(solicitud);
+    await this.crearNotificaciones(notificar?.usuarioIds ?? [], "plan_accion.solicitud_prorroga", notificar?.mensaje ?? "", datos.planAccionId);
+    return solicitud;
+  }
+
+  async listarProrrogasPendientes() {
+    return this.prorrogas.filter((item) => item.estado === "Pendiente");
+  }
+
+  async buscarProrroga(id: number) {
+    return this.prorrogas.find((item) => item.id === id) ?? null;
+  }
+
+  async ultimaProrroga(planId: number) {
+    return [...this.prorrogas].reverse().find((item) => item.planAccionId === planId) ?? null;
+  }
+
+  async decidirProrroga(id: number, decision: DecisionProrroga) {
+    const solicitud = this.prorrogas.find((item) => item.id === id);
+    if (!solicitud || solicitud.estado !== "Pendiente") return null;
+    solicitud.estado = decision.aprobar ? "Aprobada" : "Rechazada";
+    solicitud.motivoDecision = decision.motivo;
+    if (decision.aprobar) {
+      const fila = this.filas.find((f) => f.id === solicitud.planAccionId);
+      if (fila) fila.fechaCompromiso = solicitud.fechaPropuesta;
+    }
+    await this.crearNotificaciones(decision.notificar?.usuarioIds ?? [], "plan_accion.decision_prorroga", decision.notificar?.mensaje ?? "", solicitud.planAccionId);
+    return solicitud;
   }
 
   async actualizarPaso(planId: number, pasoId: number, completado: boolean) {
     await this.listo;
     const fila = this.filas.find((f) => f.id === planId);
     const paso = fila?.pasos.find((item) => item.id === pasoId);
-    if (!fila || !paso || ESTADOS_BLOQUEADOS.includes(fila.estado)) return null;
+    if (!fila || !paso || fila.etapa !== "cierre" || ESTADOS_BLOQUEADOS.includes(fila.estado)) return null;
     paso.completado = completado;
     return this.aPaso(paso);
   }

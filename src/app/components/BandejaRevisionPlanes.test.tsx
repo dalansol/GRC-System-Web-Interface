@@ -12,6 +12,7 @@ vi.mock("../api/planesAccion", async (original) => ({
   abrirRevisionPlan: vi.fn(),
   aprobarPlanAccion: vi.fn(),
   rechazarPlanAccion: vi.fn(),
+  listarEvidenciasPlan: vi.fn(),
 }));
 
 const sesion = vi.hoisted(() => ({ usuario: { id: 2, rol: "Jefe de Auditoría" } as { id: number; rol: string } }));
@@ -57,6 +58,7 @@ const plan = (cambios: Partial<PlanAccion> = {}): PlanAccion => ({
   fechaCompromiso: "2026-03-01",
   status: "Pendiente",
   estado: "Pendiente",
+  etapa: "cierre",
   creadoEn: "2026-01-01T00:00:00.000Z",
   hallazgosRelacionados: [HALLAZGO],
   pasos: [
@@ -79,6 +81,7 @@ const enRevision = (cambios: Partial<PlanAccion> = {}) => plan({ estado: "En Rev
 beforeEach(() => {
   vi.clearAllMocks();
   sesion.usuario = { id: 2, rol: "Jefe de Auditoría" };
+  vi.mocked(api.listarEvidenciasPlan).mockResolvedValue([]);
 });
 
 async function abrirBandeja(planes: PlanAccion[]) {
@@ -125,6 +128,80 @@ describe("lista de la bandeja", () => {
   });
 });
 
+describe("filtro por estado", () => {
+  it("cambiar de filtro cierra el plan abierto", async () => {
+    const usuario = await abrirBandeja([enRevision(), plan({ id: 8, titulo: "Otro plan" })]);
+    await usuario.click(screen.getByRole("tab", { name: /En Revisión/ }));
+    await usuario.click(await screen.findByRole("button", { name: /Corregir conciliaciones/ }));
+    expect(await screen.findByRole("button", { name: "Aprobar" })).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("tab", { name: /Pendiente/ }));
+
+    expect(screen.queryByRole("button", { name: "Aprobar" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("historial")).not.toBeInTheDocument();
+    expect(screen.getByText("Otro plan")).toBeInTheDocument();
+  });
+
+  it("el plan sigue abierto cuando su propio estado cambia al abrirlo", async () => {
+    vi.mocked(api.abrirRevisionPlan).mockResolvedValue(enRevision());
+    const usuario = await abrirBandeja([plan()]);
+
+    await usuario.click(screen.getByRole("button", { name: /Corregir conciliaciones/ }));
+
+    expect(await screen.findByRole("button", { name: "Aprobar" })).toBeInTheDocument();
+  });
+});
+
+describe("llegar desde una notificación", () => {
+  async function abrirConDestino(planes: PlanAccion[], planId = 7) {
+    vi.mocked(api.listarBandejaRevision).mockResolvedValue(planes);
+    render(<BandejaRevisionPlanes destino={{ planId, pestana: "revision", solicitud: 1 }} />);
+    await screen.findByRole("tablist");
+  }
+
+  it("un plan en revisión se abre en su filtro", async () => {
+    await abrirConDestino([enRevision()]);
+
+    expect(await screen.findByRole("button", { name: "Aprobar" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /En Revisión/ })).toHaveAttribute("aria-selected", "true");
+    expect(api.listarBandejaRevision).toHaveBeenCalledTimes(1);
+  });
+
+  it("un plan pendiente solo se resalta: abrirlo para revisar sigue siendo decisión del Jefe", async () => {
+    await abrirConDestino([plan()]);
+
+    const fila = (await screen.findByRole("button", { name: /Corregir conciliaciones/ })).closest("li");
+
+    expect(fila).toHaveAttribute("data-destacado", "true");
+    expect(api.abrirRevisionPlan).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Aprobar" })).not.toBeInTheDocument();
+  });
+
+  it("un plan aprobado se abre en su filtro", async () => {
+    await abrirConDestino([plan({ estado: "Aprobado", status: "Aprobado" })]);
+
+    await waitFor(() => expect(screen.getByRole("tab", { name: /Aprobado/ })).toHaveAttribute("aria-selected", "true"));
+    expect(await screen.findByTestId("historial")).toBeInTheDocument();
+  });
+
+  it("si el plan ya no está en la bandeja lo avisa", async () => {
+    await abrirConDestino([plan()], 99);
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("ya no está en la bandeja")));
+  });
+
+  it("cambiar de filtro quita el resaltado", async () => {
+    const usuario = userEvent.setup();
+    await abrirConDestino([plan(), enRevision({ id: 8, titulo: "Otro plan" })]);
+    await screen.findByRole("button", { name: /Corregir conciliaciones/ });
+
+    await usuario.click(screen.getByRole("tab", { name: /En Revisión/ }));
+    await usuario.click(screen.getByRole("tab", { name: /Pendiente/ }));
+
+    expect((await screen.findByRole("button", { name: /Corregir conciliaciones/ })).closest("li")).not.toHaveAttribute("data-destacado");
+  });
+});
+
 describe("abrir un plan (criterio 1)", () => {
   it("un revisor que abre un plan pendiente lo pasa a En Revisión una sola vez", async () => {
     vi.mocked(api.abrirRevisionPlan).mockResolvedValue(enRevision());
@@ -161,7 +238,7 @@ describe("abrir un plan (criterio 1)", () => {
 });
 
 describe("revisor impedido", () => {
-  const impedido = "No puedes revisar este plan porque eres su responsable o tienes pasos asignados.";
+  const impedido = "No puedes revisar este plan porque eres su responsable, lo creaste o tienes pasos asignados.";
 
   it("el responsable ve el plan en solo lectura y no lo cambia de estado", async () => {
     sesion.usuario = { id: 6, rol: "Jefe de Auditoría" };
@@ -176,8 +253,17 @@ describe("revisor impedido", () => {
   });
 
   it("quien tiene un paso asignado tampoco puede revisar", async () => {
-    sesion.usuario = { id: 6, rol: "Administrador" };
+    sesion.usuario = { id: 6, rol: "Jefe de Auditoría" };
     const usuario = await abrirBandeja([plan({ responsable: { id: 9, nombre: "Otro" } })]);
+
+    await usuario.click(screen.getByRole("button", { name: /Corregir conciliaciones/ }));
+
+    expect(await screen.findByText(impedido)).toBeInTheDocument();
+    expect(api.abrirRevisionPlan).not.toHaveBeenCalled();
+  });
+
+  it("quien creó el plan tampoco puede revisar", async () => {
+    const usuario = await abrirBandeja([plan({ creadoPorId: 2 })]);
 
     await usuario.click(screen.getByRole("button", { name: /Corregir conciliaciones/ }));
 
@@ -251,9 +337,68 @@ describe("rechazar (criterio 3)", () => {
     await usuario.type(await screen.findByLabelText("Motivo del rechazo"), "  Falta evidencia  ");
     await usuario.click(screen.getByRole("button", { name: "Confirmar rechazo" }));
 
-    await waitFor(() => expect(api.rechazarPlanAccion).toHaveBeenCalledWith(7, "Falta evidencia"));
+    await waitFor(() => expect(api.rechazarPlanAccion).toHaveBeenCalledWith(7, "Falta evidencia", []));
     await waitFor(() => expect(screen.queryByLabelText("Motivo del rechazo")).not.toBeInTheDocument());
     expect(toast.success).toHaveBeenCalled();
+  });
+
+  it("en el cierre avisa que los pasos de los archivos señalados se reabren", async () => {
+    const usuario = await abrirRechazo();
+    expect(await screen.findByText(/Sus pasos se reabren/)).toBeInTheDocument();
+    await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
+  });
+
+  it("en el cierre lista los archivos del plan y envía los señalados", async () => {
+    vi.mocked(api.listarEvidenciasPlan).mockResolvedValue([
+      { id: "EV-1", pasoId: 11, nombre: "conciliacion.pdf", hash: "h1" },
+      { id: "EV-2", pasoId: 11, nombre: "otro.pdf", hash: "h2" },
+    ]);
+    vi.mocked(api.rechazarPlanAccion).mockResolvedValue(plan({ estado: "Rechazado", status: "Rechazado" }));
+    const usuario = await abrirRechazo();
+
+    await usuario.click(await screen.findByRole("checkbox", { name: /conciliacion\.pdf/ }));
+    await usuario.type(screen.getByLabelText("Motivo del rechazo"), "Falta marzo");
+    await usuario.click(screen.getByRole("button", { name: "Confirmar rechazo" }));
+
+    await waitFor(() => expect(api.rechazarPlanAccion).toHaveBeenCalledWith(7, "Falta marzo", ["EV-1"]));
+  });
+
+  it("distingue archivos con el mismo nombre por su paso", async () => {
+    const pasoBase = plan().pasos[0]!;
+    vi.mocked(api.listarEvidenciasPlan).mockResolvedValue([
+      { id: "EV-1", pasoId: 11, nombre: "evidencia.pdf", hash: "h1" },
+      { id: "EV-2", pasoId: 12, nombre: "evidencia.pdf", hash: "h2" },
+    ]);
+    const usuario = await abrirDetalleEnRevision({
+      pasos: [pasoBase, { ...pasoBase, id: 12, descripcion: "Publicar calendario" }],
+    });
+
+    await usuario.click(screen.getByRole("button", { name: "Rechazar" }));
+
+    expect(await screen.findByRole("checkbox", { name: "evidencia.pdf (Revisar conciliaciones)" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "evidencia.pdf (Publicar calendario)" })).toBeInTheDocument();
+  });
+
+  it("los archivos señalados no se conservan al cancelar y volver a abrir", async () => {
+    vi.mocked(api.listarEvidenciasPlan).mockResolvedValue([{ id: "EV-1", pasoId: 11, nombre: "conciliacion.pdf", hash: "h1" }]);
+    const usuario = await abrirRechazo();
+
+    await usuario.click(await screen.findByRole("checkbox", { name: /conciliacion\.pdf/ }));
+    await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
+    await usuario.click(screen.getByRole("button", { name: "Rechazar" }));
+
+    expect(await screen.findByRole("checkbox", { name: /conciliacion\.pdf/ })).not.toBeChecked();
+  });
+
+  it("si no se pueden cargar los archivos, igual se puede rechazar", async () => {
+    vi.mocked(api.listarEvidenciasPlan).mockRejectedValue(new Error("Sin conexión"));
+    vi.mocked(api.rechazarPlanAccion).mockResolvedValue(plan({ estado: "Rechazado", status: "Rechazado" }));
+    const usuario = await abrirRechazo();
+
+    await usuario.type(await screen.findByLabelText("Motivo del rechazo"), "Falta marzo");
+    await usuario.click(screen.getByRole("button", { name: "Confirmar rechazo" }));
+
+    await waitFor(() => expect(api.rechazarPlanAccion).toHaveBeenCalledWith(7, "Falta marzo", []));
   });
 
   it("no ofrece aprobar ni rechazar un plan ya rechazado", async () => {
@@ -265,5 +410,44 @@ describe("rechazar (criterio 3)", () => {
     expect(api.abrirRevisionPlan).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Aprobar" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Rechazar" })).not.toBeInTheDocument();
+  });
+});
+
+describe("etapa de la revisión", () => {
+  const definicion = (cambios: Partial<PlanAccion> = {}) => enRevision({ etapa: "definicion", ...cambios });
+
+  it("muestra si el plan se valida o si se revisa su evidencia", async () => {
+    await abrirBandeja([
+      plan({ id: 1, titulo: "Plan por validar", etapa: "definicion" }),
+      plan({ id: 2, titulo: "Plan por cerrar" }),
+    ]);
+
+    expect(screen.getByText("Validación del plan")).toBeInTheDocument();
+    expect(screen.getByText("Cierre y evidencia")).toBeInTheDocument();
+  });
+
+  it("al validar la definición explica que el auditado empieza a trabajar", async () => {
+    const usuario = await abrirDetalleEnRevision({ etapa: "definicion" });
+
+    await usuario.click(screen.getByRole("button", { name: "Aprobar" }));
+
+    expect(await screen.findByRole("heading", { name: "Validar plan de acción" })).toBeInTheDocument();
+    expect(screen.getByText(/el auditado podrá empezar a trabajar/)).toBeInTheDocument();
+  });
+
+  it("al rechazar la definición no pide archivos ni los consulta", async () => {
+    vi.mocked(api.rechazarPlanAccion).mockResolvedValue(definicion({ estado: "Rechazado", status: "Rechazado" }));
+    const usuario = await abrirDetalleEnRevision({ etapa: "definicion" });
+
+    await usuario.click(screen.getByRole("button", { name: "Rechazar" }));
+    await usuario.type(await screen.findByLabelText("Motivo del rechazo"), "Faltan pasos");
+
+    expect(api.listarEvidenciasPlan).not.toHaveBeenCalled();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.getByText(/El auditor verá este motivo/)).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Confirmar rechazo" }));
+
+    await waitFor(() => expect(api.rechazarPlanAccion).toHaveBeenCalledWith(7, "Faltan pasos", []));
   });
 });

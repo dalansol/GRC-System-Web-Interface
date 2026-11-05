@@ -14,8 +14,9 @@ const formatearFecha = (iso: string) =>
   new Date(iso).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" });
 
 /** Campana de la barra superior. Un fallo al consultar no interrumpe la aplicación: se reintenta en la siguiente consulta. */
-export default function CampanaNotificaciones() {
+export default function CampanaNotificaciones({ onAbrir }: { onAbrir?: (aviso: Notificacion) => void }) {
   const [avisos, setAvisos] = useState<Notificacion[]>([]);
+  const [abierta, setAbierta] = useState(false);
 
   useEffect(() => {
     let vigente = true;
@@ -46,6 +47,12 @@ export default function CampanaNotificaciones() {
     });
   };
 
+  const abrirAviso = (aviso: Notificacion) => {
+    marcarLeida(aviso);
+    setAbierta(false);
+    onAbrir?.(aviso);
+  };
+
   const marcarTodas = () => {
     const anteriores = avisos;
     setAvisos((previos) => previos.map((item) => ({ ...item, leida: true })));
@@ -53,7 +60,7 @@ export default function CampanaNotificaciones() {
   };
 
   return (
-    <Popover>
+    <Popover open={abierta} onOpenChange={setAbierta}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -83,7 +90,7 @@ export default function CampanaNotificaciones() {
               <li key={aviso.id}>
                 <button
                   type="button"
-                  onClick={() => marcarLeida(aviso)}
+                  onClick={() => abrirAviso(aviso)}
                   className={`w-full px-3 py-2 text-left text-xs hover:bg-muted/40 ${aviso.leida ? "text-muted-foreground" : "bg-primary/5 font-medium text-foreground"}`}
                 >
                   <span className="block break-words">{aviso.mensaje}</span>

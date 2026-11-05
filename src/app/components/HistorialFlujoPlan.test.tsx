@@ -75,6 +75,36 @@ describe("historial del flujo", () => {
     expect(screen.getByText("Integridad verificada")).toBeInTheDocument();
   });
 
+  it("nombra la validación del plan y no le aplica la revisión de integridad del cierre", async () => {
+    vi.mocked(api.obtenerFlujoPlan).mockResolvedValue({
+      eventos: [evento({ etapa: "definicion", accion: "aprobacion", estadoNuevo: "Asignado", firmaHash: HASH })],
+      firmaIntegra: true,
+    });
+
+    render(<HistorialFlujoPlan planId={7} recarga={0} />);
+
+    expect(await screen.findByText("Plan validado")).toBeInTheDocument();
+    expect(screen.queryByText("Integridad verificada")).not.toBeInTheDocument();
+  });
+
+  it("muestra los archivos señalados en un rechazo", async () => {
+    vi.mocked(api.obtenerFlujoPlan).mockResolvedValue({
+      eventos: [
+        evento({
+          accion: "rechazo",
+          estadoNuevo: "Rechazado",
+          motivo: "Falta marzo",
+          evidenciasObservadas: [{ evidenciaId: "EV-1", pasoId: 1, nombre: "conciliacion.pdf" }],
+        }),
+      ],
+      firmaIntegra: null,
+    });
+
+    render(<HistorialFlujoPlan planId={7} recarga={0} />);
+
+    expect(await screen.findByText(/conciliacion\.pdf/)).toBeInTheDocument();
+  });
+
   it("avisa si el contenido cambió después de la firma", async () => {
     vi.mocked(api.obtenerFlujoPlan).mockResolvedValue({
       eventos: [evento({ accion: "aprobacion", estadoNuevo: "Aprobado", firmaHash: HASH })],

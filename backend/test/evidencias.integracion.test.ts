@@ -61,6 +61,7 @@ const SCRIPTS = [
   "041_estado_revision_planes.sql",
   "042_procesos_en_asignaciones.sql",
   "044_flujo_aprobacion_planes.sql",
+  "045_etapas_planes_accion.sql",
 ];
 
 const ADMIN = "s.ramirez@expedite.com";
@@ -279,6 +280,18 @@ describe.skipIf(!env.SQL_TEST_SERVER)("evidencias sobre PostgreSQL", () => {
       expect(res.status).toBe(409);
       expect(res.body.error.codigo).toBe("PLAN_BLOQUEADO");
       expect(await consultar(EMPLEADO_AUDITADO, paso, "action_plan_step")).toEqual([id]);
+    });
+
+    it.each(["Borrador", "Rechazado", "Asignado"])("con el plan %s aún en definición no se sube evidencia", async (estado) => {
+      const { plan, paso } = await pasoNuevo();
+      await pool.query("UPDATE action_plans SET status = $1, review_stage = 'definicion' WHERE id = $2", [estado, plan]);
+      const archivos = guardados.size;
+
+      const res = await subir(EMPLEADO_AUDITADO, paso, "action_plan_step");
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.codigo).toBe("PLAN_BLOQUEADO");
+      expect(guardados.size).toBe(archivos);
     });
 
     it("con el plan Rechazado se sube y se elimina evidencia", async () => {

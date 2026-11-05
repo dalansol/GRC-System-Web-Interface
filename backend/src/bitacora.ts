@@ -13,6 +13,8 @@ export interface EventoBitacora {
     | "plan_accion.apertura_revision"
     | "plan_accion.aprobacion"
     | "plan_accion.rechazo"
+    | "plan_accion.solicitud_prorroga"
+    | "plan_accion.decision_prorroga"
     | "conflicto.declaracion"
     | "conflicto.aviso_jefatura"
     | "asistente.resumen"

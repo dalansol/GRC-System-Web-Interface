@@ -15,6 +15,7 @@ import {
 import { CONTROLS } from "../data/mock_data";
 
 import FormularioPlanAccion from "./FormularioPlanAccion";
+import { esAuditado, puedeGestionarPlanes } from "../api/planesAccion";
 import { useSesion } from "../auth/SesionContext";
 import { useHallazgosViewModel, HallazgoViewModel } from "../domain/hallazgos/useHallazgosViewModel";
 
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export default function VistaHallazgo({ onSelectFinding }: Props) {
+  const { usuario } = useSesion();
   const {
     hallazgos: rawHallazgos,
     loading,
@@ -41,9 +43,7 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
     setSevFilter,
     setStatusFilter,
     fetchHallazgos,
-  } = useHallazgosViewModel();
-
-  const { usuario } = useSesion();
+  } = useHallazgosViewModel({ consultarPlanes: !esAuditado(usuario?.rol) });
 
   // State for selected finding IDs via checkboxes
   const [selectedFindingIds, setSelectedFindingIds] = useState<string[]>([]);
@@ -53,8 +53,9 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
     usuario?.rol && ["Administrador", "Jefe de Auditoría", "Auditor Senior", "Auditor"].includes(usuario.rol)
   );
 
-  // Verificación específica para Jefe Auditado (control de checkboxes y creación de planes)
-  const esJefeAuditado = usuario?.rol === "Jefe Auditado";
+  // El auditor define los planes (UF-08): solo él ve las casillas y el botón de crear.
+  const puedeCrearPlan = puedeGestionarPlanes(usuario?.rol);
+  const usuarioAuditado = esAuditado(usuario?.rol);
 
   // Filtrado de seguridad: si no es equipo de auditoría, solo ve hallazgos de su unidad o asignados
   const hallazgos = rawHallazgos.filter((item) => {
@@ -108,7 +109,7 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
-          {esJefeAuditado && (
+          {puedeCrearPlan && (
             <button
               type="button"
               disabled={selectedFindingIds.length === 0}
@@ -171,7 +172,7 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
           <table className="w-full text-left text-sm">
             <thead className="border-b border-border bg-muted/50 text-xs text-muted-foreground">
               <tr>
-                {esJefeAuditado && (
+                {puedeCrearPlan && (
                   <th className="px-4 py-3 w-10 text-center">
                     <input
                       type="checkbox"
@@ -199,7 +200,7 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
                       className={`transition-colors cursor-pointer group ${isExpanded ? "bg-secondary/40" : "hover:bg-muted/30"}`}
                       onClick={() => setExpandedFinding(isExpanded ? null : item.id)}
                     >
-                      {esJefeAuditado && (
+                      {puedeCrearPlan && (
                         <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <input
                             type="checkbox"
@@ -260,10 +261,10 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
                     </tr>
                     {isExpanded && (
                       <tr>
-                        <td colSpan={esJefeAuditado ? 6 : 5} className="px-4 pb-4 bg-secondary/20 border-b border-border">
+                        <td colSpan={puedeCrearPlan ? 6 : 5} className="px-4 pb-4 bg-secondary/20 border-b border-border">
                           <div className="pt-3 space-y-3" onClick={(e) => e.stopPropagation()}>
                             {/* Visualización de Planes de Acción relacionados */}
-                            {(() => {
+                            {!usuarioAuditado && (() => {
                               const planes = planesPorHallazgo[item.id] ?? [];
                               const hoy = new Date().toISOString().slice(0, 10);
                               if (planes.length > 0) {
@@ -294,7 +295,7 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
                                         </div>
                                       </div>
                                     ))}
-                                    {esJefeAuditado && (
+                                    {puedeCrearPlan && (
                                       <button
                                         type="button"
                                         onClick={() => setHallazgoParaPlan(item)}
@@ -327,7 +328,7 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
         )}
       </div>
 
-      {hallazgoParaPlan && esJefeAuditado && (
+      {hallazgoParaPlan && puedeCrearPlan && (
         <FormularioPlanAccion
           hallazgosSeleccionados={hallazgos.filter(h => selectedFindingIds.includes(h.id))}
           onGuardado={handlePlanCreado}

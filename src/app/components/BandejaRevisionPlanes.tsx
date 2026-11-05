@@ -6,16 +6,21 @@ import { Card } from "./SharedComponents";
 import EvidenciasSection from "./EvidenciasSection";
 import HistorialFlujoPlan from "./HistorialFlujoPlan";
 import InsigniaEstadoPlan from "./InsigniaEstadoPlan";
+import { desplazarAElemento } from "./desplazarAElemento";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { useSesion } from "../auth/SesionContext";
 import {
   abrirRevisionPlan,
   aprobarPlanAccion,
+  ETIQUETA_ETAPA,
   listarBandejaRevision,
+  listarEvidenciasPlan,
   puedeRevisarPlan,
   rechazarPlanAccion,
   type EstadoPlanAccion,
+  type EvidenciaPlan,
   type PlanAccion,
+  type SolicitudDestinoPlan,
 } from "../api/planesAccion";
 
 const FILTROS: EstadoPlanAccion[] = ["Pendiente", "En Revisión", "Aprobado", "Rechazado"];
@@ -23,33 +28,65 @@ const FILTROS: EstadoPlanAccion[] = ["Pendiente", "En Revisión", "Aprobado", "R
 const mensajeDe = (error: unknown, respaldo: string) => (error instanceof Error ? error.message : respaldo);
 
 /** Bandeja de revisión y aprobación de planes de acción (SF-12). */
-export default function BandejaRevisionPlanes() {
+export default function BandejaRevisionPlanes({ destino }: { destino?: SolicitudDestinoPlan | null }) {
   const { usuario } = useSesion();
   const [planes, setPlanes] = useState<PlanAccion[]>([]);
   const [cargando, setCargando] = useState(true);
   const [filtro, setFiltro] = useState<EstadoPlanAccion>("Pendiente");
   const [seleccionadoId, setSeleccionadoId] = useState<number | null>(null);
+  const [destacadoId, setDestacadoId] = useState<number | null>(null);
   const [recargaFlujo, setRecargaFlujo] = useState(0);
   const [enProceso, setEnProceso] = useState(false);
   const [confirmandoAprobacion, setConfirmandoAprobacion] = useState(false);
   const [rechazando, setRechazando] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [errorMotivo, setErrorMotivo] = useState(false);
+  const [evidenciasPlan, setEvidenciasPlan] = useState<EvidenciaPlan[]>([]);
+  const [observadas, setObservadas] = useState<string[]>([]);
 
   const cargar = async () => {
     setCargando(true);
     try {
-      setPlanes(await listarBandejaRevision());
+      const lista = await listarBandejaRevision();
+      setPlanes(lista);
+      return lista;
     } catch (error) {
       toast.error(mensajeDe(error, "No se pudo cargar la bandeja de revisión."));
+      return null;
     } finally {
       setCargando(false);
     }
   };
 
+  // Desde una notificación se llega al plan. Uno pendiente solo se resalta: abrirlo lo pasa a En Revisión,
+  // y eso le toca decidirlo al Jefe de Auditoría.
   useEffect(() => {
-    void cargar();
-  }, []);
+    void cargar().then((lista) => {
+      if (!destino || !lista) return;
+      const plan = lista.find((item) => item.id === destino.planId);
+      if (!plan) {
+        toast.error("Ese plan ya no está en la bandeja de revisión.");
+        return;
+      }
+      setFiltro(plan.estado);
+      if (plan.estado === "Pendiente") {
+        setSeleccionadoId(null);
+        setDestacadoId(plan.id);
+      } else {
+        setDestacadoId(null);
+        setSeleccionadoId(plan.id);
+      }
+      desplazarAElemento(`plan-revision-${plan.id}`);
+    });
+  }, [destino?.solicitud]);
+
+  // El detalle pertenece al filtro en el que se abrió: al cambiar de filtro se cierra.
+  const cambiarFiltro = (estado: EstadoPlanAccion) => {
+    if (estado === filtro) return;
+    setFiltro(estado);
+    setSeleccionadoId(null);
+    setDestacadoId(null);
+  };
 
   const reemplazarPlan = (actualizado: PlanAccion) => {
     setPlanes((previos) => previos.map((plan) => (plan.id === actualizado.id ? actualizado : plan)));
@@ -59,6 +96,7 @@ export default function BandejaRevisionPlanes() {
   // Abrir un plan pendiente lo pasa a En Revisión. Va en el clic y no en un efecto para que se llame una sola vez.
   const abrirPlan = async (plan: PlanAccion) => {
     setSeleccionadoId(plan.id);
+    setDestacadoId(null);
     if (plan.estado !== "Pendiente" || !puedeRevisarPlan(plan, usuario)) return;
     try {
       reemplazarPlan(await abrirRevisionPlan(plan.id));
@@ -72,7 +110,7 @@ export default function BandejaRevisionPlanes() {
     setEnProceso(true);
     try {
       reemplazarPlan(await aprobarPlanAccion(plan.id));
-      toast.success("Plan de acción aprobado y firmado.");
+      toast.success(plan.etapa === "definicion" ? "Plan de acción validado y firmado." : "Plan de acción aprobado y firmado.");
     } catch (error) {
       toast.error(mensajeDe(error, "No se pudo aprobar el plan de acción."));
       void cargar();
@@ -90,7 +128,7 @@ export default function BandejaRevisionPlanes() {
     }
     setEnProceso(true);
     try {
-      reemplazarPlan(await rechazarPlanAccion(plan.id, texto));
+      reemplazarPlan(await rechazarPlanAccion(plan.id, texto, observadas));
       toast.success("Plan de acción rechazado.");
       cerrarRechazo();
     } catch (error) {
@@ -106,6 +144,19 @@ export default function BandejaRevisionPlanes() {
     setRechazando(false);
     setMotivo("");
     setErrorMotivo(false);
+    setObservadas([]);
+  };
+
+  // Solo el cierre revisa archivos. Si no se pueden leer, aún se puede rechazar con el motivo.
+  const abrirRechazo = async (plan: PlanAccion) => {
+    setEvidenciasPlan([]);
+    setRechazando(true);
+    if (plan.etapa !== "cierre") return;
+    try {
+      setEvidenciasPlan(await listarEvidenciasPlan(plan.id));
+    } catch {
+      setEvidenciasPlan([]);
+    }
   };
 
   const visibles = planes.filter((plan) => plan.estado === filtro);
@@ -131,7 +182,7 @@ export default function BandejaRevisionPlanes() {
               type="button"
               role="tab"
               aria-selected={filtro === estado}
-              onClick={() => setFiltro(estado)}
+              onClick={() => cambiarFiltro(estado)}
               className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors ${
                 filtro === estado
                   ? "border-primary bg-primary text-primary-foreground"
@@ -159,7 +210,12 @@ export default function BandejaRevisionPlanes() {
         ) : (
           <ul className="divide-y divide-border">
             {visibles.map((plan) => (
-              <li key={plan.id}>
+              <li
+                key={plan.id}
+                id={`plan-revision-${plan.id}`}
+                data-destacado={plan.id === destacadoId ? "true" : undefined}
+                className={plan.id === destacadoId ? "ring-2 ring-inset ring-primary" : undefined}
+              >
                 <button
                   type="button"
                   onClick={() => void abrirPlan(plan)}
@@ -175,6 +231,7 @@ export default function BandejaRevisionPlanes() {
                       {plan.responsable.nombre} · Fecha límite {plan.fechaCompromiso}
                     </span>
                   </span>
+                  <span className="text-xs text-muted-foreground">{ETIQUETA_ETAPA[plan.etapa]}</span>
                   <InsigniaEstadoPlan estado={plan.estado} />
                 </button>
               </li>
@@ -193,6 +250,7 @@ export default function BandejaRevisionPlanes() {
                 <p className="text-xs text-muted-foreground">
                   Responsable: {seleccionado.responsable.nombre} · Fecha límite: {seleccionado.fechaCompromiso}
                 </p>
+                <p className="text-xs font-medium text-foreground">{ETIQUETA_ETAPA[seleccionado.etapa]}</p>
               </div>
               <InsigniaEstadoPlan estado={seleccionado.estado} />
             </div>
@@ -237,7 +295,7 @@ export default function BandejaRevisionPlanes() {
 
             {!puedeRevisar && (
               <p className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-                No puedes revisar este plan porque eres su responsable o tienes pasos asignados.
+                No puedes revisar este plan porque eres su responsable, lo creaste o tienes pasos asignados.
               </p>
             )}
 
@@ -245,7 +303,7 @@ export default function BandejaRevisionPlanes() {
               <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
                 <button
                   type="button"
-                  onClick={() => setRechazando(true)}
+                  onClick={() => void abrirRechazo(seleccionado)}
                   disabled={enProceso}
                   className="inline-flex items-center gap-2 rounded-md border border-destructive px-4 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 disabled:opacity-50"
                 >
@@ -267,10 +325,12 @@ export default function BandejaRevisionPlanes() {
             <Dialog open={confirmandoAprobacion} onOpenChange={(abierto) => !enProceso && setConfirmandoAprobacion(abierto)}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Aprobar plan de acción</DialogTitle>
+                  <DialogTitle>{seleccionado.etapa === "definicion" ? "Validar plan de acción" : "Aprobar plan de acción"}</DialogTitle>
                   <DialogDescription>
-                    Tu nombre, tu rol y la fecha quedarán registrados como firma electrónica de {seleccionado.publicId}, y
-                    el plan ya no podrá modificarse.
+                    Tu nombre, tu rol y la fecha quedarán registrados como firma electrónica de {seleccionado.publicId}.{" "}
+                    {seleccionado.etapa === "definicion"
+                      ? "El plan ya no podrá cambiar de contenido y el auditado podrá empezar a trabajar."
+                      : "El plan ya no podrá modificarse."}
                   </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
@@ -299,7 +359,9 @@ export default function BandejaRevisionPlanes() {
                 <DialogHeader>
                   <DialogTitle>Rechazar plan de acción</DialogTitle>
                   <DialogDescription>
-                    El responsable verá este motivo y podrá corregir el plan {seleccionado.publicId} para reenviarlo.
+                    {seleccionado.etapa === "definicion"
+                      ? `El auditor verá este motivo y podrá corregir el plan ${seleccionado.publicId} para reenviarlo.`
+                      : `El auditado y el auditor verán este motivo y los archivos señalados de ${seleccionado.publicId}. Sus pasos se reabren para que el auditado los corrija.`}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-1">
@@ -325,6 +387,27 @@ export default function BandejaRevisionPlanes() {
                     </p>
                   )}
                 </div>
+                {seleccionado.etapa === "cierre" && evidenciasPlan.length > 0 && (
+                  <fieldset className="space-y-1">
+                    <legend className="text-xs font-semibold text-muted-foreground">Archivos que hay que corregir (opcional)</legend>
+                    {evidenciasPlan.map((evidencia) => (
+                      <label key={evidencia.id} className="flex items-center gap-2 text-xs text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={observadas.includes(evidencia.id)}
+                          onChange={(evento) =>
+                            setObservadas((previas) =>
+                              evento.target.checked ? [...previas, evidencia.id] : previas.filter((id) => id !== evidencia.id),
+                            )
+                          }
+                        />
+                        <span className="break-all">
+                          {evidencia.nombre} ({seleccionado.pasos.find((paso) => paso.id === evidencia.pasoId)?.descripcion ?? "Paso"})
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
                 <DialogFooter>
                   <button
                     type="button"

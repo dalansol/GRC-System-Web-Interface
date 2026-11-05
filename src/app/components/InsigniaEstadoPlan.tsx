@@ -1,4 +1,5 @@
 const ESTILO_ESTADO: Record<string, string> = {
+  Borrador: "bg-slate-50 text-slate-600 border border-slate-200",
   Asignado: "bg-amber-50 text-amber-700 border border-amber-200",
   "En Progreso": "bg-blue-50 text-blue-700 border border-blue-200",
   "En Proceso": "bg-blue-50 text-blue-700 border border-blue-200",
@@ -12,7 +13,7 @@ const ESTILO_ESTADO: Record<string, string> = {
 
 const ESTILO_POR_OMISION = "bg-slate-50 text-slate-600 border border-slate-200";
 
-/** Estado de un plan de acción, igual en "Mis planes" y en la bandeja de revisión. */
+/** Estado de un plan de acción, igual en todas las vistas de planes. */
 export default function InsigniaEstadoPlan({ estado }: { estado: string }) {
   return (
     <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium truncate max-w-full ${ESTILO_ESTADO[estado] ?? ESTILO_POR_OMISION}`}>

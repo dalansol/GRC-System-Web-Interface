@@ -31,17 +31,57 @@ entera. Otras tablas del modelo ya referencian `users.id`.
 | `roles` | `id` PK, `name` único |
 | `permissions` | `id` PK, `name` único |
 | `role_permissions` | `role_id` FK, `permission_id` FK, PK compuesta |
-| `users` | `id` PK, `name`, `email` único, `role_id` FK, `status` (`active` / `inactive`), `entra_oid` único nulo, `last_login` nulo, `created_at` |
+| `users` | `id` PK, `name`, `email` único, `role_id` FK, `status` (`active` / `inactive`), `entra_oid` único nulo, `last_login` nulo, `created_at`, `business_unit_id` FK nulo (034) |
 
 Cambio respecto al modelo en Miro: `users.role` (texto) se sustituye por
 `users.role_id` (llave foránea a `roles`). La relación rol–permiso es de muchos a
 muchos, por eso existe `role_permissions`.
 
-Datos iniciales: los 6 roles y 8 permisos de `src/app/data/mock_data.tsx`.
+Datos iniciales: 8 roles y 10 permisos, en `backend/sql/002_seed.sql` y `backend/src/repos/semilla.ts`, que deben coincidir.
 
 Scripts en `backend/sql/`: `001_schema.sql`, `002_seed.sql` y
 `003_primer_administrador.sql` (crea al primer Administrador; hay que editar su nombre
 y correo antes de ejecutarlo).
+
+## Roles y acceso actual
+
+Actualizado el 2026-11-04. Las rutas se protegen por el nombre del rol (`autorizar`), no por los
+permisos de la tabla, que hoy solo se muestran y se devuelven en `/api/me`.
+
+| Rol | Permisos |
+|---|---|
+| Administrador | Todos |
+| Jefe de Auditoría | Ver Dashboard, Editar Registros, Aprobar Riesgos, Exportar Datos, Ver Auditorías, Crear Auditorías |
+| Auditor Senior | Ver Dashboard, Editar Registros, Exportar Datos, Ver Auditorías |
+| Auditor, Consultor, Solo Lectura | Ver Dashboard, Ver Auditorías |
+| Jefe Auditado, Empleado Auditado | Ver Hallazgos, Ver Plan de Accion |
+
+Los auditados solo ven Dashboard, Hallazgos, Planes de Acción y Ajustes en el menú. En Planes de Acción solo ven lo que tienen asignado, en una vista reducida, y solo cuando el plan ya se validó.
+
+| Recurso | Quién puede |
+|---|---|
+| Ver hallazgos | Equipo de auditoría (Administrador, Jefe de Auditoría, Auditor Senior, Auditor): todos. Los demás roles: los propios y los de su unidad |
+| Editar o eliminar hallazgos | Administrador y Jefe de Auditoría: todos. Auditor Senior y Auditor: los que registraron. Los demás roles: los propios y los de su unidad |
+| Ver evidencia de un control | El Auditor que la subió; el Auditor Senior que asignó el control; el Jefe de Auditoría que creó el plan |
+| Ver evidencia de un paso de plan de acción | Responsable del plan, asignado al paso y equipo de auditoría |
+| Ver evidencia de un hallazgo | Quien la subió y equipo de auditoría (en pantalla, solo lectura para el equipo de auditoría) |
+| Subir evidencia | Control: el Auditor asignado. Paso: el asignado, si el plan ya se validó y no está en `Pendiente`, `En Revisión` o `Aprobado`. Hallazgo: cualquier usuario en sesión por la API, sin opción en pantalla (TBD) |
+| Eliminar evidencia | Control: el auditor asignado. Paso: quien la subió, si el plan ya se validó y no está en `Pendiente`, `En Revisión` o `Aprobado`. Hallazgo: quien la subió |
+| Consultar la lista completa de planes de acción | Todos, salvo los auditados |
+| Consultar sus planes de acción | Un auditado: plan validado, en vista reducida. El responsable ve todos los pasos; un asignado, solo los suyos |
+| Crear plan de acción | Auditor y Auditor Senior. El responsable y los asignados deben ser auditados |
+| Editar plan de acción | Auditor y Auditor Senior, salvo su responsable. En definición, todo; ya validado, solo el responsable y el estado manual |
+| Enviar plan de acción a revisión | Auditor y Auditor Senior que no participen en el plan |
+| Completar un paso de plan de acción | Su asignado, si el plan ya se validó y no está en revisión ni aprobado |
+| Revisar, aprobar o rechazar plan de acción | Jefe de Auditoría, salvo que sea su responsable, lo haya creado o tenga un paso asignado |
+| Solicitar prórroga de un plan de acción | Su responsable |
+| Decidir una prórroga | Jefe de Auditoría, con los mismos impedimentos de la revisión |
+| Consultar el historial del flujo de un plan | Equipo de auditoría |
+| Consultar notificaciones | Cada usuario, solo las suyas |
+
+La unidad del usuario sale de `users.business_unit_id`. Si está vacía se trata como unidad 10
+(`repos/sql.ts`), y la aplicación todavía no permite asignarla. `GET /api/usuarios` y `/api/me`
+devuelven `business_unit_id`.
 
 ## Backend (`backend/src/`)
 
@@ -155,3 +195,7 @@ src/app/components/UsuariosRolesView.tsx   vista (sale de App.tsx)
 ## Pendiente (TBD)
 
 - Dominio corporativo real. En desarrollo se usa `expedite.com`.
+- Que FEMSA confirme los roles de auditado y las reglas de la tabla de acceso.
+- Asignar la unidad de negocio desde la aplicación y quitar el valor fijo de la unidad 10.
+- Que FEMSA confirme las reglas de los planes de acción, tomadas del SRS (detalle en `aprobacion-planes-accion.md`).
+- Rol definitivo para subir evidencia a un hallazgo.

@@ -24,7 +24,9 @@ import { pedir } from "../api/cliente";
 import { listarHallazgos, type HallazgoApi } from "../api/hallazgos";
 import FormularioPlanAccion from "./FormularioPlanAccion";
 import { 
-  planBloqueado,
+  esAuditado,
+  puedeEditarPlan,
+  puedeGestionarPlanes,
   planFinalizado,
   ROLES_EDICION_PLAN_ACCION, 
   type PlanAccion 
@@ -63,19 +65,13 @@ export default function VistaHallazgoDetallado({
 
   const currentUserId = usuario?.id;
 
-  // Verificación específica para Jefe Auditado (control de creación de planes)
-  const esJefeAuditado = usuario?.rol === "Jefe Auditado";
+  // El auditor define los planes (UF-08). El auditado ve los suyos en Planes de Acción, sin este detalle (SF-16).
+  const puedeCrearPlan = puedeGestionarPlanes(usuario?.rol);
+  const usuarioAuditado = esAuditado(usuario?.rol);
 
   // La evidencia del hallazgo es de solo lectura y la consulta el equipo de auditoría.
   const esEquipoAuditoria = Boolean(usuario && ROLES_EDICION_PLAN_ACCION.includes(usuario.rol));
 
-  const puedeEditarPlan = (plan: PlanAccion) =>
-    Boolean(
-      usuario &&
-        ROLES_EDICION_PLAN_ACCION.includes(usuario.rol) &&
-        plan.responsable?.id !== usuario.id &&
-        !planBloqueado(plan)
-    );
 
   const cargarDetalle = async (active = true) => {
     let hallazgoData: HallazgoApi | null = null;
@@ -126,6 +122,7 @@ export default function VistaHallazgoDetallado({
               fechaCompromiso: raw.fechaCompromiso || raw.due_date || "",
               estado,
               status: estado,
+              etapa: raw.etapa || raw.review_stage || "cierre",
               pasos: raw.pasos || raw.steps || [],
               creadoEn: raw.creadoEn || raw.created_at || new Date().toISOString(),
             };
@@ -286,13 +283,14 @@ export default function VistaHallazgoDetallado({
       )}
 
       {/* Plan de Acción Correctivo */}
+      {!usuarioAuditado && (
       <Card className="p-6">
         <div className="mb-4 flex items-center justify-between border-b border-border pb-3">
           <div className="flex items-center gap-2">
             <ShieldAlert size={18} className="text-primary" />
             <h2 className="text-base font-bold text-foreground">Plan de Acción Correctivo</h2>
           </div>
-          {esJefeAuditado && hallazgo.status !== "Cerrado" && (
+          {puedeCrearPlan && hallazgo.status !== "Cerrado" && (
             <button
               type="button"
               onClick={() => {
@@ -325,7 +323,7 @@ export default function VistaHallazgoDetallado({
                     >
                       {plan.estado}
                     </span>
-                    {puedeEditarPlan(plan) && (
+                    {puedeEditarPlan(plan, usuario) && (
                       <button
                         type="button"
                         onClick={() => {
@@ -386,7 +384,7 @@ export default function VistaHallazgoDetallado({
                   <div className="space-y-2.5 pl-2 max-w-full">
                     {plan.pasos && plan.pasos.length > 0 ? (
                       plan.pasos.map((paso: any) => {
-                        const esAsignadoActual = paso.usuarioAsignado?.id === currentUserId || esJefeAuditado;
+                        const esAsignadoActual = paso.usuarioAsignado?.id === currentUserId;
                         const pasoCompletado = paso.estado === "Completado" || paso.completado;
                         const isSplitActive = splitStepKey?.planId === plan.id && splitStepKey?.stepId === paso.id;
 
@@ -502,6 +500,7 @@ export default function VistaHallazgoDetallado({
           </div>
         )}
       </Card>
+      )}
 
       {/* Modal Integrado */}
       {showPlanModal && esJefeAuditado && (

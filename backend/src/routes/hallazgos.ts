@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { poolPromise } from "../db.js";
+import { esAuditado } from "../domain/flujoPlanAccion.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import { ROLES_EDICION } from "./planesAccion.js";
 
@@ -279,6 +280,13 @@ router.get("/hallazgos/:id", async (req: Request, res: Response) => {
 router.get("/hallazgos/:id/planes-accion", async (req: Request, res: Response) => {
   const { id } = req.params;
 
+  // El auditado ve sus planes en su propia vista, sin causa raíz ni detalle de otros pasos (SF-16).
+  if (esAuditado(usuarioEnSesion(res).rol)) {
+    return res.status(403).json({
+      error: { codigo: "ROL_NO_AUTORIZADO", mensaje: "No tienes acceso a esta información." },
+    });
+  }
+
   try {
     const pool = await poolPromise;
     const usuario = usuarioEnSesion(res);
@@ -292,6 +300,7 @@ router.get("/hallazgos/:id/planes-accion", async (req: Request, res: Response) =
              u.name AS responsible_name,
              ap.due_date,
              ap.status,
+             ap.review_stage,
              ap.created_at,
              COALESCE(
                json_agg(

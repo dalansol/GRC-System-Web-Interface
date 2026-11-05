@@ -35,9 +35,10 @@ const PLAN: PlanAccion = {
   publicId: "PACC-2025-001",
   hallazgo: HALLAZGO,
   descripcion: "Actualizar el calendario normativo.",
-  responsable: { id: 6, nombre: "Laura Fernández" },
+  responsable: { id: 6, nombre: "Javier Ejemplo" },
   fechaCompromiso: "2025-12-15",
-  estado: "Asignado",
+  estado: "Borrador",
+  etapa: "definicion",
   creadoEn: "2025-10-08T10:00:00.000Z",
 };
 
@@ -47,7 +48,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   onCreado = vi.fn();
   vi.mocked(api.obtenerHallazgoParaPlan).mockResolvedValue(HALLAZGO);
-  vi.mocked(api.listarResponsables).mockResolvedValue([{ id: 6, nombre: "Laura Fernández", correo: "l.fernandez@expedite.com" }]);
+  vi.mocked(api.listarResponsables).mockResolvedValue([
+    { id: 6, nombre: "Javier Ejemplo", correo: "j.ejemplo@expedite.com" },
+    { id: 8, nombre: "Charlie Ejemplo", correo: "c.ejemplo@expedite.com" },
+  ]);
   vi.mocked(api.crearPlanAccion).mockResolvedValue(PLAN);
 });
 
@@ -72,7 +76,7 @@ describe("FormularioPlanAccion", () => {
     expect(screen.getByText("2025-11-30")).toBeInTheDocument();
   });
 
-  it("guarda el plan con descripción, responsable y fecha, y lo entrega en estado Asignado", async () => {
+  it("guarda el plan con descripción, responsable y fecha", async () => {
     await abrir();
     const usuario = await llenar("2025-12-15");
 
@@ -121,10 +125,10 @@ describe("FormularioPlanAccion en modo edición", () => {
     render(
       <FormularioPlanAccion hallazgoId="HAL-2025-003" hallazgoTitulo={HALLAZGO.titulo} plan={plan} onGuardado={onCreado} onCerrar={() => {}} />,
     );
-    await screen.findByRole("option", { name: plan.responsable.nombre });
+    await screen.findAllByRole("option", { name: plan.responsable.nombre });
   }
 
-  it("precarga los datos del plan y envía los cambios conservando el estado", async () => {
+  it("en definición precarga los datos y envía los cambios, incluidos los pasos, sin el estado", async () => {
     const actualizado: PlanAccion = { ...PLAN, fechaCompromiso: "2026-01-10" };
     vi.mocked(api.actualizarPlanAccion).mockResolvedValue(actualizado);
     await abrirEdicion();
@@ -145,13 +149,103 @@ describe("FormularioPlanAccion en modo edición", () => {
       descripcion: PLAN.descripcion,
       responsableId: 6,
       fechaCompromiso: "2026-01-10",
-      estado: "Asignado",
+      pasos: [],
     });
     expect(api.crearPlanAccion).not.toHaveBeenCalled();
   });
 
+  it("en definición envía los pasos editados", async () => {
+    vi.mocked(api.actualizarPlanAccion).mockResolvedValue(PLAN);
+    await abrirEdicion({
+      ...PLAN,
+      pasos: [
+        {
+          id: 11,
+          action_plan_id: 7,
+          planAccionId: 7,
+          usuarioAsignado: { id: 6, nombre: "Javier Ejemplo" },
+          descripcion: "Paso original",
+          fechaCompromiso: "2025-12-15",
+          completado: false,
+          creadoEn: "2025-10-08T10:00:00.000Z",
+          evidenciasCount: 0,
+        },
+      ],
+    });
+    const usuario = userEvent.setup();
+
+    await usuario.clear(screen.getByDisplayValue("Paso original"));
+    await usuario.type(screen.getByPlaceholderText("Descripción de la actividad..."), "Paso corregido");
+    await usuario.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => expect(api.actualizarPlanAccion).toHaveBeenCalled());
+    expect(vi.mocked(api.actualizarPlanAccion).mock.calls[0]![1].pasos).toEqual([
+      { id: 11, descripcion: "Paso corregido", usuarioAsignadoId: 6, fechaCompromiso: "2025-12-15" },
+    ]);
+  });
+
+  it("un plan nuevo no propone como responsable a quien lo crea", async () => {
+    await abrir();
+    expect(screen.getByLabelText("Responsable principal")).toHaveValue("");
+  });
+
+  describe("ya validado", () => {
+    const validado: PlanAccion = { ...PLAN, estado: "En Progreso", status: "En Progreso", etapa: "cierre" };
+
+    it("solo deja cambiar el responsable y el estado manual, y explica por qué", async () => {
+      await abrirEdicion(validado);
+
+      expect(screen.getByLabelText("Título del Plan de Acción")).toBeDisabled();
+      expect(screen.getByLabelText("Análisis de Causa Raíz (RCA)")).toBeDisabled();
+      expect(screen.getByLabelText("Fecha de compromiso")).toBeDisabled();
+      expect(screen.getByLabelText("Responsable principal")).toBeEnabled();
+      expect(screen.queryByRole("button", { name: /Agregar paso/ })).not.toBeInTheDocument();
+      expect(screen.getByText(/la fecha se mueve con una prórroga/)).toBeInTheDocument();
+    });
+
+    it("un plan anterior sin título ni pasos con fecha se puede reasignar", async () => {
+      const anterior = {
+        ...validado,
+        titulo: null,
+        descripcion: "",
+        pasos: [
+          {
+            id: 11,
+            action_plan_id: 7,
+            planAccionId: 7,
+            usuarioAsignado: null,
+            descripcion: "",
+            fechaCompromiso: null,
+            completado: false,
+            creadoEn: "2025-10-08T10:00:00.000Z",
+            evidenciasCount: 0,
+          },
+        ],
+      } as unknown as PlanAccion;
+      vi.mocked(api.actualizarPlanAccion).mockResolvedValue(anterior);
+      await abrirEdicion(anterior);
+      const usuario = userEvent.setup();
+
+      await usuario.selectOptions(screen.getByLabelText("Responsable principal"), "8");
+      await usuario.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+      await waitFor(() => expect(api.actualizarPlanAccion).toHaveBeenCalledWith(7, { responsableId: 8, estado: "En Progreso" }));
+    });
+
+    it("envía solo el responsable y el estado", async () => {
+      vi.mocked(api.actualizarPlanAccion).mockResolvedValue(validado);
+      await abrirEdicion(validado);
+      const usuario = userEvent.setup();
+
+      await usuario.selectOptions(screen.getByLabelText("Responsable principal"), "8");
+      await usuario.click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+      await waitFor(() => expect(api.actualizarPlanAccion).toHaveBeenCalledWith(7, { responsableId: 8, estado: "En Progreso" }));
+    });
+  });
+
   it("en un plan rechazado muestra el estado sin poder cambiarlo y no lo envía", async () => {
-    const rechazado: PlanAccion = { ...PLAN, estado: "Rechazado", status: "Rechazado" };
+    const rechazado: PlanAccion = { ...PLAN, estado: "Rechazado", status: "Rechazado", etapa: "cierre" };
     vi.mocked(api.actualizarPlanAccion).mockResolvedValue(rechazado);
     await abrirEdicion(rechazado);
 

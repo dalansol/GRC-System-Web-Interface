@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import {
   Calendar,
   CheckCircle2,
@@ -20,20 +20,29 @@ import {
 import { toast } from "sonner";
 
 import { Card, Breadcrumbs, PageHeader } from "./SharedComponents";
+import BandejaProrrogas from "./BandejaProrrogas";
 import BandejaRevisionPlanes from "./BandejaRevisionPlanes";
 import EvidenciasSection from "./EvidenciasSection";
+import { desplazarAElemento } from "./desplazarAElemento";
+import FormularioPlanAccion from "./FormularioPlanAccion";
 import HistorialFlujoPlan from "./HistorialFlujoPlan";
 import InsigniaEstadoPlan from "./InsigniaEstadoPlan";
+import PortalPlanesAuditado from "./PortalPlanesAuditado";
 import { useSesion } from "../auth/SesionContext";
 import {
   actualizarPasoPlanAccion,
   enviarPlanARevision,
-  listarMisPlanesAccion,
+  esAuditado,
+  ETIQUETA_ETAPA,
+  listarPlanesAccion,
   obtenerFlujoPlan,
   planBloqueado,
+  puedeEditarPlan,
+  puedeEnviarPlan,
   ROLES_REVISION_PLAN_ACCION,
-  type HallazgoResumen,
-  type PlanAccion
+  type EvidenciaObservada,
+  type PlanAccion,
+  type SolicitudDestinoPlan
 } from "../api/planesAccion";
 import { type HallazgoPortal } from "../api/portalAuditado";
 
@@ -43,16 +52,20 @@ interface PlanAccionConDetalles extends Omit<PlanAccion, "estado" | "status"> {
   status?: string;
 }
 
-/** Motivo del último rechazo, para que el responsable sepa qué corregir antes de reenviar. */
+/** Motivo del último rechazo y sus archivos señalados, para saber qué corregir antes de reenviar. */
 function AvisoRechazoPlan({ planId }: { planId: number }) {
   const [motivo, setMotivo] = useState<string | null>(null);
+  const [observadas, setObservadas] = useState<EvidenciaObservada[]>([]);
 
   useEffect(() => {
     let vigente = true;
     obtenerFlujoPlan(planId)
       .then(({ eventos }) => {
         const rechazo = [...eventos].reverse().find((evento) => evento.accion === "rechazo");
-        if (vigente) setMotivo(rechazo?.motivo ?? null);
+        if (vigente) {
+          setMotivo(rechazo?.motivo ?? null);
+          setObservadas(rechazo?.evidenciasObservadas ?? []);
+        }
       })
       .catch(() => {
         if (vigente) setMotivo(null);
@@ -69,15 +82,40 @@ function AvisoRechazoPlan({ planId }: { planId: number }) {
         Plan rechazado: corrígelo y reenvíalo a revisión
       </div>
       {motivo && <p className="break-words">Motivo: {motivo}</p>}
+      {observadas.length > 0 && (
+        <p className="break-words">Archivos señalados: {observadas.map((evidencia) => evidencia.nombre).join(", ")}</p>
+      )}
     </div>
   );
 }
 
-export default function VistaPlanesAccion() {
+export default function VistaPlanesAccion({ destino }: { destino?: SolicitudDestinoPlan | null }) {
+  const { usuario } = useSesion();
+  // Los auditados solo ven lo que tienen asignado, en su propia vista (SF-16).
+  if (esAuditado(usuario?.rol)) {
+    return (
+      <div className="flex-1 w-full max-w-full overflow-x-hidden p-6 pb-24 space-y-6 box-border" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <Breadcrumbs items={["Inicio", "Auditoría", "Planes de Acción"]} />
+        <PageHeader title="Mis planes de acción" subtitle="Sube la evidencia de tus pasos y actualiza su avance." />
+        <PortalPlanesAuditado destino={destino} />
+      </div>
+    );
+  }
+  return <SeguimientoPlanes destino={destino} />;
+}
+
+/** Seguimiento del equipo de auditoría: todos los planes, su envío a revisión y la bandeja del Jefe de Auditoría. */
+function SeguimientoPlanes({ destino }: { destino?: SolicitudDestinoPlan | null }) {
   const { usuario } = useSesion();
   const esRevisor = Boolean(usuario && ROLES_REVISION_PLAN_ACCION.includes(usuario.rol));
-  const [pestana, setPestana] = useState<"mios" | "revision">("mios");
+  const [pestana, setPestana] = useState<"seguimiento" | "revision" | "prorrogas">(destino?.pestana ?? "seguimiento");
+  // Pasos con un cambio en curso: un doble clic no debe mandar otro.
+  const pasosEnCurso = useRef(new Set<number>());
+  // Cambiar de pestaña a mano termina el viaje de la notificación: volver no debe reabrir su plan.
+  const [destinoAtendido, setDestinoAtendido] = useState<number | null>(null);
+  const destinoVigente = destino && destino.solicitud !== destinoAtendido ? destino : null;
   const [recargaFlujo, setRecargaFlujo] = useState(0);
+  const [planEnEdicion, setPlanEnEdicion] = useState<PlanAccionConDetalles | null>(null);
 
   const [planes, setPlanes] = useState<PlanAccionConDetalles[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,27 +134,46 @@ export default function VistaPlanesAccion() {
   const cargarPlanes = async () => {
     setLoading(true);
     try {
-      const planesRemotos = await listarMisPlanesAccion();
+      const planesRemotos = await listarPlanesAccion();
       setPlanes(planesRemotos);
+      return planesRemotos;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudieron cargar los planes de acción.");
+      return null;
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    cargarPlanes();
+    if (destino?.pestana === "seguimiento") return;
+    void cargarPlanes();
   }, [usuario?.id, (usuario as any)?.business_unit_id, usuario?.businessUnitId]);
+
+  // Desde una notificación se llega a la pestaña indicada; en Seguimiento, con el plan abierto.
+  useEffect(() => {
+    if (!destino) return;
+    setPestana(destino.pestana);
+    if (destino.pestana !== "seguimiento") return;
+    void cargarPlanes().then((lista) => {
+      if (!lista) return;
+      if (lista.some((plan) => plan.id === destino.planId)) {
+        setExpandedPlanId(destino.planId);
+        desplazarAElemento(`plan-fila-${destino.planId}`);
+      } else {
+        toast.error("Ese plan ya no está disponible.");
+      }
+    });
+  }, [destino?.solicitud]);
 
   // Toggle step completion status with evidence validation
   const togglePasoCompletado = async (plan: PlanAccionConDetalles, pasoId: number, completadoDeseado: boolean) => {
-    if (planBloqueado(plan)) {
-      toast.error("El plan de acción está en revisión o aprobado y ya no puede modificarse.");
+    if (plan.etapa !== "cierre" || planBloqueado(plan)) {
+      toast.error("El plan de acción aún no se valida, está en revisión o ya se aprobó, y no puede modificarse.");
       return;
     }
     const paso = plan.pasos?.find((p) => p.id === pasoId);
-    if (!paso) return;
+    if (!paso || pasosEnCurso.current.has(pasoId)) return;
 
     // Si se quiere marcar como completado, validar que tenga evidencias
     if (completadoDeseado) {
@@ -126,15 +183,22 @@ export default function VistaPlanesAccion() {
       }
     }
 
-    try {
-      const pasoActualizado = await actualizarPasoPlanAccion(plan.id, pasoId, completadoDeseado);
+    // El paso cambia en pantalla de inmediato. Si el servidor lo rechaza, se deshace.
+    const fijarPaso = (pasoNuevo: PlanAccion["pasos"][number]) => {
       setPlanes((prev) => prev.map((p) => p.id !== plan.id ? p : {
         ...p,
-        pasos: p.pasos.map((item) => item.id === pasoId ? pasoActualizado : item),
+        pasos: p.pasos.map((item) => item.id === pasoId ? pasoNuevo : item),
       }));
-      toast.success("Estatus de la actividad actualizado.");
+    };
+    pasosEnCurso.current.add(pasoId);
+    fijarPaso({ ...paso, completado: completadoDeseado });
+    try {
+      fijarPaso(await actualizarPasoPlanAccion(plan.id, pasoId, completadoDeseado));
     } catch (error) {
+      fijarPaso(paso);
       toast.error(error instanceof Error ? error.message : "No se pudo actualizar la actividad.");
+    } finally {
+      pasosEnCurso.current.delete(pasoId);
     }
   };
 
@@ -146,13 +210,16 @@ export default function VistaPlanesAccion() {
         ...planActualizado,
       } : plan));
       setRecargaFlujo((valor) => valor + 1);
-      toast.success("Plan de acción enviado a revisión.");
+      toast.success("Plan de acción enviado.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo enviar el plan a revisión.");
     }
   };
 
-  const buIdDisplay = (usuario as any)?.business_unit_id ?? usuario?.businessUnitId ?? 10;
+  const guardarEdicion = (actualizado: PlanAccion) => {
+    setPlanes((prev) => prev.map((plan) => (plan.id === actualizado.id ? { ...plan, ...actualizado } : plan)));
+    setPlanEnEdicion(null);
+  };
 
   return (
     <div className="flex-1 w-full max-w-full overflow-x-hidden p-6 pb-24 space-y-6 box-border" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -162,10 +229,10 @@ export default function VistaPlanesAccion() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <PageHeader
           title="Gestión de Planes de Acción"
-          subtitle={`${planes.length} planes registrados · ID Unidad de Negocio: ${buIdDisplay}`}
+          subtitle={`${planes.length} planes registrados`}
         />
 
-        {pestana === "mios" && (
+        {pestana === "seguimiento" && (
         <button
           type="button"
           onClick={cargarPlanes}
@@ -180,13 +247,16 @@ export default function VistaPlanesAccion() {
 
       {esRevisor && (
         <div role="tablist" aria-label="Vista de planes de acción" className="flex gap-1 border-b border-border">
-          {([["mios", "Mis planes"], ["revision", "Bandeja de revisión"]] as const).map(([id, etiqueta]) => (
+          {([["seguimiento", "Seguimiento"], ["revision", "Bandeja de revisión"], ["prorrogas", "Prórrogas"]] as const).map(([id, etiqueta]) => (
             <button
               key={id}
               type="button"
               role="tab"
               aria-selected={pestana === id}
-              onClick={() => setPestana(id)}
+              onClick={() => {
+                setPestana(id);
+                setDestinoAtendido(destino?.solicitud ?? null);
+              }}
               className={`-mb-px border-b-2 px-3 py-2 text-xs font-semibold transition-colors ${
                 pestana === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
@@ -198,7 +268,9 @@ export default function VistaPlanesAccion() {
       )}
 
       {pestana === "revision" && esRevisor ? (
-        <BandejaRevisionPlanes />
+        <BandejaRevisionPlanes destino={destinoVigente?.pestana === "revision" ? destinoVigente : null} />
+      ) : pestana === "prorrogas" && esRevisor ? (
+        <BandejaProrrogas destino={destinoVigente?.pestana === "prorrogas" ? destinoVigente : null} />
       ) : (
       /* Main Table Section */
       <Card>
@@ -211,7 +283,7 @@ export default function VistaPlanesAccion() {
           ) : planes.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center text-xs text-muted-foreground gap-2">
               <ShieldAlert size={28} className="text-muted-foreground/50" />
-              <p>No tienes planes de acción asignados o pendientes de atención.</p>
+              <p>No hay planes de acción registrados.</p>
             </div>
           ) : (
             <table className="w-full text-sm table-fixed">
@@ -234,21 +306,23 @@ export default function VistaPlanesAccion() {
                   const tituloDisplay = plan.titulo || plan.hallazgo?.titulo || plan.finding?.title || "Plan de Acción Correctivo";
                   const responsableNombre = plan.responsable?.nombre || "No asignado";
 
-                  // Calcular si todos los pasos están completados
-                  const todosPasosCompletados = plan.pasos && plan.pasos.length > 0 && plan.pasos.every((p) => p.completado);
                   const bloqueado = planBloqueado(plan);
                   const rechazado = estadoStr === "Rechazado";
-                  const puedeEnviar = plan.responsable?.id === currentUserId && todosPasosCompletados && !bloqueado;
+                  const puedeEnviar = puedeEnviarPlan(plan, usuario);
+                  const destinoEnvio = plan.etapa === "definicion" ? "validación" : "revisión";
+                  // Un paso solo cambia en un plan ya validado, y lo hace su asignado.
+                  const pasosAbiertos = plan.etapa === "cierre" && !bloqueado;
 
                   return (
                     <Fragment key={plan.id}>
-                      <tr className="border-b border-border hover:bg-muted/20">
+                      <tr id={`plan-fila-${plan.id}`} className="border-b border-border hover:bg-muted/20">
                         <td className="py-3 px-4 font-mono font-medium text-xs text-primary truncate">{folioDisplay}</td>
                         <td className="py-3 px-4 font-medium text-foreground truncate" title={tituloDisplay}>{tituloDisplay}</td>
                         <td className="py-3 px-4 text-muted-foreground text-xs truncate" title={responsableNombre}>{responsableNombre}</td>
                         <td className="py-3 px-4 text-xs font-mono text-muted-foreground truncate">{plan.fechaCompromiso}</td>
                         <td className="py-3 px-4">
                           <InsigniaEstadoPlan estado={estadoStr} />
+                          <div className="mt-1 text-[11px] text-muted-foreground">{ETIQUETA_ETAPA[plan.etapa]}</div>
                         </td>
                         <td className="py-3 px-4 text-right">
                           <button
@@ -392,11 +466,11 @@ export default function VistaPlanesAccion() {
                                                     toast.error("Solo puedes modificar el estatus de tus propios pasos asignados.");
                                                   }
                                                 }}
-                                                className="focus:outline-none shrink-0"
+                                                className="focus:outline-none shrink-0 rounded-full transition-transform hover:scale-110 active:scale-90"
                                                 title={esAsignadoActual ? (isDone ? "Marcar como pendiente" : "Marcar como completado") : "Solo el responsable asignado puede cambiar este estatus"}
                                               >
                                                 {isDone ? (
-                                                  <CheckCircle2 size={16} className="text-green-600 fill-green-100" />
+                                                  <CheckCircle2 size={16} className="text-green-600 fill-green-100 animate-in zoom-in duration-200" />
                                                 ) : (
                                                   <div className="h-4 w-4 rounded-full border-2 border-muted-foreground" />
                                                 )}
@@ -465,7 +539,7 @@ export default function VistaPlanesAccion() {
                                                 <EvidenciasSection
                                                   entityId={String(paso.id)}
                                                   entityType="action_plan_step"
-                                                  puedeSubir={esAsignadoActual && !bloqueado}
+                                                  puedeSubir={esAsignadoActual && pasosAbiertos}
                                                   onEvidenceCountChange={(count) => {
                                                     setPlanes((prev) => prev.map((item) => item.id !== plan.id ? item : {
                                                       ...item,
@@ -495,17 +569,28 @@ export default function VistaPlanesAccion() {
                                 <HistorialFlujoPlan planId={plan.id} recarga={recargaFlujo} />
                               </div>
 
-                              {/* El responsable envía el plan a revisión cuando todos los pasos están completados */}
-                              {puedeEnviar && (
-                                <div className="pt-4 flex justify-end border-t border-border mt-4">
-                                  <button
-                                    type="button"
-                                    onClick={() => enviarARevision(plan.id)}
-                                    className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
-                                  >
-                                    <CheckCheck size={15} />
-                                    {rechazado ? "Reenviar a revisión" : "Enviar a revisión"}
-                                  </button>
+                              {/* El auditor corrige el plan y lo envía a validar o, ya terminado, a revisar su evidencia */}
+                              {(puedeEnviar || puedeEditarPlan(plan, usuario)) && (
+                                <div className="pt-4 flex justify-end gap-2 border-t border-border mt-4">
+                                  {puedeEditarPlan(plan, usuario) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setPlanEnEdicion(plan)}
+                                      className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground hover:bg-secondary transition-colors"
+                                    >
+                                      Editar plan
+                                    </button>
+                                  )}
+                                  {puedeEnviar && (
+                                    <button
+                                      type="button"
+                                      onClick={() => enviarARevision(plan.id)}
+                                      className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
+                                    >
+                                      <CheckCheck size={15} />
+                                      {rechazado ? `Reenviar a ${destinoEnvio}` : `Enviar a ${destinoEnvio}`}
+                                    </button>
+                                  )}
                                 </div>
                               )}
 
@@ -521,6 +606,19 @@ export default function VistaPlanesAccion() {
           )}
         </div>
       </Card>
+      )}
+
+      {planEnEdicion && (
+        <FormularioPlanAccion
+          plan={planEnEdicion as PlanAccion}
+          hallazgosSeleccionados={(planEnEdicion.hallazgosRelacionados?.length ? planEnEdicion.hallazgosRelacionados : [planEnEdicion.hallazgo]).map((hallazgo) => ({
+            id: hallazgo.id,
+            folio: hallazgo.folio,
+            title: hallazgo.titulo,
+          }))}
+          onGuardado={guardarEdicion}
+          onCerrar={() => setPlanEnEdicion(null)}
+        />
       )}
     </div>
   );

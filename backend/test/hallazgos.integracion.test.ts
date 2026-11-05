@@ -58,6 +58,7 @@ const SCRIPTS = [
   "041_estado_revision_planes.sql",
   "042_procesos_en_asignaciones.sql",
   "044_flujo_aprobacion_planes.sql",
+  "045_etapas_planes_accion.sql",
 ];
 
 const ADMIN = "s.ramirez@expedite.com";
@@ -254,7 +255,16 @@ describe.skipIf(!env.SQL_TEST_SERVER)("hallazgos sobre PostgreSQL", () => {
       expect((await como(correo, "get", "/hallazgos/HAL-U10")).status).toBe(200);
       expect((await como(correo, "get", "/hallazgos/HAL-U20")).status).toBe(404);
       expect((await como(correo, "get", "/hallazgos/HAL-SUELTO")).status).toBe(404);
-      expect((await como(correo, "get", "/hallazgos/HAL-SUELTO/planes-accion")).body).toEqual([]);
+    }
+  });
+
+  it("los auditados no consultan los planes desde un hallazgo, ni siquiera de su unidad", async () => {
+    for (const correo of [JEFE_AUDITADO, EMPLEADO_AUDITADO]) {
+      for (const hallazgo of ["HAL-SUELTO", "HAL-U10"]) {
+        const res = await como(correo, "get", `/hallazgos/${hallazgo}/planes-accion`);
+        expect(res.status).toBe(403);
+        expect(res.body.error.codigo).toBe("ROL_NO_AUTORIZADO");
+      }
     }
   });
 

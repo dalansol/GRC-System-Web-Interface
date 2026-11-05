@@ -39,7 +39,8 @@ const orderFindings = (findings: HallazgoViewModel[]) =>
     return 0;
   });
 
-export function useHallazgosViewModel() {
+/** `consultarPlanes`: el auditado no consulta la lista completa de planes; ve los suyos en su propia vista (SF-16). */
+export function useHallazgosViewModel({ consultarPlanes = true }: { consultarPlanes?: boolean } = {}) {
   const [hallazgos, setHallazgos] = useState<HallazgoViewModel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -107,7 +108,7 @@ export function useHallazgosViewModel() {
 
   useEffect(() => {
     fetchHallazgos();
-    fetchPlanesAccion();
+    if (consultarPlanes) fetchPlanesAccion();
   }, []);
 
   const handleDelete = async (id: string) => {

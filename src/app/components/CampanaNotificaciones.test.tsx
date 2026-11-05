@@ -79,6 +79,20 @@ describe("campana de notificaciones", () => {
     await waitFor(() => expect(punto()).not.toBeInTheDocument());
   });
 
+  it("al hacer clic avisa a dónde ir y cierra la lista, aunque ya estuviera leída", async () => {
+    const leida = aviso({ leida: true });
+    vi.mocked(api.listarNotificaciones).mockResolvedValue({ noLeidas: 0, items: [leida] });
+    const onAbrir = vi.fn();
+    const usuario = userEvent.setup();
+
+    render(<CampanaNotificaciones onAbrir={onAbrir} />);
+    await usuario.click(screen.getByRole("button", { name: /Notificaciones/ }));
+    await usuario.click(await screen.findByRole("button", { name: /PACC-2026-007/ }));
+
+    expect(onAbrir).toHaveBeenCalledWith(leida);
+    await waitFor(() => expect(screen.queryByText(/PACC-2026-007/)).not.toBeInTheDocument());
+  });
+
   it("una notificación ya leída no se vuelve a marcar", async () => {
     vi.mocked(api.listarNotificaciones).mockResolvedValue({ noLeidas: 0, items: [aviso({ leida: true })] });
     const usuario = userEvent.setup();
