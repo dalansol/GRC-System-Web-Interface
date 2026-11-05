@@ -463,6 +463,8 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
 
     it("devuelve los hashes de la evidencia por paso", async () => {
       const paso = (await planes.buscarPorId(planId))!.pasos[0]!;
+      // La tabla evidence no se borra entre corridas de esta prueba.
+      await pool.query("DELETE FROM evidence WHERE id = 'EVD-F-1'");
       await pool.query(
         `INSERT INTO evidence (id, entity_id, entity_type, file_name, mime_type, file_size, file_hash, storage_path, uploaded_by)
          VALUES ('EVD-F-1', $1, 'action_plan_step', 'a.pdf', 'pdf', 10, 'hash-1', 'evidencias/a.pdf', $2)`,
