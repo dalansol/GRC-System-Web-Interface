@@ -29,7 +29,7 @@ const SCRIPTS = [
   "014_quitar_seguimiento_controles_catalogo.sql",
   "028_estado_inicial_controles_progreso.sql",
   "029_conflictos_por_plan.sql",
-  "036_evaluacion_controles.sql",
+  "047_evaluacion_controles.sql",
 ];
 
 const script = (nombre: string) => readFile(new URL(`../sql/${nombre}`, import.meta.url), "utf8");

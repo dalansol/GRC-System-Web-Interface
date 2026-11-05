@@ -62,6 +62,7 @@ const SCRIPTS = [
   "042_procesos_en_asignaciones.sql",
   "044_flujo_aprobacion_planes.sql",
   "045_etapas_planes_accion.sql",
+  "048_versiones_evidencia.sql",
 ];
 
 const ADMIN = "s.ramirez@expedite.com";

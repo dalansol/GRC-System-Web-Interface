@@ -29,9 +29,34 @@ const SCRIPTS = [
   "012_seguimiento_controles.sql",
   "013_seguimiento_asignaciones_control.sql",
   "014_quitar_seguimiento_controles_catalogo.sql",
+  "015_seed_estructura.sql",
+  "016_mantener_controles_al_eliminar_proceso.sql",
+  "017_jerarquia_organizacional.sql",
+  "019_riesgos_jerarquia.sql",
+  "021_nombres_reales.sql",
+  "023_codigo_y_nombre.sql",
+  "025_nombres_unicos.sql",
+  "026_nombres_periodos.sql",
   "027_formatos_evidencia.sql",
   "028_estado_inicial_controles_progreso.sql",
   "029_conflictos_por_plan.sql",
+  "031_rls_control_horas.sql",
+  "032_normalizar_entidad_evidencias_control.sql",
+  "033_campos_muestra_rotacion_controles.sql",
+  "034_catalogos_estructura.sql",
+  "034_portal_auditado.sql",
+  "035_normalizar_root_cause_plan.sql",
+  "035_trimestres_periodos.sql",
+  "036_permitir_varios_planes_por_hallazgo.sql",
+  "037_migrar_relacion_planes_hallazgos.sql",
+  "038_public_id_planes_accion.sql",
+  "039_entidad_evidencias.sql",
+  "040_evidencias_entidad_unica.sql",
+  "041_estado_revision_planes.sql",
+  "042_procesos_en_asignaciones.sql",
+  "044_flujo_aprobacion_planes.sql",
+  "045_etapas_planes_accion.sql",
+  "048_versiones_evidencia.sql",
 ];
 
 const script = (nombre: string) => readFile(new URL(`../sql/${nombre}`, import.meta.url), "utf8");
@@ -51,6 +76,7 @@ describe.skipIf(!env.SQL_TEST_SERVER)("permisos de controles y evidencias sobre 
     number
   >;
   let plan1: number;
+  let proceso: number;
   let plan2: number;
   const borrados: string[] = [];
 
@@ -136,6 +162,16 @@ describe.skipIf(!env.SQL_TEST_SERVER)("permisos de controles y evidencias sobre 
     u.lectura = await usuario("Solo Lectura", "Solo Lectura");
     plan1 = await plan("PAI-A-001", u.seniorResponsable, u.jefe);
     plan2 = await plan("PAI-A-002", u.seniorAjeno, u.jefe);
+    const { rows: unidades } = await pool.query(
+      `INSERT INTO business_units (name, manager_id, fiscal_period_id, created_by)
+       SELECT 'UDN-ACCESO', $1, MIN(id), $1 FROM fiscal_periods RETURNING id`,
+      [u.jefe],
+    );
+    const { rows: procesos } = await pool.query(
+      `INSERT INTO processes (business_unit_id, name, title, control_id) VALUES ($1, 'Proceso', 'Proceso', 'CTR-2') RETURNING id`,
+      [unidades[0].id],
+    );
+    proceso = procesos[0].id;
     await pool.query("INSERT INTO controls (id, code, name) VALUES ('CTR-1', 'CP-1', 'Control uno'), ('CTR-2', 'CP-2', 'Control dos')");
   });
 
@@ -153,7 +189,7 @@ describe.skipIf(!env.SQL_TEST_SERVER)("permisos de controles y evidencias sobre 
     const asignarComo = (senior: number, planId: number) =>
       request(como({ id: senior, rol: "Auditor Senior" }))
         .post(`/api/planes/${planId}/controles`)
-        .send({ controlId: "CTR-2", auditorId: u.auditora });
+        .send({ controlId: "CTR-2", processId: proceso, auditorId: u.auditora });
 
     it("el Auditor Senior responsable del plan asigna", async () => {
       const respuesta = await asignarComo(u.seniorResponsable, plan1);
