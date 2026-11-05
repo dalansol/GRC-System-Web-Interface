@@ -14,6 +14,7 @@ Que el auditor abra una evidencia `.xlsx` dentro de Expedite y la edite con la m
 | ViewModel | `domain/hoja/estadoHoja.ts` (reducer) y `useHojaCalculo.ts` | Selección, edición, modo Señalar, deshacer/rehacer (100 pasos), recálculo |
 | Vista | `src/app/components/hoja/` | Cuadrícula virtualizada, cinta, barra de fórmulas, pestañas, barra de estado, menú contextual |
 | API | `src/app/api/evidencias.ts` | Descargar el archivo, guardar versión, listar versiones |
+| Backend | `backend/src/routes/evidencias.ts`, `backend/sql/034_versiones_evidencia.sql` | Entregar el archivo vigente, guardar versiones con hash en servidor, historial |
 
 `components/SpreadsheetEditor.tsx` quedó como punto de entrada (lo usan `EvidenciasSection` y `App.tsx`).
 
@@ -55,28 +56,34 @@ Que el auditor abra una evidencia `.xlsx` dentro de Expedite y la edite con la m
 
 **No se conserva** (se avisa al abrir, no se descarta en silencio): celdas combinadas, imágenes, validaciones de datos, formato condicional, fórmulas de matriz (se convierten en valor). Gráficos, tablas dinámicas y macros tampoco se conservan; `exceljs` no los lee.
 
-## Contrato con el backend (pendiente de implementar en `backend/src/routes/evidencias.ts`)
+### Macros (.xlsm)
+
+Un libro con macros es un `.xlsx` que además trae `xl/vbaProject.bin` dentro del ZIP. Se acepta como evidencia (`upload.ts` y `ck_evidence_mime_type`, 034) y el editor lo abre igual que un `.xlsx`: `contieneMacros` busca esa entrada en los bytes del archivo y `leerXlsx` añade el aviso "El archivo contiene macros, que no son compatibles…" mostrando el resto del contenido. Al guardar, la versión nueva sale siempre como `.xlsx` (el nombre cambia de extensión y `mime_type` pasa a `xlsx`); el backend también rechaza cualquier otra cosa que no sea un `.xlsx`.
+
+## Rutas del backend (`backend/src/routes/evidencias.ts`, solo con `DATA_MODE=sql`)
 
 | Método | Ruta | Cuerpo | Respuesta |
 |---|---|---|---|
-| GET | `/api/evidencias/:id/archivo` | — | Binario del `.xlsx` vigente |
-| POST | `/api/evidencias/:id/versiones` | multipart: `file`, `comentario` | `{ version, file_hash, created_at, uploaded_by, comentario }` |
-| GET | `/api/evidencias/:id/versiones` | — | Lista de lo anterior |
+| GET | `/api/evidencias/:id/archivo` | — | Binario del libro vigente (`Content-Type` de xlsx, cabecera `X-Evidencia-Version`); 415 si la evidencia no es un libro |
+| POST | `/api/evidencias/:id/versiones` | multipart: `file` (`.xlsx`), `comentario` (hasta 500) | 201 `{ version, file_hash, file_size, created_at, uploaded_by (nombre), comentario }` |
+| GET | `/api/evidencias/:id/versiones` | — | Historial de la más nueva a la más vieja; antes del primer guardado solo el original (versión 1) |
 
-- Ambas rutas detrás de `autenticar`. Guardar valida el mismo permiso que subir evidencia (en controles, el Auditor asignado; en hallazgos, TBD #19).
-- Guardar **no sobrescribe**: crea una versión nueva, recalcula el SHA-256 en el servidor, la guarda en el almacenamiento (R2) y registra `evidencia.version` en la bitácora (SF-15/SF-18).
+- Las tres detrás de `autenticar`. Ver el archivo o el historial sigue la regla del listado (quien la subió; en controles también el Auditor Senior que asignó el control y la Jefatura dueña del plan); quien no puede verla recibe 404. Guardar sigue la regla de subir y eliminar: en controles el Auditor asignado, en hallazgos quien la subió (TBD #19); si no, 403.
+- Guardar **no sobrescribe**: dentro de una transacción (`SELECT … FOR UPDATE` para que dos guardados simultáneos no repitan versión) el original pasa a `evidence_versions` como versión 1 si el historial estaba vacío, se guarda el archivo nuevo con la clave `EV-…-vN.xlsx` en el almacenamiento (R2 o local), se inserta la versión N con el SHA-256 calculado en el servidor y la fila de `evidence` pasa a reflejarla (`version`, `file_hash`, `file_size`, `storage_path`, `file_name`). Si algo falla se deshace y se borra el archivo.
+- El archivo recibido debe empezar por `PK` (un libro es un ZIP) y llamarse `.xlsx`; si no, 400.
+- Al eliminar una evidencia se borran también los archivos de todas sus versiones (`ON DELETE CASCADE` en la tabla).
 - El hash que se muestra al descargar una copia se calcula en el navegador solo como referencia; el oficial es el del backend.
 
-### Mientras el backend no exista
+### Sin backend o en modo memoria
 
-Si `GET …/archivo` falla (404, sin conexión o archivo no válido), el editor abre un **libro de ejemplo** con un aviso visible; "Guardar" se convierte en "Descargar copia". Lo mismo pasa con los documentos de auditoría mock de `App.tsx`, que no tienen id de evidencia.
+Si `GET …/archivo` falla (404, sin conexión o archivo no válido), el editor abre un **libro de ejemplo** con un aviso visible; "Guardar" se convierte en "Descargar copia". Lo mismo pasa con los documentos de auditoría mock de `App.tsx`, que no tienen id de evidencia, y con `DATA_MODE=memoria`, donde las rutas de evidencias no existen.
 
 ## Permisos
 
-`EvidenciasSection` abre el editor en **solo lectura** cuando el usuario no puede subir evidencia (`puedeSubirEvidencia`): se puede navegar, seleccionar, copiar y descargar, pero no editar ni guardar. El botón dice "Ver en Expedite".
+`EvidenciasSection` abre el editor en **solo lectura** cuando el usuario no puede subir evidencia (`puedeSubirEvidencia`): se puede navegar, seleccionar, copiar y descargar, pero no editar ni guardar. El botón dice "Ver en Expedite". El backend repite la comprobación al guardar.
 
 ## Decisiones pendientes
 
-- Rutas del backend y evento de bitácora (contrato arriba).
+- Evento `evidencia.version` en la bitácora (SF-15/SF-18): `rutasEvidencias` todavía no recibe `registrarEvento`.
 - Quién puede editar una evidencia de hallazgo: TBD #19 de CLAUDE.md.
 - Restaurar una versión anterior desde el historial: requiere una ruta de descarga por versión.

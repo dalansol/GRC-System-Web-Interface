@@ -21,8 +21,9 @@ import { ErrorApi, pedir, pedirFormData } from "../api/cliente";
 
 // ─── Evidencias Section ───────────────────────────────────────────────────────
 const BLOCKED_EXTENSIONS = [".exe", ".bat", ".js", ".msi", ".sh", ".cmd", ".vbs", ".ps1"];
-const ALLOWED_EXTENSIONS = [".pdf", ".xlsx", ".eml", ".msg", ".zip", ".7z"];
-const ALLOWED_FORMATS_LABEL = ".pdf, .xlsx, .eml, .msg, .zip y .7z";
+const ALLOWED_EXTENSIONS = [".pdf", ".xlsx", ".xlsm", ".eml", ".msg", ".zip", ".7z"];
+const LIBROS_EXCEL = ["xlsx", "xlsm"];
+const ALLOWED_FORMATS_LABEL = ".pdf, .xlsx, .xlsm, .eml, .msg, .zip y .7z";
 const MAX_FILE_SIZE_MB = 100;
 
 interface EvidenceFile {
@@ -195,7 +196,7 @@ export default function EvidenciasSection({
     }
   };
 
-  const iconClass = (t: string) => t === "pdf" ? "text-red-500" : t === "xlsx" ? "text-emerald-600" : "text-blue-500";
+  const iconClass = (t: string) => t === "pdf" ? "text-red-500" : LIBROS_EXCEL.includes(t) ? "text-emerald-600" : "text-blue-500";
 
   return (
     <>
@@ -268,7 +269,7 @@ export default function EvidenciasSection({
                     <Sparkles size={10} /> Analizar con IA
                   </button>
                 )}
-                {f.mimeType === "xlsx" && (
+                {LIBROS_EXCEL.includes(f.mimeType) && (
                   <button
                     onClick={() => setXlsxTarget(f)}
                     className="flex-shrink-0 flex items-center gap-1 text-[10px] px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md hover:bg-emerald-100 font-semibold transition-colors whitespace-nowrap"
@@ -286,7 +287,7 @@ export default function EvidenciasSection({
           </div>
         )}
         <div className="mt-3 pt-3 border-t border-border text-[10px] text-muted-foreground">
-          Formatos aceptados: PDF, XLSX, EML, MSG, ZIP, 7Z · Máx. {MAX_FILE_SIZE_MB} MB · Hash SHA-256 · Los archivos .xlsx se pueden editar directamente en Expedite
+          Formatos aceptados: PDF, XLSX, XLSM, EML, MSG, ZIP, 7Z · Máx. {MAX_FILE_SIZE_MB} MB · Hash SHA-256 · Los libros de Excel se pueden editar directamente en Expedite (las macros no son compatibles)
         </div>
       </Card>
     </>

@@ -169,11 +169,37 @@ function hojaDesdeWorksheet(ws: Worksheet, avisos: Set<string>): Hoja {
   return hoja;
 }
 
+export const AVISO_MACROS =
+  "El archivo contiene macros, que no son compatibles con el editor: se muestra el resto del contenido y al guardar la versión nueva queda sin macros (.xlsx).";
+
+/**
+ * Un libro con macros (.xlsm) es un ZIP que incluye la entrada xl/vbaProject.bin; el nombre
+ * aparece sin comprimir en el directorio del ZIP, así que basta buscarlo en los bytes.
+ */
+export function contieneMacros(datos: ArrayBuffer): boolean {
+  const bytes = new Uint8Array(datos);
+  const firma = new TextEncoder().encode("xl/vbaProject.bin");
+  const fin = bytes.length - firma.length;
+  for (let i = 0; i <= fin; i++) {
+    if (bytes[i] !== firma[0]) continue;
+    let coincide = true;
+    for (let j = 1; j < firma.length; j++) {
+      if (bytes[i + j] !== firma[j]) {
+        coincide = false;
+        break;
+      }
+    }
+    if (coincide) return true;
+  }
+  return false;
+}
+
 export async function leerXlsx(datos: ArrayBuffer): Promise<{ libro: Libro; avisos: string[] }> {
   const ExcelJS = await cargarExcelJS();
   const wb: Workbook = new ExcelJS.Workbook();
   await wb.xlsx.load(datos);
   const avisos = new Set<string>();
+  if (contieneMacros(datos)) avisos.add(AVISO_MACROS);
   const hojas: Hoja[] = [];
   wb.eachSheet((ws) => {
     if (ws.state === "hidden" || ws.state === "veryHidden") avisos.add("Hay hojas ocultas; se mostrarán al editar.");

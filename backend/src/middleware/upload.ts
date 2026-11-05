@@ -8,13 +8,15 @@ const GENERIC_MIMETYPES = ["application/octet-stream", ""];
 const ALLOWED_MIMETYPES_BY_EXTENSION: Record<string, string[]> = {
   ".pdf": ["application/pdf"],
   ".xlsx": ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+  // Libros con macros: el editor avisa que las macros no son compatibles y muestra el resto.
+  ".xlsm": ["application/vnd.ms-excel.sheet.macroEnabled.12", ...GENERIC_MIMETYPES],
   ".eml": ["message/rfc822", ...GENERIC_MIMETYPES],
   ".msg": ["application/vnd.ms-outlook", "application/x-msg", ...GENERIC_MIMETYPES],
   ".zip": ["application/zip", "application/x-zip-compressed", "multipart/x-zip", ...GENERIC_MIMETYPES],
   ".7z": ["application/x-7z-compressed", ...GENERIC_MIMETYPES],
 };
 const ALLOWED_EXTENSIONS = Object.keys(ALLOWED_MIMETYPES_BY_EXTENSION);
-const ALLOWED_FORMATS_LABEL = ".pdf, .xlsx, .eml, .msg, .zip y .7z";
+const ALLOWED_FORMATS_LABEL = ".pdf, .xlsx, .xlsm, .eml, .msg, .zip y .7z";
 const BLOCKED_EXTENSIONS = [
   ".exe", ".bat", ".js", ".msi", ".sh", ".cmd", ".vbs", ".ps1",
 ];

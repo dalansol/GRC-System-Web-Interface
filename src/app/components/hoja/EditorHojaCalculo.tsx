@@ -185,6 +185,10 @@ interface Portapapeles {
   rango: Rango;
 }
 
+/** Lo que se guarda o descarga siempre es un .xlsx (un .xlsm pierde las macros). */
+const nombreXlsx = (nombre: string) =>
+  /\.xlsx$/i.test(nombre) ? nombre : /\.xlsm$/i.test(nombre) ? nombre.replace(/\.xlsm$/i, ".xlsx") : `${nombre}.xlsx`;
+
 const normalizarTsv = (t: string) => t.replace(/\r\n/g, "\n").replace(/\n$/, "");
 
 // Logo completo (los tres chevrones encendidos) para la barra de título.
@@ -342,7 +346,7 @@ function EditorCargado({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = filename.toLowerCase().endsWith(".xlsx") ? filename : `${filename}.xlsx`;
+      a.download = nombreXlsx(filename);
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       const hash = await hashSha256(blob);
@@ -362,7 +366,7 @@ function EditorCargado({
     setGuardando(true);
     const libro = estado.libro;
     try {
-      const version = await guardarVersionEvidencia(evidenciaId, await escribirXlsx(libro), filename, texto);
+      const version = await guardarVersionEvidencia(evidenciaId, await escribirXlsx(libro), nombreXlsx(filename), texto);
       despachar({ tipo: "guardado", libro });
       toast.success(`Versión ${version.version} guardada · SHA-256 ${version.hash.slice(0, 8)}…${version.hash.slice(-8)}`);
       onGuardado?.(version);
