@@ -57,14 +57,15 @@ const SCRIPTS = [
   "041_estado_revision_planes.sql",
   "042_procesos_en_asignaciones.sql",
   "043_seed_plan_demo.sql",
+  "044_flujo_aprobacion_planes.sql",
 ];
 
 // Las tablas del modelo entidad-relación de docs/diseno/base-de-datos.md.
 const TABLAS = [
-  "action_plan_findings", "action_plan_public_id_counters", "action_plan_steps", "action_plans", "area", "audit_controls", "audit_engagement", "audit_engagement_team", "audit_entity",
+  "action_plan_approval_events", "action_plan_findings", "action_plan_public_id_counters", "action_plan_steps", "action_plans", "area", "audit_controls", "audit_engagement", "audit_engagement_team", "audit_entity",
   "audit_plans", "audit_procedure_type", "audit_procedures", "audit_status", "audits", "business",
   "business_units", "catalog_department", "catalog_domain", "catalogs", "conflict_declarations", "control_horas",
-  "control_procedure", "controls", "division", "evidence", "findings", "fiscal_periods", "permissions",
+  "control_procedure", "controls", "division", "evidence", "findings", "fiscal_periods", "notifications", "permissions",
   "processes", "risk_library", "risk_register", "role_permissions", "roles", "structure_code_counters", "structure_options", "users",
 ];
 

@@ -1,4 +1,5 @@
 import type pg from "pg";
+import { ESTADOS_BANDEJA, type AccionFlujoPlan, type EventoFlujoPlan } from "../domain/flujoPlanAccion.js";
 import type {
   DatosEdicionPlanAccion,
   DatosPlanAccion,
@@ -7,7 +8,8 @@ import type {
   PasoPlanAccion,
   PlanAccion,
 } from "../domain/planesAccion.js";
-import type { RepositorioPlanesAccion } from "./planesAccion.js";
+import type { Notificacion } from "./notificaciones.js";
+import type { RepositorioPlanesAccion, TransicionPlan } from "./planesAccion.js";
 
 interface FilaHallazgo {
   id: string;
@@ -221,15 +223,101 @@ export class RepositorioPlanesAccionSql implements RepositorioPlanesAccion {
     return resultado.rowCount === 1 ? this.buscarPorId(id) : null;
   }
 
-  async aprobar(id: number) {
-    const resultado = await this.pool.query(
-      `UPDATE action_plans
-       SET status = 'En Revisión'
-       WHERE id = $1 AND status <> 'En Revisión'
-       RETURNING id`,
+  async transicionar(id: number, t: TransicionPlan) {
+    const cliente = await this.pool.connect();
+    try {
+      await cliente.query("BEGIN");
+      // El bloqueo de la fila hace que, de dos revisores simultáneos, el segundo vea ya el estado nuevo.
+      const actual = await cliente.query<{ status: EstadoPlanAccion }>(
+        "SELECT status FROM action_plans WHERE id = $1 FOR UPDATE",
+        [id],
+      );
+      const estadoAnterior = actual.rows[0]?.status;
+      if (!estadoAnterior || !t.desde.includes(estadoAnterior)) {
+        await cliente.query("ROLLBACK");
+        return null;
+      }
+      await cliente.query("UPDATE action_plans SET status = $1 WHERE id = $2", [t.hacia, id]);
+      await cliente.query(
+        `INSERT INTO action_plan_approval_events
+           (action_plan_id, action, from_status, to_status, actor_id, actor_name, actor_role, reason, signature_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [id, t.accion, estadoAnterior, t.hacia, t.actor.id, t.actor.nombre, t.actor.rol, t.motivo ?? null, t.firmaHash ?? null],
+      );
+      if (t.notificar?.usuarioIds.length) {
+        await cliente.query(
+          `INSERT INTO notifications (user_id, type, message, entity_type, entity_id)
+           SELECT unnest($1::int[]), $2, $3, 'action_plan', $4`,
+          [t.notificar.usuarioIds, `plan_accion.${t.accion}`, t.notificar.mensaje, String(id)],
+        );
+      }
+      await cliente.query("COMMIT");
+    } catch (error) {
+      await cliente.query("ROLLBACK");
+      throw error;
+    } finally {
+      cliente.release();
+    }
+    return this.buscarPorId(id);
+  }
+
+  async listarRevision() {
+    const resultado = await this.pool.query<FilaPlan>(
+      `${SELECT_PLAN} WHERE p.status = ANY($1::varchar[]) ORDER BY p.due_date ASC`,
+      [[...ESTADOS_BANDEJA]],
+    );
+    return this.agregarPasos(resultado.rows);
+  }
+
+  async listarFlujo(id: number) {
+    const resultado = await this.pool.query<FilaEvento>(
+      `SELECT id, action_plan_id, action, from_status, to_status, actor_id, actor_name, actor_role,
+              reason, signature_hash, created_at
+       FROM action_plan_approval_events
+       WHERE action_plan_id = $1
+       ORDER BY id`,
       [id],
     );
-    return resultado.rowCount === 1 ? this.buscarPorId(id) : null;
+    return resultado.rows.map(aEvento);
+  }
+
+  async hashesEvidenciaPlan(id: number) {
+    const resultado = await this.pool.query<{ step_id: number; file_hash: string }>(
+      `SELECT s.id AS step_id, e.file_hash
+       FROM action_plan_steps s
+       JOIN evidence e ON e.entity_type = 'action_plan_step' AND e.entity_id = s.id::text
+       WHERE s.action_plan_id = $1`,
+      [id],
+    );
+    const porPaso: Record<number, string[]> = {};
+    for (const fila of resultado.rows) {
+      (porPaso[fila.step_id] ??= []).push(fila.file_hash);
+    }
+    return porPaso;
+  }
+
+  async listarNotificaciones(usuarioId: number) {
+    const resultado = await this.pool.query<FilaNotificacion>(
+      `SELECT id, type, message, entity_type, entity_id, read_at, created_at
+       FROM notifications
+       WHERE user_id = $1
+       ORDER BY id DESC
+       LIMIT 50`,
+      [usuarioId],
+    );
+    return resultado.rows.map(aNotificacion);
+  }
+
+  async marcarNotificacionLeida(id: number, usuarioId: number) {
+    const resultado = await this.pool.query(
+      "UPDATE notifications SET read_at = COALESCE(read_at, now()) WHERE id = $1 AND user_id = $2",
+      [id, usuarioId],
+    );
+    return resultado.rowCount === 1;
+  }
+
+  async marcarTodasLeidas(usuarioId: number) {
+    await this.pool.query("UPDATE notifications SET read_at = now() WHERE user_id = $1 AND read_at IS NULL", [usuarioId]);
   }
 
   async actualizarPaso(planId: number, pasoId: number, completado: boolean) {
@@ -312,4 +400,54 @@ interface FilaPaso {
   is_completed: boolean;
   created_at: Date;
   evidence_count: number | string | null;
+}
+
+interface FilaEvento {
+  id: number;
+  action_plan_id: number;
+  action: AccionFlujoPlan;
+  from_status: EstadoPlanAccion;
+  to_status: EstadoPlanAccion;
+  actor_id: number;
+  actor_name: string;
+  actor_role: string;
+  reason: string | null;
+  signature_hash: string | null;
+  created_at: Date;
+}
+
+function aEvento(fila: FilaEvento): EventoFlujoPlan {
+  return {
+    id: fila.id,
+    planAccionId: fila.action_plan_id,
+    accion: fila.action,
+    estadoAnterior: fila.from_status,
+    estadoNuevo: fila.to_status,
+    actor: { id: fila.actor_id, nombre: fila.actor_name, rol: fila.actor_role },
+    motivo: fila.reason,
+    firmaHash: fila.signature_hash,
+    fecha: fila.created_at.toISOString(),
+  };
+}
+
+interface FilaNotificacion {
+  id: number;
+  type: string;
+  message: string;
+  entity_type: string;
+  entity_id: string;
+  read_at: Date | null;
+  created_at: Date;
+}
+
+function aNotificacion(fila: FilaNotificacion): Notificacion {
+  return {
+    id: fila.id,
+    tipo: fila.type,
+    mensaje: fila.message,
+    entidadTipo: fila.entity_type,
+    entidadId: fila.entity_id,
+    leida: fila.read_at !== null,
+    fecha: fila.created_at.toISOString(),
+  };
 }

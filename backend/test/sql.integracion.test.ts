@@ -14,6 +14,7 @@ import { crearVerificadorDev } from "../src/auth/verificador.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
 import { ErrorCodigoDuplicado } from "../src/repos/planes.js";
 import { RepositorioEvidenciasMemoria } from "../src/repos/evidenciasMemoria.js";
+import type { TransicionPlan } from "../src/repos/planesAccion.js";
 import { RepositorioPlanesAccionMemoria } from "../src/repos/planesAccionMemoria.js";
 import { RepositorioPlanesAccionSql } from "../src/repos/planesAccionSql.js";
 import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
@@ -51,13 +52,13 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
 
     // Los scripts se ejecutan dos veces cada uno: deben poder repetirse.
     await pool.query(`
-      DROP TABLE IF EXISTS action_plan_public_id_counters, action_plan_steps, action_plan_findings, action_plans, findings, conflict_declarations, audit_controls, controls, processes, business_units, fiscal_periods,
+      DROP TABLE IF EXISTS notifications, action_plan_approval_events, action_plan_public_id_counters, action_plan_steps, action_plan_findings, action_plans, findings, conflict_declarations, audit_controls, controls, processes, business_units, fiscal_periods,
                            audits, audit_plans, users, role_permissions, permissions, roles CASCADE`);
     const scripts = [
       "001_schema.sql", "002_seed.sql", "004_findings.sql", "006_auditorias.sql", "007_action_plans.sql",
       "008_estructura_y_controles.sql", "034_portal_auditado.sql", "035_normalizar_root_cause_plan.sql",
       "036_permitir_varios_planes_por_hallazgo.sql", "037_migrar_relacion_planes_hallazgos.sql",
-      "038_public_id_planes_accion.sql", "041_estado_revision_planes.sql", "042_procesos_en_asignaciones.sql",
+      "038_public_id_planes_accion.sql", "041_estado_revision_planes.sql", "042_procesos_en_asignaciones.sql", "044_flujo_aprobacion_planes.sql",
     ];
     for (const nombre of [...scripts, ...scripts]) {
       await pool.query(await script(nombre));
@@ -69,6 +70,7 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
 
   beforeEach(async () => {
     await pool.query(`
+      TRUNCATE action_plan_approval_events, notifications;
       DELETE FROM action_plans; DELETE FROM findings; DELETE FROM audit_controls; DELETE FROM controls; DELETE FROM processes; DELETE FROM business_units;
       DELETE FROM fiscal_periods; DELETE FROM audit_plans; DELETE FROM users;`);
     await repo.crearUsuario({ nombre: "Sofía Ramírez", correo: "s.ramirez@expedite.com", rolId: rolId["Administrador"]! });
@@ -310,5 +312,184 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
     expect(await planesAccion.buscarPorId(creado.id)).toEqual(editado);
     expect(await planesAccion.actualizar(999_999, { ...datos, estado: "Completado" })).toBeNull();
     expect(await planesAccion.listarPorResponsable(admin.id)).toHaveLength(1);
+  });
+
+  describe("flujo de aprobación de planes de acción", () => {
+    let planes: RepositorioPlanesAccionSql;
+    let admin: { id: number; nombre: string };
+    let ana: { id: number; nombre: string };
+    let planId: number;
+
+    const transicion = (cambios: Partial<TransicionPlan> = {}): TransicionPlan => ({
+      desde: ["Pendiente"],
+      hacia: "En Revisión",
+      accion: "apertura",
+      actor: { id: admin.id, nombre: admin.nombre, rol: "Administrador" },
+      ...cambios,
+    });
+    const estadoEnBase = async (id: number) =>
+      (await pool.query("SELECT status FROM action_plans WHERE id = $1", [id])).rows[0].status;
+    const contarEventos = async (id: number) =>
+      (await pool.query("SELECT COUNT(*)::int AS total FROM action_plan_approval_events WHERE action_plan_id = $1", [id])).rows[0].total;
+
+    beforeEach(async () => {
+      planes = new RepositorioPlanesAccionSql(pool);
+      admin = (await repo.buscarPorCorreo("s.ramirez@expedite.com"))!;
+      ana = (await repo.buscarPorCorreo("a.rodriguez@expedite.com"))!;
+      await pool.query(
+        `INSERT INTO findings (id, folio, title, severity, status, "auditId") VALUES ('HAL-F-1', 'HAL-F-1', 'Hallazgo del flujo', 'Alto', 'Abierto', 'AUD-001')`,
+      );
+      const creado = await planes.crear(
+        {
+          hallazgoId: "HAL-F-1",
+          descripcion: "Corregir accesos",
+          responsableId: ana.id,
+          fechaCompromiso: "2026-11-30",
+          pasos: [{ descripcion: "Revisar roles", usuarioAsignadoId: ana.id, fechaCompromiso: "2026-11-15" }],
+        },
+        admin.id,
+      );
+      planId = creado.id;
+      await pool.query("UPDATE action_plans SET status = 'Pendiente' WHERE id = $1", [planId]);
+    });
+
+    it("cambia el estado y escribe el evento y las notificaciones juntos", async () => {
+      const plan = await planes.transicionar(planId, transicion({ notificar: { usuarioIds: [ana.id], mensaje: "En revisión" } }));
+
+      expect(plan?.estado).toBe("En Revisión");
+      expect(plan?.creadoPorId).toBe(admin.id);
+      expect(await planes.listarFlujo(planId)).toEqual([
+        expect.objectContaining({
+          planAccionId: planId,
+          accion: "apertura",
+          estadoAnterior: "Pendiente",
+          estadoNuevo: "En Revisión",
+          actor: { id: admin.id, nombre: admin.nombre, rol: "Administrador" },
+          motivo: null,
+          firmaHash: null,
+          fecha: expect.any(String),
+        }),
+      ]);
+      expect(await planes.listarNotificaciones(ana.id)).toEqual([
+        expect.objectContaining({ mensaje: "En revisión", entidadTipo: "action_plan", entidadId: String(planId), leida: false }),
+      ]);
+    });
+
+    it("guarda el motivo del rechazo y la firma de la aprobación", async () => {
+      await planes.transicionar(planId, transicion());
+      await planes.transicionar(planId, transicion({ desde: ["En Revisión"], hacia: "Rechazado", accion: "rechazo", motivo: "Falta evidencia" }));
+      await pool.query("UPDATE action_plans SET status = 'En Revisión' WHERE id = $1", [planId]);
+      await planes.transicionar(planId, transicion({ desde: ["En Revisión"], hacia: "Aprobado", accion: "aprobacion", firmaHash: "a".repeat(64) }));
+
+      const flujo = await planes.listarFlujo(planId);
+      expect(flujo.map((e) => e.accion)).toEqual(["apertura", "rechazo", "aprobacion"]);
+      expect(flujo[1]!.motivo).toBe("Falta evidencia");
+      expect(flujo[2]!.firmaHash).toBe("a".repeat(64));
+    });
+
+    it("no hace nada si el plan no está en un estado de origen válido", async () => {
+      const plan = await planes.transicionar(planId, transicion({ desde: ["En Revisión"], hacia: "Aprobado", accion: "aprobacion", firmaHash: "a".repeat(64) }));
+
+      expect(plan).toBeNull();
+      expect(await estadoEnBase(planId)).toBe("Pendiente");
+      expect(await contarEventos(planId)).toBe(0);
+    });
+
+    it("devuelve null si el plan no existe", async () => {
+      expect(await planes.transicionar(999_999, transicion())).toBeNull();
+    });
+
+    it("de dos transiciones simultáneas solo una se aplica", async () => {
+      const resultados = await Promise.all([
+        planes.transicionar(planId, transicion({ notificar: { usuarioIds: [ana.id], mensaje: "Uno" } })),
+        planes.transicionar(planId, transicion({ notificar: { usuarioIds: [ana.id], mensaje: "Dos" } })),
+      ]);
+
+      expect(resultados.filter(Boolean)).toHaveLength(1);
+      expect(await contarEventos(planId)).toBe(1);
+      expect(await planes.listarNotificaciones(ana.id)).toHaveLength(1);
+    });
+
+    it("la bitácora del flujo es inmutable", async () => {
+      await planes.transicionar(planId, transicion());
+
+      await expect(pool.query("UPDATE action_plan_approval_events SET actor_name = 'Otro'")).rejects.toThrow(/inmutable/);
+      await expect(pool.query("DELETE FROM action_plan_approval_events")).rejects.toThrow(/inmutable/);
+      expect(await contarEventos(planId)).toBe(1);
+    });
+
+    it("la base exige el motivo del rechazo y la firma de la aprobación", async () => {
+      await expect(
+        planes.transicionar(planId, transicion({ hacia: "Rechazado", accion: "rechazo", motivo: "   " })),
+      ).rejects.toThrow();
+      await expect(planes.transicionar(planId, transicion({ hacia: "Aprobado", accion: "aprobacion" }))).rejects.toThrow();
+      expect(await estadoEnBase(planId)).toBe("Pendiente");
+    });
+
+    it("si falla una notificación no cambia el estado ni queda el evento", async () => {
+      await expect(
+        planes.transicionar(planId, transicion({ notificar: { usuarioIds: [999_999], mensaje: "Sin destinatario" } })),
+      ).rejects.toThrow();
+
+      expect(await estadoEnBase(planId)).toBe("Pendiente");
+      expect(await contarEventos(planId)).toBe(0);
+    });
+
+    it("el script convierte a Pendiente los planes En Revisión sin eventos y respeta los ya revisados", async () => {
+      await planes.transicionar(planId, transicion());
+      const antiguo = await planes.crear(
+        { hallazgoId: "HAL-F-1", descripcion: "Plan anterior", responsableId: ana.id, fechaCompromiso: "2026-11-30" },
+        admin.id,
+      );
+      await pool.query("UPDATE action_plans SET status = 'En Revisión' WHERE id = $1", [antiguo.id]);
+
+      await pool.query(await script("044_flujo_aprobacion_planes.sql"));
+
+      expect(await estadoEnBase(antiguo.id)).toBe("Pendiente");
+      expect(await estadoEnBase(planId)).toBe("En Revisión");
+    });
+
+    it("la bandeja lista solo los planes en estados de revisión", async () => {
+      const fuera = await planes.crear(
+        { hallazgoId: "HAL-F-1", descripcion: "Fuera del flujo", responsableId: ana.id, fechaCompromiso: "2026-11-30" },
+        admin.id,
+      );
+
+      const ids = (await planes.listarRevision()).map((p) => p.id);
+
+      expect(ids).toContain(planId);
+      expect(ids).not.toContain(fuera.id);
+    });
+
+    it("devuelve los hashes de la evidencia por paso", async () => {
+      const paso = (await planes.buscarPorId(planId))!.pasos[0]!;
+      await pool.query(
+        `INSERT INTO evidence (id, entity_id, entity_type, file_name, mime_type, file_size, file_hash, storage_path, uploaded_by)
+         VALUES ('EVD-F-1', $1, 'action_plan_step', 'a.pdf', 'pdf', 10, 'hash-1', 'evidencias/a.pdf', $2)`,
+        [String(paso.id), String(ana.id)],
+      );
+
+      expect(await planes.hashesEvidenciaPlan(planId)).toEqual({ [paso.id]: ["hash-1"] });
+    });
+
+    it("cada usuario solo marca como leídas sus notificaciones", async () => {
+      await planes.transicionar(planId, transicion({ notificar: { usuarioIds: [ana.id], mensaje: "Aviso" } }));
+      const [aviso] = await planes.listarNotificaciones(ana.id);
+
+      expect(await planes.marcarNotificacionLeida(aviso!.id, admin.id)).toBe(false);
+      expect((await planes.listarNotificaciones(ana.id))[0]!.leida).toBe(false);
+
+      expect(await planes.marcarNotificacionLeida(aviso!.id, ana.id)).toBe(true);
+      expect((await planes.listarNotificaciones(ana.id))[0]!.leida).toBe(true);
+    });
+
+    it("marca todas las notificaciones del usuario sin tocar las de otros", async () => {
+      await planes.transicionar(planId, transicion({ notificar: { usuarioIds: [ana.id, admin.id], mensaje: "Aviso" } }));
+
+      await planes.marcarTodasLeidas(ana.id);
+
+      expect((await planes.listarNotificaciones(ana.id))[0]!.leida).toBe(true);
+      expect((await planes.listarNotificaciones(admin.id))[0]!.leida).toBe(false);
+    });
   });
 });

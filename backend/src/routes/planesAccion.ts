@@ -170,7 +170,13 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
       throw new ErrorApi(400, "PASOS_PENDIENTES", "Todos los pasos deben estar completados antes de enviar el plan a revisión.");
     }
 
-    const plan = await repo.aprobar(id);
+    const sesion = usuarioEnSesion(res);
+    const plan = await repo.transicionar(id, {
+      desde: ["Asignado", "En Progreso", "Completado", "Rechazado"],
+      hacia: "Pendiente",
+      accion: "envio",
+      actor: { id: sesion.id, nombre: sesion.nombre, rol: sesion.rol },
+    });
     if (!plan) throw new ErrorApi(409, "PLAN_EN_REVISION", "El plan de acción ya está en revisión.");
     registrarEvento({
       accion: "plan_accion.envio_revision",
