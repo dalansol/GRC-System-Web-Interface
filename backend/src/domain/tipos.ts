@@ -15,6 +15,7 @@ export interface Usuario {
   rol: string;
   estado: EstadoUsuario;
   ultimoAcceso: string | null;
+  business_unit_id: number;
 }
 
 export interface UsuarioConPermisos extends Usuario {

@@ -57,8 +57,8 @@ ON CONFLICT DO NOTHING;
 
 -- Evidence tests (archivos adjuntos)
 INSERT INTO evidence
-    (id, entity_id, entity_type, file_name, mime_type, file_size, file_hash, storage_path, uploaded_by, created_at, control_id, finding_id, audit_id)
+    (id, entity_id, entity_type, file_name, mime_type, file_size, file_hash, storage_path, uploaded_by, created_at)
 VALUES
-    ('EVD-TEST-001', 'FND-TEST-001', 'hallazgo', 'evidencia_aprobacion.pdf', 'pdf', 1048576, 'hash1', 'uploads/evidencia_aprobacion.pdf', 'USR-001', '2026-10-01T09:00:00Z', NULL, 'FND-TEST-001', NULL),
-    ('EVD-TEST-002', 'CTR-001', 'control', 'matriz_riesgos.xlsx', 'xlsx', 2048576, 'hash2', 'uploads/matriz_riesgos.xlsx', 'USR-002', '2026-10-02T10:00:00Z', 'CTR-001', NULL, NULL)
+    ('EVD-TEST-001', 'FND-TEST-001', 'hallazgo', 'evidencia_aprobacion.pdf', 'pdf', 1048576, 'hash1', 'uploads/evidencia_aprobacion.pdf', 'USR-001', '2026-10-01T09:00:00Z'),
+    ('EVD-TEST-002', 'CTR-001', 'control', 'matriz_riesgos.xlsx', 'xlsx', 2048576, 'hash2', 'uploads/matriz_riesgos.xlsx', 'USR-002', '2026-10-02T10:00:00Z')
 ON CONFLICT (id) DO NOTHING;

@@ -9,6 +9,7 @@ export interface EventoBitacora {
     | "plan.edicion"
     | "plan_accion.alta"
     | "plan_accion.edicion"
+    | "plan_accion.envio_revision"
     | "conflicto.declaracion"
     | "conflicto.aviso_jefatura"
     | "asistente.resumen"

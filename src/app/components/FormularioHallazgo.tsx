@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Check, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { crearHallazgo } from "../api/hallazgos";
+import { crearHallazgo, type HallazgoApi } from "../api/hallazgos";
 
 export interface FindingControlOption {
   id: string;
@@ -28,6 +28,10 @@ interface FormularioHallazgoProps {
   controls: FindingControlOption[];
   nextFolio: string;
   auditId?: string;
+  /** When set, the control dropdown is hidden and this value is pre-selected. */
+  fixedControlId?: string;
+  /** ID of the auditor creating the finding (stored as ownerId). */
+  ownerId?: string;
   onCreated: (finding: CreatedFinding) => void;
   onClose: () => void;
 }
@@ -75,13 +79,14 @@ function calculateResidualRisk(
   return "Bajo";
 }
 
-const metaEnv = (import.meta as any).env;
-const USE_REAL_BACKEND = metaEnv?.VITE_USE_REAL_BACKEND !== "false";
+const USE_REAL_BACKEND = import.meta.env.VITE_USE_REAL_BACKEND !== "false";
 
 export default function FormularioHallazgo({
   controls,
   nextFolio,
   auditId = "AUD-001",
+  fixedControlId,
+  ownerId,
   onCreated,
   onClose,
 }: FormularioHallazgoProps) {
@@ -90,7 +95,8 @@ export default function FormularioHallazgo({
   const [type, setType] = useState("");
   const [severity, setSeverity] =
     useState<CreatedFinding["severity"]>("Medio");
-  const [controlId, setControlId] = useState("");
+  // When fixedControlId is provided, it is always the selected control.
+  const [controlId, setControlId] = useState(fixedControlId ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -114,7 +120,8 @@ export default function FormularioHallazgo({
     }
     if (!type) nextErrors.type = "Selecciona un tipo";
     if (!severity) nextErrors.severity = "Selecciona una gravedad";
-    if (!controlId) {
+    // Only require manual selection when the control is not pre-fixed.
+    if (!fixedControlId && !controlId) {
       nextErrors.controlId = "Selecciona el control que falló";
     }
 
@@ -133,7 +140,7 @@ export default function FormularioHallazgo({
 
     if (!selectedControl || !residualRisk) return;
 
-    const payload = {
+    const payload: Omit<HallazgoApi, "id"> = {
       folio: nextFolio,
       title: title.trim(),
       description: description.trim(),
@@ -145,7 +152,7 @@ export default function FormularioHallazgo({
       residualRisk,
       status: "Abierto",
       auditId,
-      date: new Date().toISOString().slice(0, 10),
+      ...(ownerId ? { ownerId } : {}),
     };
 
     setIsSubmitting(true);
@@ -154,20 +161,40 @@ export default function FormularioHallazgo({
       let createdFinding: CreatedFinding;
 
       if (USE_REAL_BACKEND) {
-        createdFinding = await crearHallazgo(payload);
+        const response = await crearHallazgo(payload);
+        createdFinding = {
+          id: response.id,
+          folio: response.folio ?? nextFolio,
+          title: response.title,
+          description: response.description ?? payload.description ?? "",
+          type: response.type ?? payload.type ?? "",
+          severity: response.severity,
+          failedControl: response.failedControl ?? selectedControl.name,
+          failedControlId: response.failedControlId ?? selectedControl.id,
+          residualRisk: response.residualRisk ?? residualRisk,
+          status: "Abierto",
+          auditId: response.auditId ?? auditId,
+          date: new Date().toISOString().slice(0, 10),
+        };
       } else {
         // Fallback local en memoria
         createdFinding = {
           id: `HAL-${Date.now()}`,
           ...payload,
-        } as CreatedFinding;
+          failedControl: selectedControl.name,
+          failedControlId: selectedControl.id,
+          residualRisk,
+          status: "Abierto",
+          auditId,
+          date: new Date().toISOString().slice(0, 10),
+        };
       }
 
       onCreated(createdFinding);
       toast.success(`Hallazgo ${nextFolio} registrado correctamente`);
       onClose();
-    } catch (error: any) {
-      toast.error(error.message || "Error inesperado al intentar guardar el hallazgo");
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : "Error inesperado al intentar guardar el hallazgo");
     } finally {
       setIsSubmitting(false);
     }
@@ -292,32 +319,35 @@ export default function FormularioHallazgo({
             </select>
           </div>
 
-          <div className="col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-muted-foreground">
-              Control que falló
-            </label>
-            <select
-              value={controlId}
-              disabled={isSubmitting}
-              onChange={event => {
-                setControlId(event.target.value);
-                setErrors(current => ({ ...current, controlId: "" }));
-              }}
-              className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm disabled:bg-slate-100"
-            >
-              <option value="">Seleccionar control</option>
-              {controls.map(control => (
-                <option key={control.id} value={control.id}>
-                  {control.id} - {control.name}
-                </option>
-              ))}
-            </select>
-            {errors.controlId && (
-              <p className="mt-1 text-xs text-red-600">
-                {errors.controlId}
-              </p>
-            )}
-          </div>
+          {/* Control selector: hidden when the control is pre-fixed */}
+          {!fixedControlId && (
+            <div className="col-span-2">
+              <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                Control que falló
+              </label>
+              <select
+                value={controlId}
+                disabled={isSubmitting}
+                onChange={event => {
+                  setControlId(event.target.value);
+                  setErrors(current => ({ ...current, controlId: "" }));
+                }}
+                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm disabled:bg-slate-100"
+              >
+                <option value="">Seleccionar control</option>
+                {controls.map(control => (
+                  <option key={control.id} value={control.id}>
+                    {control.id} - {control.name}
+                  </option>
+                ))}
+              </select>
+              {errors.controlId && (
+                <p className="mt-1 text-xs text-red-600">
+                  {errors.controlId}
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="col-span-2 rounded-md border border-primary/20 bg-primary/5 p-3">
             <div className="text-xs font-semibold text-muted-foreground">

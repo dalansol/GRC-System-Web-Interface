@@ -2,7 +2,7 @@ import { pedir } from "./cliente";
 
 // Planes de acción correctivos de un hallazgo (SF-10, SF-11; historia #91).
 
-export type EstadoPlanAccion = "Asignado" | "En Progreso" | "Completado";
+export type EstadoPlanAccion = "Asignado" | "En Progreso" | "Completado" | "En Revisión";
 
 export interface HallazgoResumen {
   id: string;
@@ -17,19 +17,47 @@ export interface HallazgoResumen {
 
 export interface PlanAccion {
   id: number;
+  publicId: string;
+  titulo: string;
+  causaRaiz: string | null;
   hallazgo: HallazgoResumen;
   descripcion: string;
   responsable: { id: number; nombre: string };
   /** AAAA-MM-DD */
   fechaCompromiso: string;
+  status: EstadoPlanAccion;
   estado: EstadoPlanAccion;
   creadoEn: string;
+  hallazgosRelacionados: HallazgoResumen[];
+  pasos: PasoPlanAccion[];
+}
+
+export interface PasoPlanAccion {
+  id: number;
+  action_plan_id: number;
+  planAccionId: number;
+  usuarioAsignado: { id: number; nombre: string } | null;
+  descripcion: string;
+  fechaCompromiso: string | null;
+  completado: boolean;
+  creadoEn: string;
+  evidenciasCount: number;
 }
 
 export interface NuevoPlanAccion {
   hallazgoId: string;
+  titulo: string;
+  causaRaiz: string;
   descripcion: string;
   responsableId: number;
+  fechaCompromiso: string;
+  pasos: NuevoPasoPlanAccion[];
+}
+
+export interface NuevoPasoPlanAccion {
+  id?: number;
+  descripcion: string;
+  usuarioAsignadoId: number;
   fechaCompromiso: string;
 }
 
@@ -58,6 +86,7 @@ export const ESTADOS_PLAN_ACCION: EstadoPlanAccion[] = ["Asignado", "En Progreso
 
 /** Campos que el equipo de auditoría puede modificar. El responsable auditado no edita su plan. */
 export interface CambiosPlanAccion {
+  titulo?: string;
   descripcion?: string;
   responsableId?: number;
   fechaCompromiso?: string;
@@ -69,3 +98,12 @@ export const ROLES_EDICION_PLAN_ACCION = ["Administrador", "Jefe de Auditoría",
 
 export const actualizarPlanAccion = (id: number, cambios: CambiosPlanAccion) =>
   pedir<PlanAccion>(`/planes-accion/${id}`, { metodo: "PATCH", cuerpo: cambios });
+
+export const aprobarPlanAccion = (id: number) =>
+  pedir<PlanAccion>(`/planes-accion/${id}/aprobar`, { metodo: "POST" });
+
+export const actualizarPasoPlanAccion = (planId: number, pasoId: number, completado: boolean) =>
+  pedir<PasoPlanAccion>(`/planes-accion/${planId}/pasos/${pasoId}`, {
+    metodo: "PATCH",
+    cuerpo: { completado },
+  });

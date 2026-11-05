@@ -12,6 +12,8 @@ const USUARIOS_DEMO = [
   { rol: "Auditor", nombre: "Ana Rodríguez", correo: "a.rodriguez@expedite.com" },
   { rol: "Solo Lectura", nombre: "Diego Torres", correo: "d.torres@expedite.com" },
   { rol: "Consultor", nombre: "Pedro Sánchez", correo: "p.sanchez@expedite.com", inactivo: true },
+  { nombre: "Javier Ejemplo", correo: "j.ejemplo@expedite.com", rol: "Jefe Auditado", estado: "active"},
+  { nombre: "Charlie Ejemplo", correo: "c.ejemplo@expedite.com", rol: "Empleado Auditado", estado: "active" }
 ];
 
 export function AccesoDemo({ onElegir, campo }: { onElegir: (correo: string) => void; campo: React.RefObject<HTMLInputElement | null> }) {

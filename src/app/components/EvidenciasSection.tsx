@@ -37,6 +37,8 @@ interface EvidenceFile {
   version?: number;
 }
 
+type EvidenceEntityType = "control" | "hallazgo" | "action_plan_step";
+
 // ─── Fallback mock data (used when the API is unavailable) ────────────────────
 const FALLBACK_EVIDENCES: EvidenceFile[] = [
   { id: "EV-001", name: "Conciliacion_Bancaria_Jun2025.xlsx", size: "2.1 MB", mimeType: "xlsx", hash: "sha256:a3f9c12e…4f2a1c0e", uploadDate: "2025-07-12", uploadedBy: "M. García", entityId: "CTR-001" },
@@ -69,23 +71,15 @@ function mapApiRow(row: any): EvidenceFile {
 export default function EvidenciasSection({ 
   entityId, 
   entityType = "control",
-  controlId,
-  findingId,
-  auditId,
-  businessEntityId,
   puedeSubir,
+  onEvidenceCountChange,
 }: { 
   entityId: string; 
-  entityType?: "control" | "hallazgo";
-  controlId?: string;
-  findingId?: string;
-  auditId?: string;
-  businessEntityId?: string;
+  entityType?: EvidenceEntityType;
   puedeSubir?: boolean;
+  onEvidenceCountChange?: (count: number) => void;
 }) {
-  // Hallazgo: TBD quién sube evidencia (CLAUDE.md §7 #19); por ahora cualquier usuario en sesión.
-  const puedeSubirEvidencia =
-    entityType === "control" ? puedeSubir === true : true;
+  const puedeSubirEvidencia = puedeSubir === true;
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -100,16 +94,17 @@ export default function EvidenciasSection({
   const fetchEvidences = useCallback(async () => {
     try {
       const query = new URLSearchParams({ entityId, entityType });
-      if (auditId) query.set("auditId", auditId);
       const data = await pedir<any[]>(`/evidencias?${query.toString()}`);
       setFiles(data.map(mapApiRow));
+      onEvidenceCountChange?.(data.length);
       setUsingFallback(false);
     } catch (reason: unknown) {
       setFiles([]);
+      onEvidenceCountChange?.(0);
       setUsingFallback(false);
       setError(reason instanceof Error ? reason.message : "No se pudieron cargar las evidencias.");
     }
-  }, [entityId, entityType, auditId]);
+  }, [entityId, entityType]);
 
   useEffect(() => {
     fetchEvidences();
@@ -150,6 +145,7 @@ export default function EvidenciasSection({
         uploadedBy: "M. García", entityId, version: 1,
       };
       setFiles(prev => [newEv, ...prev]);
+      onEvidenceCountChange?.(files.length + 1);
       toast.success(`Evidencia "${file.name}" cargada correctamente`);
       if (inputRef.current) inputRef.current.value = "";
       return;
@@ -162,11 +158,6 @@ export default function EvidenciasSection({
       formData.append("file", file);
       formData.append("entityId", entityId);
       formData.append("entityType", entityType);
-      if (auditId) formData.append("auditId", auditId);
-      if (controlId) formData.append("controlId", controlId);
-      if (findingId) formData.append("findingId", findingId);
-      if (businessEntityId) formData.append("businessEntityId", businessEntityId);
-
       await pedirFormData("/evidencias/upload", formData);
 
       toast.success(`Evidencia "${file.name}" cargada correctamente`);
@@ -183,6 +174,7 @@ export default function EvidenciasSection({
   const removeFile = async (id: string) => {
     if (usingFallback) {
       setFiles(prev => prev.filter(f => f.id !== id));
+      onEvidenceCountChange?.(Math.max(0, files.length - 1));
       return;
     }
 

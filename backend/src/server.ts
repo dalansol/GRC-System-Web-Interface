@@ -39,7 +39,7 @@ let repoConflictos: RepositorioConflictos;
 let repoEvidencias: RepositorioEvidencias;
 let repoEstructura: RepositorioEstructura;
 let repoCatalogos: RepositorioCatalogos;
-const rutasSinSesion: Router[] = [];
+const rutasConSesion: Router[] = [];
 
 if (config.datos.modo === "sql") {
   const repoSql = await RepositorioSql.conectar(config.datos);
@@ -52,7 +52,7 @@ if (config.datos.modo === "sql") {
   repoCatalogos = new RepositorioCatalogosSql(repoSql.pool);
   // Las rutas de hallazgos y evidencias usan la misma conexión que las de usuarios.
   registrarPool(repoSql.pool);
-  rutasSinSesion.push((await import("./routes/hallazgos.js")).default);
+  rutasConSesion.push((await import("./routes/hallazgos.js")).default);
 } else {
   // Sin base de datos no hay rutas de hallazgos ni de evidencias; el frontend usa sus datos de prueba.
   repo = new RepositorioMemoria();
@@ -81,13 +81,13 @@ const app = crearApp({
   repoConflictos,
   repoEstructura,
   repoCatalogos,
-  rutasConSesion: config.datos.modo === "sql"
-    ? [(await import("./routes/evidencias.js")).rutasEvidencias(almacenamiento)]
-    : [],
+  rutasConSesion: [
+    ...(config.datos.modo === "sql" ? [(await import("./routes/evidencias.js")).rutasEvidencias(almacenamiento)] : []),
+    ...rutasConSesion,
+  ],
   verificador,
   dominiosPermitidos: config.dominiosPermitidos,
   corsOrigin: config.corsOrigin,
-  rutasSinSesion,
 });
 
 app.listen(config.puerto, () => {

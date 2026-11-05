@@ -24,6 +24,7 @@ export interface HallazgoViewModel {
   controlId?: string;
   failedControlId?: string;
   ownerId?: string;
+  businessUnitId?: number;
 }
 
 const orderFindings = (findings: HallazgoViewModel[]) =>
@@ -51,20 +52,28 @@ export function useHallazgosViewModel() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // Planes de acción por id de hallazgo (SF-10). Siempre vienen del backend, que es quien valida la fecha de compromiso.
-  const [planesPorHallazgo, setPlanesPorHallazgo] = useState<Record<string, PlanAccion>>({});
+  const [planesPorHallazgo, setPlanesPorHallazgo] = useState<Record<string, PlanAccion[]>>({});
   const [hallazgoParaPlan, setHallazgoParaPlan] = useState<HallazgoViewModel | null>(null);
 
   const fetchPlanesAccion = async () => {
     try {
       const planes = await listarPlanesAccion();
-      setPlanesPorHallazgo(Object.fromEntries(planes.map((plan) => [plan.hallazgo.id, plan])));
+      setPlanesPorHallazgo(
+        planes.reduce<Record<string, PlanAccion[]>>((planesPorHallazgo, plan) => {
+          (planesPorHallazgo[plan.hallazgo.id] ??= []).push(plan);
+          return planesPorHallazgo;
+        }, {}),
+      );
     } catch (error: any) {
       toast.error(error.message || "Error al cargar los planes de acción.");
     }
   };
 
   const handlePlanCreado = (plan: PlanAccion) => {
-    setPlanesPorHallazgo((prev) => ({ ...prev, [plan.hallazgo.id]: plan }));
+    setPlanesPorHallazgo((prev) => ({
+      ...prev,
+      [plan.hallazgo.id]: [...(prev[plan.hallazgo.id] ?? []), plan],
+    }));
     // Al asignar un plan el hallazgo pasa a "Asignado" (el backend hace lo mismo en la base).
     setHallazgos((prev) => prev.map((item) => (item.id === plan.hallazgo.id ? { ...item, status: "Asignado" } : item)));
     setHallazgoParaPlan(null);
@@ -72,7 +81,10 @@ export function useHallazgosViewModel() {
 
   // La edición solo cambia el plan; el status del hallazgo no se toca.
   const handlePlanActualizado = (plan: PlanAccion) => {
-    setPlanesPorHallazgo((prev) => ({ ...prev, [plan.hallazgo.id]: plan }));
+    setPlanesPorHallazgo((prev) => ({
+      ...prev,
+      [plan.hallazgo.id]: (prev[plan.hallazgo.id] ?? []).map((actual) => actual.id === plan.id ? plan : actual),
+    }));
     setHallazgoParaPlan(null);
   };
 

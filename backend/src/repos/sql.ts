@@ -23,10 +23,11 @@ interface FilaUsuario {
   role: string;
   status: EstadoUsuario;
   last_login: Date | null;
+  business_unit_id: number | null;
 }
 
 const SELECT_USUARIO = `
-  SELECT u.id, u.name, u.email, r.name AS role, u.status, u.last_login
+  SELECT u.id, u.name, u.email, r.name AS role, u.status, u.last_login, u.business_unit_id
   FROM users u
   JOIN roles r ON r.id = u.role_id`;
 
@@ -41,6 +42,7 @@ function aUsuario(fila: FilaUsuario): Usuario {
     rol: fila.role,
     estado: fila.status,
     ultimoAcceso: fila.last_login ? fila.last_login.toISOString() : null,
+    business_unit_id: fila.business_unit_id ?? 10,
   };
 }
 

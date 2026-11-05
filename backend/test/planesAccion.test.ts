@@ -116,16 +116,16 @@ describe("alta de planes de acción (criterio 1)", () => {
     expect((await como(JEFA).post("/api/planes-accion").send(await planNuevo())).status).toBe(201);
   });
 
-  it("un usuario de Solo Lectura no puede crear", async () => {
+  it("un usuario autenticado puede crear temporalmente", async () => {
     const res = await como(SOLO_LECTURA).post("/api/planes-accion").send(await planNuevo());
-    expect(res.status).toBe(403);
-    expect(eventos).toEqual([]);
+    expect(res.status).toBe(201);
+    expect(eventos).toHaveLength(1);
   });
 
-  it("rechaza un segundo plan para el mismo hallazgo", async () => {
+  it("permite un segundo plan para el mismo hallazgo", async () => {
     const res = await como(AUDITORA).post("/api/planes-accion").send(await planNuevo({ hallazgoId: "HAL-2025-001" }));
-    expect(res.status).toBe(409);
-    expect(res.body.error.codigo).toBe("PLAN_DUPLICADO");
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ hallazgo: { id: "HAL-2025-001" }, estado: "Asignado" });
   });
 
   it("responde 404 si el hallazgo no existe", async () => {

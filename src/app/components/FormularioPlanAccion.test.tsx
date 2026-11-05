@@ -29,6 +29,7 @@ const HALLAZGO = {
 
 const PLAN: PlanAccion = {
   id: 7,
+  publicId: "PACC-2025-001",
   hallazgo: HALLAZGO,
   descripcion: "Actualizar el calendario normativo.",
   responsable: { id: 6, nombre: "Laura Fernández" },

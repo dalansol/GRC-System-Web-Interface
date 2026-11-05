@@ -1,19 +1,24 @@
 import { useEffect, useState } from "react";
-import { ClipboardCheck, ClipboardList, Loader2, Check, X } from "lucide-react";
+import { ClipboardCheck, Loader2, Check, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   AISummaryCard,
+  Breadcrumbs,
   Card,
   DetailField,
   ValidityBadge,
 } from "./SharedComponents";
 import type { ControlRecord } from "./SharedComponents";
 import EvidenciasSection from "./EvidenciasSection";
-import { listarControles, registrarHoras, actualizarstatusControl } from "../api/controles";
+import { listarControles, actualizarstatusControl } from "../api/controles";
 import { AvisoDeclaracionesPendientes, useDeclaracionesPendientes } from "./ConflictosPlan";
 import { actualizarAsignacionStatus, consultarMiAsignacionControl, consultarRevisionControl, type RevisionControl } from "../api/auditControls";
-import { AUDIT_ENTITIES, CONTROLS, PROCEDURE_TRACKING } from "../data/mock_data";
+import { CONTROLS, PROCEDURE_TRACKING } from "../data/mock_data";
+import FormularioHallazgo, { type FindingControlOption } from "./FormularioHallazgo";
+import { useSesion } from "../auth/SesionContext";
+import { listarHallazgos, type HallazgoApi } from "../api/hallazgos";
+import VistaHallazgoDetallado from "./VistaHallazgoDetallado";
 
 export default function VistaControlDetallado({
   id,
@@ -24,8 +29,9 @@ export default function VistaControlDetallado({
   auditId?: string;
   crumbs: React.ReactNode;
 }) {
+  const { usuario } = useSesion();
   const [backendControl, setBackendControl] = useState<ControlRecord | null>(null);
-  // Historia #96: sin declaración de conflictos no se evalúan los controles del plan.
+  const [miAsignacionId, setMiAsignacionId] = useState<number | null>(null);
   const { pendientes: planesPendientes } = useDeclaracionesPendientes();
   const [puedeSubirEvidencia, setPuedeSubirEvidencia] = useState(false);
   const [miAsignacionStatus, setMiAsignacionStatus] = useState<string | null>(null);
@@ -33,11 +39,38 @@ export default function VistaControlDetallado({
   const [feedbackRevision, setFeedbackRevision] = useState("");
   const [rechazando, setRechazando] = useState(false);
   const [guardandoRevision, setGuardandoRevision] = useState(false);
-  const [horas, setHoras] = useState("");
-  const [guardandoHoras, setGuardandoHoras] = useState(false);
   const [enviandoRevision, setEnviandoRevision] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [showHallazgoForm, setShowHallazgoForm] = useState(false);
+
+  // Selected finding state for detail view navigation
+  const [selectedHallazgoId, setSelectedHallazgoId] = useState<string | null>(null);
+
+  // List of findings matching this control
+  const [hallazgos, setHallazgos] = useState<HallazgoApi[]>([]);
+  const [loadingHallazgos, setLoadingHallazgos] = useState(false);
+
+  const cargarHallazgos = () => {
+    setLoadingHallazgos(true);
+    listarHallazgos()
+      .then((todos) => {
+        const filtrados = todos.filter((item) => {
+          const matchControl =
+            String(item.controlId) === String(id) ||
+            String(item.failedControlId) === String(id);
+          const matchAudit = auditId ? String(item.auditId) === String(auditId) : true;
+          return matchControl && matchAudit;
+        });
+        setHallazgos(filtrados);
+      })
+      .catch(() => toast.error("No se pudieron cargar los hallazgos del control."))
+      .finally(() => setLoadingHallazgos(false));
+  };
+
+  useEffect(() => {
+    cargarHallazgos();
+  }, [id, auditId]);
 
   useEffect(() => {
     let active = true;
@@ -93,35 +126,11 @@ export default function VistaControlDetallado({
       });
       setRevision((actual) => actual ? { ...actual, status, feedback: feedbackRevision.trim() } : actual);
       setRechazando(false);
-      toast.success(status === "Completado" ? "Control aprobado." : "Control rechazado y devuelto a En Progreso.");
+      toast.success(status === "Completado" ? "Control approved." : "Control rechazado y devuelto a En Progreso.");
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "No se pudo actualizar la revisión.");
     } finally {
       setGuardandoRevision(false);
-    }
-  };
-
-  const guardarHoras = async () => {
-    const valor = Number(horas);
-    if (!Number.isFinite(valor) || valor <= 0 || valor >= 24) {
-      toast.error("Las horas deben ser mayores que 0 y menores que 24.");
-      return;
-    }
-
-    setGuardandoHoras(true);
-    try {
-      const resultado = await registrarHoras(id, { horas: valor });
-      setBackendControl((actual) =>
-        actual
-          ? { ...actual, horasInvertidas: Number(resultado.hours_spent) }
-          : actual,
-      );
-      setHoras("");
-      toast.success("Horas registradas correctamente.");
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : "No se pudieron registrar las horas.");
-    } finally {
-      setGuardandoHoras(false);
     }
   };
 
@@ -159,17 +168,20 @@ export default function VistaControlDetallado({
   useEffect(() => {
     let active = true;
     setPuedeSubirEvidencia(false);
+    setMiAsignacionId(null);
     setMiAsignacionStatus(null);
     consultarMiAsignacionControl(id, auditId)
       .then((resultado) => {
         if (active) {
           setPuedeSubirEvidencia(resultado.asignado);
+          setMiAsignacionId(resultado.asignacion?.id ?? null);
           setMiAsignacionStatus(resultado.asignacion?.status ?? null);
         }
       })
       .catch(() => {
         if (active) {
           setPuedeSubirEvidencia(false);
+          setMiAsignacionId(null);
           setMiAsignacionStatus(null);
         }
       });
@@ -187,8 +199,44 @@ export default function VistaControlDetallado({
     puedeSubirEvidencia &&
     !evaluacionBloqueada &&
     !enviandoRevision &&
-    !guardandoHoras &&
     miAsignacionStatus === "En Progreso";
+
+  const controlParaHallazgo: FindingControlOption[] = ctrl
+    ? [
+        {
+          id: ctrl.id,
+          name: ctrl.controlProcedureName,
+          vulnerability: (ctrl as any).currentVulnerability ?? "Media",
+        },
+      ]
+    : [];
+
+  const procedure = PROCEDURE_TRACKING.find(
+    (p) => p.controlId === id,
+  );
+
+  const entidadAuditada = procedure
+    ? `${procedure.businessName} (${procedure.area})`
+    : (ctrl as any)?.business_unit_name ?? "Unidad de Negocio N/A";
+
+  const procedimientoNombre = procedure
+    ? procedure.procedureName
+    : (ctrl as any)?.process_title ?? ctrl?.controlProcedureName ?? "Procedimiento N/A";
+
+  // Conditional render for detailed finding view with dynamic breadcrumb
+  if (selectedHallazgoId) {
+    const selectedHallazgo = hallazgos.find((item) => String(item.id) === String(selectedHallazgoId));
+    const hallazgoLabel = selectedHallazgo?.folio || selectedHallazgoId;
+
+    return (
+      <VistaHallazgoDetallado
+        hallazgoId={selectedHallazgoId}
+        onBack={() => setSelectedHallazgoId(null)}
+        crumbs={<Breadcrumbs items={["Inicio", "Planes de Auditoría", id, hallazgoLabel]} />}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex-1 overflow-auto p-6">
@@ -211,13 +259,6 @@ export default function VistaControlDetallado({
       </div>
     );
   }
-
-  const auditEntity = AUDIT_ENTITIES.find(
-    (entity) => entity.id === ctrl.auditEntityId,
-  ) ?? { id: "—", name: "No disponible" };
-  const procedures = PROCEDURE_TRACKING.filter(
-    (procedure) => procedure.controlId === id,
-  );
 
   return (
     <div
@@ -284,11 +325,14 @@ export default function VistaControlDetallado({
             </h1>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4 pt-3 border-t border-border mb-4">
+
+        {/* ── Entidad Auditada and Procedimiento Side-by-Side ── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-border mb-4">
           <DetailField label="ID Control" value={ctrl.id} />
-          <DetailField label="Entidad Auditora" value={"FEMSA Departamento de Auditorias"} />
-          {/*Este nombre es un placeholder! Se debe de modificar cuando se implemente lo de los departamentos.*/}
+          <DetailField label="Entidad Auditada" value={entidadAuditada} />
+          <DetailField label="Procedimiento" value={procedimientoNombre} />
         </div>
+
         <div className="pt-3 border-t border-border">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">
             Actividad de Control
@@ -312,8 +356,8 @@ export default function VistaControlDetallado({
           {[
             { label: "Tipo de Control", value: ctrl.controlType },
             { label: "Frecuencia de Operación", value: ctrl.frequency },
-            { label: "Tamaño de Muestra", value: "30"/*ctrl.sampleSize*/ },
-            { label: "Rotación", value: "Semanal" /*ctrl.rotation*/ },
+            { label: "Tamaño de Muestra", value: ctrl.sampleSize },
+            { label: "Rotación", value: ctrl.rotation },
             { label: "Estatus", value: ctrl.controlStatus },
           ].map((field) => (
             <div key={field.label} className="bg-muted/40 rounded-lg p-3">
@@ -328,70 +372,12 @@ export default function VistaControlDetallado({
         </div>
       </Card>
 
-      <Card>
-        <div className="px-4 pt-4 pb-3 border-b border-border flex items-center gap-2">
-          <ClipboardList size={15} className="text-primary" />
-          <div className="text-sm font-semibold text-foreground">
-            Seguimiento de Procedimientos
-          </div>
-          <span className="text-xs bg-secondary text-secondary-foreground px-2 py-0.5 rounded-full font-semibold">
-            {procedures.length}
-          </span>
-        </div>
-        {procedures.length === 0 ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">
-            Sin procedimientos de seguimiento registrados
-          </div>
-        ) : (
-          <div className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  {[
-                    "ID Seguimiento",
-                    "Nombre Procedimiento",
-                    "Identificador",
-                    "Depto. Negocio",
-                    "Negocio",
-                    "División",
-                    "Área",
-                    "País",
-                  ].map((heading) => (
-                    <th
-                      key={heading}
-                      className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap"
-                    >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {procedures.map((procedure) => (
-                  <tr key={procedure.id} className="hover:bg-secondary/30 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-primary">{procedure.id}</td>
-                    <td className="px-4 py-3 text-xs font-medium text-foreground">{procedure.procedureName}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{procedure.identificator}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{procedure.businessDeptName}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{procedure.businessName}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{procedure.divisionName}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{procedure.area}</td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{procedure.country}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
       <EvidenciasSection
-        entityId={ctrl.id}
+        entityId={String(miAsignacionId ?? ctrl.id)}
         entityType="control"
-        controlId={ctrl.id}
-        auditId={auditId}
-        businessEntityId={ctrl.auditEntityId}
-        puedeSubir={Boolean(auditId) && puedeEnviarARevision}
+        puedeSubir={Boolean(miAsignacionId) && puedeEnviarARevision}
       />
+
       {puedeSubirEvidencia && (
         <Card className="mb-5 p-5">
           {evaluacionBloqueada && (
@@ -399,52 +385,121 @@ export default function VistaControlDetallado({
               <AvisoDeclaracionesPendientes pendientes={pendientesDelControl} />
             </div>
           )}
-          <div className="mb-4">
-            <h2 className="text-sm font-semibold text-foreground">Avance del control</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Registra las horas trabajadas y envía el control a revisión cuando hayas terminado.
-            </p>
-          </div>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <label className="block text-xs font-semibold text-foreground">
-              Horas trabajadas
-              <div className="mt-2 flex items-center gap-2">
-                <input
-                  type="number"
-                  min="0.01"
-                  max="23.99"
-                  step="0.01"
-                  value={horas}
-                  onChange={(event) => setHoras(event.target.value)}
-                  disabled={guardandoHoras || enviandoRevision || evaluacionBloqueada || ctrl.status === "En Revision" || ctrl.status === "Completado"}
-                  className="w-32 rounded-md border border-border bg-white px-3 py-2 text-sm font-normal"
-                  placeholder="Ej. 2.5"
-                />
-                <button
-                  type="button"
-                  onClick={guardarHoras}
-                  disabled={guardandoHoras || enviandoRevision || evaluacionBloqueada || ctrl.status === "En Revision" || ctrl.status === "Completado"}
-                  className="rounded-md border border-primary px-3 py-2 text-xs font-semibold text-primary disabled:opacity-50"
-                >
-                  {guardandoHoras ? "Guardando..." : "Registrar horas"}
-                </button>
-              </div>
-              <span className="mt-1 block font-normal text-muted-foreground">
-                Total registrado: {ctrl.horasInvertidas ?? 0} h
-              </span>
-            </label>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Avance del control</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Envía el control a revisión cuando hayas terminado su evaluación.
+              </p>
+            </div>
             <button
               type="button"
               onClick={enviarARevision}
-              disabled={enviandoRevision || guardandoHoras || evaluacionBloqueada || !auditId || miAsignacionStatus !== "En Progreso"}
+              disabled={enviandoRevision || evaluacionBloqueada || !auditId || miAsignacionStatus !== "En Progreso"}
               className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-white disabled:bg-gray-400 disabled:opacity-100"
             >
               {enviandoRevision ? "Enviando..." : "Enviar a revisión"}
             </button>
           </div>
+
+          {/* ── Hallazgos registrados ── */}
+          <div className="mt-5 border-t border-border pt-5">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  <AlertTriangle size={14} className="text-amber-500" />
+                  Hallazgos del control
+                  <span className="ml-1 text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-semibold">
+                    {hallazgos.length}
+                  </span>
+                </h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Listado de hallazgos registrados para este control. Haz clic en un hallazgo para ver su detalle.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHallazgoForm(true)}
+                className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+              >
+                + Nuevo hallazgo
+              </button>
+            </div>
+
+            {loadingHallazgos ? (
+              <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+                <Loader2 className="mr-2 animate-spin" size={14} />
+                Cargando hallazgos...
+              </div>
+            ) : hallazgos.length === 0 ? (
+              <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                No hay hallazgos registrados para este control.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-muted/50 text-muted-foreground border-b border-border">
+                    <tr>
+                      <th className="p-2">Folio</th>
+                      <th className="p-2">Título</th>
+                      <th className="p-2">Severidad</th>
+                      <th className="p-2">Estatus</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {hallazgos.map((hallazgo) => (
+                      <tr
+                        key={hallazgo.id}
+                        onClick={() => setSelectedHallazgoId(String(hallazgo.id))}
+                        className="hover:bg-muted/40 cursor-pointer transition-colors"
+                        title="Haz clic para ver el detalle del hallazgo"
+                      >
+                        <td className="p-2 font-mono font-semibold text-primary hover:underline">
+                          {hallazgo.folio || hallazgo.id}
+                        </td>
+                        <td className="p-2 font-medium text-foreground">{hallazgo.title}</td>
+                        <td className="p-2">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                              hallazgo.severity === "Crítico"
+                                ? "bg-red-100 text-red-800"
+                                : hallazgo.severity === "Alto"
+                                ? "bg-orange-100 text-orange-800"
+                                : hallazgo.severity === "Medio"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-blue-100 text-blue-800"
+                            }`}
+                          >
+                            {hallazgo.severity}
+                          </span>
+                        </td>
+                        <td className="p-2 text-muted-foreground">{hallazgo.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </Card>
       )}
       <AISummaryCard entityId={ctrl.id} entityType="Control" />
+
+      {/* ── Modal: Formulario de hallazgo ── */}
+      {showHallazgoForm && (
+        <FormularioHallazgo
+          controls={controlParaHallazgo}
+          fixedControlId={ctrl.id}
+          ownerId={usuario ? String(usuario.id) : undefined}
+          nextFolio={`HAL-${Date.now()}`}
+          auditId={auditId}
+          onCreated={() => {
+            setShowHallazgoForm(false);
+            cargarHallazgos();
+          }}
+          onClose={() => setShowHallazgoForm(false)}
+        />
+      )}
     </div>
   );
 }

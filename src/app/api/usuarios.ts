@@ -7,6 +7,7 @@ export interface Usuario {
   nombre: string;
   correo: string;
   rol: string;
+  businessUnitId?: number; // Campo para vincular al usuario con su unidad de negocio
   estado: "active" | "inactive";
   ultimoAcceso: string | null;
 }
@@ -25,6 +26,7 @@ export interface NuevoUsuario {
   nombre: string;
   correo: string;
   rol: string;
+  departamento?: string;
 }
 
 export const obtenerSesion = () => pedir<UsuarioConPermisos>("/me");

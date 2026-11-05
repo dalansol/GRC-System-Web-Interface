@@ -15,6 +15,7 @@ export interface AuditorAsignable {
 
 export interface NuevaAsignacionControl {
   controlId: string;
+  processId: number;
   auditorId: number;
 }
 
@@ -77,5 +78,16 @@ export const actualizarAsignacionStatus = (
     `/planes/${encodeURIComponent(planId)}/controles/${encodeURIComponent(controlId)}/status`,
     { metodo: "PATCH", cuerpo: datos },
   );
-export const crearAsignacionControl = (planId: string, datos: NuevaAsignacionControl) =>
-  pedir(`/planes/${encodeURIComponent(planId)}/controles`, { metodo: "POST", cuerpo: datos });
+
+export const crearAsignacionControl = (
+  planId: string,
+  datos: NuevaAsignacionControl
+) =>
+  pedir<AsignacionControl>(`/planes/${encodeURIComponent(planId)}/controles`, {
+    metodo: "POST",
+    cuerpo: {
+      controlId: datos.controlId,
+      processId: datos.processId,
+      auditorId: datos.auditorId,
+    },
+  });
