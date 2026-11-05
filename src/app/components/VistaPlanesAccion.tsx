@@ -20,12 +20,18 @@ import {
 import { toast } from "sonner";
 
 import { Card, Breadcrumbs, PageHeader } from "./SharedComponents";
+import BandejaRevisionPlanes from "./BandejaRevisionPlanes";
 import EvidenciasSection from "./EvidenciasSection";
+import HistorialFlujoPlan from "./HistorialFlujoPlan";
+import InsigniaEstadoPlan from "./InsigniaEstadoPlan";
 import { useSesion } from "../auth/SesionContext";
 import {
   actualizarPasoPlanAccion,
-  aprobarPlanAccion,
+  enviarPlanARevision,
   listarMisPlanesAccion,
+  obtenerFlujoPlan,
+  planBloqueado,
+  ROLES_REVISION_PLAN_ACCION,
   type HallazgoResumen,
   type PlanAccion
 } from "../api/planesAccion";
@@ -37,15 +43,41 @@ interface PlanAccionConDetalles extends Omit<PlanAccion, "estado" | "status"> {
   status?: string;
 }
 
-const PLAN_ESTADO_CFG: Record<string, { label: string; cls: string }> = {
-  "Asignado": { label: "Asignado", cls: "bg-amber-50 text-amber-700 border border-amber-200" },
-  "En Proceso": { label: "En Proceso", cls: "bg-blue-50 text-blue-700 border border-blue-200" },
-  "En Revisión": { label: "En Revisión", cls: "bg-purple-50 text-purple-700 border border-purple-200" },
-  "Cerrado": { label: "Cerrado", cls: "bg-emerald-50 text-emerald-700 border border-emerald-200" },
-};
+/** Motivo del último rechazo, para que el responsable sepa qué corregir antes de reenviar. */
+function AvisoRechazoPlan({ planId }: { planId: number }) {
+  const [motivo, setMotivo] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vigente = true;
+    obtenerFlujoPlan(planId)
+      .then(({ eventos }) => {
+        const rechazo = [...eventos].reverse().find((evento) => evento.accion === "rechazo");
+        if (vigente) setMotivo(rechazo?.motivo ?? null);
+      })
+      .catch(() => {
+        if (vigente) setMotivo(null);
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [planId]);
+
+  return (
+    <div className="rounded-lg border border-red-200 bg-red-50 p-3.5 text-xs text-red-700">
+      <div className="mb-1 flex items-center gap-1.5 font-bold">
+        <AlertTriangle size={14} />
+        Plan rechazado: corrígelo y reenvíalo a revisión
+      </div>
+      {motivo && <p className="break-words">Motivo: {motivo}</p>}
+    </div>
+  );
+}
 
 export default function VistaPlanesAccion() {
   const { usuario } = useSesion();
+  const esRevisor = Boolean(usuario && ROLES_REVISION_PLAN_ACCION.includes(usuario.rol));
+  const [pestana, setPestana] = useState<"mios" | "revision">("mios");
+  const [recargaFlujo, setRecargaFlujo] = useState(0);
 
   const [planes, setPlanes] = useState<PlanAccionConDetalles[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,8 +111,8 @@ export default function VistaPlanesAccion() {
 
   // Toggle step completion status with evidence validation
   const togglePasoCompletado = async (plan: PlanAccionConDetalles, pasoId: number, completadoDeseado: boolean) => {
-    if ((plan.status || plan.estado) === "En Revisión") {
-      toast.error("El plan de acción está en revisión y ya no puede modificarse.");
+    if (planBloqueado(plan)) {
+      toast.error("El plan de acción está en revisión o aprobado y ya no puede modificarse.");
       return;
     }
     const paso = plan.pasos?.find((p) => p.id === pasoId);
@@ -106,13 +138,14 @@ export default function VistaPlanesAccion() {
     }
   };
 
-  const aprobarPlanCompleto = async (planId: number) => {
+  const enviarARevision = async (planId: number) => {
     try {
-      const planActualizado = await aprobarPlanAccion(planId);
+      const planActualizado = await enviarPlanARevision(planId);
       setPlanes((prev) => prev.map((plan) => plan.id === planId ? {
         ...plan,
         ...planActualizado,
       } : plan));
+      setRecargaFlujo((valor) => valor + 1);
       toast.success("Plan de acción enviado a revisión.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo enviar el plan a revisión.");
@@ -132,6 +165,7 @@ export default function VistaPlanesAccion() {
           subtitle={`${planes.length} planes registrados · ID Unidad de Negocio: ${buIdDisplay}`}
         />
 
+        {pestana === "mios" && (
         <button
           type="button"
           onClick={cargarPlanes}
@@ -141,9 +175,32 @@ export default function VistaPlanesAccion() {
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           Actualizar
         </button>
+        )}
       </div>
 
-      {/* Main Table Section */}
+      {esRevisor && (
+        <div role="tablist" aria-label="Vista de planes de acción" className="flex gap-1 border-b border-border">
+          {([["mios", "Mis planes"], ["revision", "Bandeja de revisión"]] as const).map(([id, etiqueta]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={pestana === id}
+              onClick={() => setPestana(id)}
+              className={`-mb-px border-b-2 px-3 py-2 text-xs font-semibold transition-colors ${
+                pestana === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {pestana === "revision" && esRevisor ? (
+        <BandejaRevisionPlanes />
+      ) : (
+      /* Main Table Section */
       <Card>
         <div className="w-full overflow-x-auto">
           {loading ? (
@@ -171,7 +228,6 @@ export default function VistaPlanesAccion() {
               <tbody>
                 {planes.map((plan) => {
                   const estadoStr = plan.status || plan.estado || "Asignado";
-                  const statusCfg = PLAN_ESTADO_CFG[estadoStr] || { label: estadoStr, cls: "bg-slate-50 text-slate-600 border border-slate-200" };
                   const isExpanded = expandedPlanId === plan.id;
                   const folioDisplay = plan.publicId;
                   
@@ -180,7 +236,9 @@ export default function VistaPlanesAccion() {
 
                   // Calcular si todos los pasos están completados
                   const todosPasosCompletados = plan.pasos && plan.pasos.length > 0 && plan.pasos.every((p) => p.completado);
-                  const planEnRevision = (plan.status || plan.estado) === "En Revisión";
+                  const bloqueado = planBloqueado(plan);
+                  const rechazado = estadoStr === "Rechazado";
+                  const puedeEnviar = plan.responsable?.id === currentUserId && todosPasosCompletados && !bloqueado;
 
                   return (
                     <Fragment key={plan.id}>
@@ -190,9 +248,7 @@ export default function VistaPlanesAccion() {
                         <td className="py-3 px-4 text-muted-foreground text-xs truncate" title={responsableNombre}>{responsableNombre}</td>
                         <td className="py-3 px-4 text-xs font-mono text-muted-foreground truncate">{plan.fechaCompromiso}</td>
                         <td className="py-3 px-4">
-                          <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium truncate max-w-full ${statusCfg.cls}`}>
-                            {statusCfg.label}
-                          </span>
+                          <InsigniaEstadoPlan estado={estadoStr} />
                         </td>
                         <td className="py-3 px-4 text-right">
                           <button
@@ -211,6 +267,8 @@ export default function VistaPlanesAccion() {
                         <tr key={`${plan.id}-details`} className="border-b border-border bg-muted/10">
                           <td colSpan={6} className="px-6 py-5 max-w-full overflow-hidden">
                             <div className="space-y-4 max-w-full">
+                              {rechazado && <AvisoRechazoPlan planId={plan.id} />}
+
                               
                               {/* Metadata Grid (Responsable y Fecha Límite a la izquierda) */}
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-lg border border-border bg-card p-4">
@@ -407,7 +465,7 @@ export default function VistaPlanesAccion() {
                                                 <EvidenciasSection
                                                   entityId={String(paso.id)}
                                                   entityType="action_plan_step"
-                                                  puedeSubir={esAsignadoActual && !planEnRevision}
+                                                  puedeSubir={esAsignadoActual && !bloqueado}
                                                   onEvidenceCountChange={(count) => {
                                                     setPlanes((prev) => prev.map((item) => item.id !== plan.id ? item : {
                                                       ...item,
@@ -431,16 +489,22 @@ export default function VistaPlanesAccion() {
                                 </div>
                               </div>
 
-                              {/* Botón para marcar el plan como aprobado (Solo aparece cuando todos los pasos están completados) */}
-                              {todosPasosCompletados && !planEnRevision && (
+                              {/* Historial de la bitácora del flujo de aprobación */}
+                              <div className="space-y-2 pt-1">
+                                <div className="text-[11px] font-bold text-foreground uppercase tracking-wider">Historial del flujo</div>
+                                <HistorialFlujoPlan planId={plan.id} recarga={recargaFlujo} />
+                              </div>
+
+                              {/* El responsable envía el plan a revisión cuando todos los pasos están completados */}
+                              {puedeEnviar && (
                                 <div className="pt-4 flex justify-end border-t border-border mt-4">
                                   <button
                                     type="button"
-                                    onClick={() => aprobarPlanCompleto(plan.id)}
-                                    className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-sm"
+                                    onClick={() => enviarARevision(plan.id)}
+                                    className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
                                   >
                                     <CheckCheck size={15} />
-                                    Aprobar Plan de Acción
+                                    {rechazado ? "Reenviar a revisión" : "Enviar a revisión"}
                                   </button>
                                 </div>
                               )}
@@ -457,6 +521,7 @@ export default function VistaPlanesAccion() {
           )}
         </div>
       </Card>
+      )}
     </div>
   );
 }

@@ -60,7 +60,7 @@ import {
 import { pedir } from "../api/cliente";
 import { listarHallazgos, type HallazgoApi } from "../api/hallazgos";
 import { listarControles } from "../api/controles";
-import { listarMisPlanesAccion, listarPlanesAccion, type PlanAccion } from "../api/planesAccion";
+import { listarMisPlanesAccion, listarPlanesAccion, planFinalizado, type PlanAccion } from "../api/planesAccion";
 import { useSesion } from "../auth/SesionContext";
 
 type QuickLink = { label: string; urgency: string; desc: string };
@@ -303,14 +303,14 @@ export default function DashboardView({
   const hallazgosCriticos = hallazgosAbiertos.filter((hallazgo) => hallazgo.severity === "Crítico").length;
   const controlesCompletados = controles.filter((control) => control.status === "Completado").length;
   const horasRegistradas = controles.reduce((total, control) => total + Number(control.hours_spent ?? 0), 0);
-  const planesCompletados = planesAccion.filter((plan) => plan.estado === "Completado").length;
-  const planesEnTiempo = planesAccion.filter((plan) => plan.estado !== "Completado" && plan.fechaCompromiso >= new Date().toISOString().slice(0, 10)).length;
+  const planesCompletados = planesAccion.filter(planFinalizado).length;
+  const planesEnTiempo = planesAccion.filter((plan) => !planFinalizado(plan) && plan.fechaCompromiso >= new Date().toISOString().slice(0, 10)).length;
   const kpis = isAuditeeRole
     ? [
         { label: "Planes Asignados", value: String(planesAccion.length), delta: `${planesEnTiempo} en tiempo`, icon: <ClipboardList size={16} />, color: "text-blue-600 bg-blue-50" },
         { label: "Hallazgos Abiertos", value: String(hallazgosAbiertos.length), delta: `${hallazgosCriticos} críticos`, icon: <AlertTriangle size={16} />, color: "text-amber-600 bg-amber-50" },
         { label: "Planes de Acción", value: String(planesAccion.length), delta: `${planesCompletados} completados`, icon: <ShieldCheck size={16} />, color: "text-emerald-600 bg-emerald-50" },
-        { label: "Vencimientos Próximos", value: String(planesAccion.filter((plan) => plan.estado !== "Completado" && plan.fechaCompromiso <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)).length), delta: "Próximos 7 días", icon: <CalendarDays size={16} />, color: "text-purple-600 bg-purple-50" },
+        { label: "Vencimientos Próximos", value: String(planesAccion.filter((plan) => !planFinalizado(plan) && plan.fechaCompromiso <= new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)).length), delta: "Próximos 7 días", icon: <CalendarDays size={16} />, color: "text-purple-600 bg-purple-50" },
       ]
     : [
         { label: "Auditorías Activas", value: String(auditorias.filter((plan) => plan.estado !== "Cerrado").length), delta: "Desde el backend", icon: <ClipboardList size={16} />, color: "text-blue-600 bg-blue-50" },
@@ -326,7 +326,7 @@ export default function DashboardView({
     if (!dashboardData) return fallback;
     return {
       findings: [{ period: "Actual", abiertos: hallazgosAbiertos.length, mitigados: hallazgos.filter((item) => item.status === "Cerrado").length, criticos: hallazgosCriticos }],
-      actionPlans: [{ period: "Actual", enTiempo: planesEnTiempo, atrasados: planesAccion.filter((plan) => plan.estado !== "Completado" && plan.fechaCompromiso < new Date().toISOString().slice(0, 10)).length, completados: planesCompletados }],
+      actionPlans: [{ period: "Actual", enTiempo: planesEnTiempo, atrasados: planesAccion.filter((plan) => !planFinalizado(plan) && plan.fechaCompromiso < new Date().toISOString().slice(0, 10)).length, completados: planesCompletados }],
     };
   }, [dashboardData, timePeriod, hallazgos, hallazgosAbiertos.length, hallazgosCriticos, planesAccion, planesCompletados, planesEnTiempo]);
 

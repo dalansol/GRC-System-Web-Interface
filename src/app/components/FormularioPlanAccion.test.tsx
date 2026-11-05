@@ -150,6 +150,20 @@ describe("FormularioPlanAccion en modo edición", () => {
     expect(api.crearPlanAccion).not.toHaveBeenCalled();
   });
 
+  it("en un plan rechazado muestra el estado sin poder cambiarlo y no lo envía", async () => {
+    const rechazado: PlanAccion = { ...PLAN, estado: "Rechazado", status: "Rechazado" };
+    vi.mocked(api.actualizarPlanAccion).mockResolvedValue(rechazado);
+    await abrirEdicion(rechazado);
+
+    expect(screen.queryByRole("combobox", { name: "Estado" })).not.toBeInTheDocument();
+    expect(screen.getByText("Rechazado")).toBeInTheDocument();
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "Guardar cambios" }));
+
+    await waitFor(() => expect(api.actualizarPlanAccion).toHaveBeenCalled());
+    expect(vi.mocked(api.actualizarPlanAccion).mock.calls[0]![1]).not.toHaveProperty("estado");
+  });
+
   it("rechaza cambiar la fecha a una anterior al cierre de la auditoría", async () => {
     await abrirEdicion();
     const usuario = userEvent.setup();

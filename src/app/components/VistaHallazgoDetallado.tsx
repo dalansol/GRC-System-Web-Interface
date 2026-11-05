@@ -24,6 +24,8 @@ import { pedir } from "../api/cliente";
 import { listarHallazgos, type HallazgoApi } from "../api/hallazgos";
 import FormularioPlanAccion from "./FormularioPlanAccion";
 import { 
+  planBloqueado,
+  planFinalizado,
   ROLES_EDICION_PLAN_ACCION, 
   type PlanAccion 
 } from "../api/planesAccion";
@@ -71,7 +73,8 @@ export default function VistaHallazgoDetallado({
     Boolean(
       usuario &&
         ROLES_EDICION_PLAN_ACCION.includes(usuario.rol) &&
-        plan.responsable?.id !== usuario.id
+        plan.responsable?.id !== usuario.id &&
+        !planBloqueado(plan)
     );
 
   const cargarDetalle = async (active = true) => {
@@ -315,7 +318,7 @@ export default function VistaHallazgoDetallado({
                   <div className="flex items-center gap-2">
                     <span
                       className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                        plan.estado === "Completado"
+                        planFinalizado(plan)
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                           : "bg-blue-50 text-blue-700 border border-blue-200"
                       }`}
@@ -358,7 +361,7 @@ export default function VistaHallazgoDetallado({
                     </div>
                     <div
                       className={`text-sm font-semibold font-mono ${
-                        plan.estado !== "Completado" && formatearFecha(plan.fechaCompromiso) < hoy
+                        !planFinalizado(plan) && formatearFecha(plan.fechaCompromiso) < hoy
                           ? "text-red-600"
                           : "text-foreground"
                       }`}

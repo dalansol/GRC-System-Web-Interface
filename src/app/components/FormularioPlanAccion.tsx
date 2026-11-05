@@ -71,6 +71,8 @@ export default function FormularioPlanAccion({
   const [responsableId, setResponsableId] = useState(plan ? String(plan.responsable.id) : String(usuario?.id ?? ""));
   const [fechaCompromiso, setFechaCompromiso] = useState(plan?.fechaCompromiso ?? "");
   const [estado, setEstado] = useState<EstadoPlanAccion>(plan?.estado ?? "Asignado");
+  // Los estados del flujo de aprobación no se fijan a mano: se muestran, pero no se envían.
+  const estadoEditable = ESTADOS_PLAN_ACCION.includes(plan?.estado ?? "Asignado");
 
   // Estado para gestionar la lista de pasos del plan
   const [pasos, setPasos] = useState<PasoFormState[]>(
@@ -192,7 +194,7 @@ export default function FormularioPlanAccion({
           descripcion: datos.descripcion,
           responsableId: datos.responsableId,
           fechaCompromiso: datos.fechaCompromiso,
-          estado,
+          ...(estadoEditable ? { estado } : {}),
         });
         toast.success(`Plan de acción actualizado. Estado: ${actualizado.estado}.`);
         onGuardado(actualizado);
@@ -333,21 +335,30 @@ export default function FormularioPlanAccion({
 
             {edicion && (
               <div>
-                <label htmlFor="plan-estado" className="mb-1 block text-xs font-semibold text-muted-foreground">
-                  Estado
-                </label>
-                <select
-                  id="plan-estado"
-                  value={estado}
-                  onChange={(e) => setEstado(e.target.value as EstadoPlanAccion)}
-                  className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
-                >
-                  {ESTADOS_PLAN_ACCION.map((e) => (
-                    <option key={e} value={e}>
-                      {e}
-                    </option>
-                  ))}
-                </select>
+                {estadoEditable ? (
+                  <>
+                    <label htmlFor="plan-estado" className="mb-1 block text-xs font-semibold text-muted-foreground">
+                      Estado
+                    </label>
+                    <select
+                      id="plan-estado"
+                      value={estado}
+                      onChange={(e) => setEstado(e.target.value as EstadoPlanAccion)}
+                      className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+                    >
+                      {ESTADOS_PLAN_ACCION.map((e) => (
+                        <option key={e} value={e}>
+                          {e}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <div className="mb-1 text-xs font-semibold text-muted-foreground">Estado (lo controla el flujo de aprobación)</div>
+                    <div className="text-sm font-semibold text-foreground">{estado}</div>
+                  </>
+                )}
               </div>
             )}
 
