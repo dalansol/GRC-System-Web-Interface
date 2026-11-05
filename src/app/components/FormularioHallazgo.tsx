@@ -7,7 +7,14 @@ export interface FindingControlOption {
   id: string;
   name: string;
   vulnerability: "Baja" | "Media" | "Alta";
+  /** Plan del control: el mismo control puede estar en varios planes. */
+  auditId?: string;
+  /** Texto de la opción; sin él se muestra `id - nombre`. */
+  etiqueta?: string;
 }
+
+const claveOpcion = (control: FindingControlOption) =>
+  control.auditId ? `${control.id}::${control.auditId}` : control.id;
 
 export interface CreatedFinding {
   id: string;
@@ -100,7 +107,7 @@ const USE_REAL_BACKEND = import.meta.env.VITE_USE_REAL_BACKEND !== "false";
 export default function FormularioHallazgo({
   controls,
   nextFolio,
-  auditId = "AUD-001",
+  auditId = "",
   fixedControlId,
   ownerId,
   onCreated,
@@ -116,7 +123,8 @@ export default function FormularioHallazgo({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const selectedControl = controls.find(control => control.id === controlId);
+  const selectedControl = controls.find(control => claveOpcion(control) === controlId);
+  const planDelHallazgo = selectedControl?.auditId ?? auditId;
 
   const residualRisk = useMemo(() => {
     if (!selectedControl) return null;
@@ -167,7 +175,7 @@ export default function FormularioHallazgo({
       controlId: selectedControl.id,
       residualRisk,
       status: "Abierto",
-      auditId,
+      auditId: planDelHallazgo,
       ...(ownerId ? { ownerId } : {}),
     };
 
@@ -189,7 +197,7 @@ export default function FormularioHallazgo({
           failedControlId: response.failedControlId ?? selectedControl.id,
           residualRisk: response.residualRisk ?? residualRisk,
           status: "Abierto",
-          auditId: response.auditId ?? auditId,
+          auditId: response.auditId ?? planDelHallazgo,
           date: new Date().toISOString().slice(0, 10),
         };
       } else {
@@ -201,7 +209,7 @@ export default function FormularioHallazgo({
           failedControlId: selectedControl.id,
           residualRisk,
           status: "Abierto",
-          auditId,
+          auditId: planDelHallazgo,
           date: new Date().toISOString().slice(0, 10),
         };
       }
@@ -352,8 +360,8 @@ export default function FormularioHallazgo({
               >
                 <option value="">Seleccionar control</option>
                 {controls.map(control => (
-                  <option key={control.id} value={control.id}>
-                    {control.id} - {control.name}
+                  <option key={claveOpcion(control)} value={claveOpcion(control)}>
+                    {control.etiqueta ?? `${control.id} - ${control.name}`}
                   </option>
                 ))}
               </select>

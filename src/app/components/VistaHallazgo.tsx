@@ -12,8 +12,10 @@ import {
   ArrowRight,
   Plus
 } from "lucide-react";
-import { CONTROLS } from "../data/mock_data";
+import { toast } from "sonner";
 
+import { listarControlesParaHallazgo } from "../api/controles";
+import FormularioHallazgo, { type FindingControlOption } from "./FormularioHallazgo";
 import FormularioPlanAccion from "./FormularioPlanAccion";
 import { esAuditado, puedeGestionarPlanes } from "../api/planesAccion";
 import { useSesion } from "../auth/SesionContext";
@@ -43,10 +45,41 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
     setSevFilter,
     setStatusFilter,
     fetchHallazgos,
+    nextFolio,
+    showCreateForm,
+    setShowCreateForm,
   } = useHallazgosViewModel({ consultarPlanes: !esAuditado(usuario?.rol) });
 
   // State for selected finding IDs via checkboxes
   const [selectedFindingIds, setSelectedFindingIds] = useState<string[]>([]);
+  const [controlesHallazgo, setControlesHallazgo] = useState<FindingControlOption[]>([]);
+  const [cargandoControles, setCargandoControles] = useState(false);
+
+  // El hallazgo se liga al control y al plan de una asignación real del usuario (SF-09).
+  const abrirNuevoHallazgo = async () => {
+    setCargandoControles(true);
+    try {
+      const controles = await listarControlesParaHallazgo();
+      if (controles.length === 0) {
+        toast.info("No tienes controles asignados en un plan para registrar un hallazgo.");
+        return;
+      }
+      setControlesHallazgo(
+        controles.map((control) => ({
+          id: control.control_id,
+          name: control.name,
+          vulnerability: control.tiene_deficiencia ? "Alta" : "Baja",
+          auditId: String(control.audit_id),
+          etiqueta: `${control.code} - ${control.name} (${control.plan_code})`,
+        })),
+      );
+      setShowCreateForm(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudieron cargar los controles.");
+    } finally {
+      setCargandoControles(false);
+    }
+  };
 
   // Roles permitidos para ver todos los hallazgos
   const esEquipoAuditoria = Boolean(
@@ -109,6 +142,18 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
         </div>
 
         <div className="flex items-center gap-2">
+          {esEquipoAuditoria && (
+            <button
+              type="button"
+              disabled={cargandoControles}
+              onClick={abrirNuevoHallazgo}
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-50"
+            >
+              <Plus size={14} />
+              Nuevo hallazgo
+            </button>
+          )}
+
           {puedeCrearPlan && (
             <button
               type="button"
@@ -327,6 +372,17 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
           </table>
         )}
       </div>
+
+      {showCreateForm && esEquipoAuditoria && (
+        <FormularioHallazgo
+          controls={controlesHallazgo}
+          nextFolio={nextFolio}
+          onCreated={() => {
+            void fetchHallazgos();
+          }}
+          onClose={() => setShowCreateForm(false)}
+        />
+      )}
 
       {hallazgoParaPlan && puedeCrearPlan && (
         <FormularioPlanAccion

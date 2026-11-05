@@ -515,7 +515,7 @@ export default function VistaControlDetallado({
           fixedControlId={ctrl.id}
           ownerId={usuario ? String(usuario.id) : undefined}
           nextFolio={`HAL-${Date.now()}`}
-          auditId={auditId}
+          auditId={planEvaluacion ?? undefined}
           onCreated={() => {
             setShowHallazgoForm(false);
             cargarHallazgos();

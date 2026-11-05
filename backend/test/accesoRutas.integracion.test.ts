@@ -56,6 +56,7 @@ const SCRIPTS = [
   "042_procesos_en_asignaciones.sql",
   "044_flujo_aprobacion_planes.sql",
   "045_etapas_planes_accion.sql",
+  "047_evaluacion_controles.sql",
   "048_versiones_evidencia.sql",
 ];
 
@@ -211,6 +212,35 @@ describe.skipIf(!env.SQL_TEST_SERVER)("permisos de controles y evidencias sobre 
       const respuesta = await asignarComo(u.seniorResponsable, 999999);
 
       expect(respuesta.status).toBe(404);
+    });
+  });
+
+  describe("controles para un hallazgo nuevo", () => {
+    const consultar = (id: number, rol: string) =>
+      request(como({ id, rol })).get("/api/controles/para-hallazgo");
+
+    beforeEach(async () => {
+      await asignar(plan1, u.auditora, u.seniorResponsable);
+      await asignar(plan2, u.ajeno, u.seniorAjeno);
+    });
+
+    it("el auditor solo recibe el plan de su asignación, aunque el control esté en otro", async () => {
+      const respuesta = await consultar(u.auditora, "Auditor");
+
+      expect(respuesta.status).toBe(200);
+      expect(respuesta.body).toEqual([expect.objectContaining({ control_id: "CTR-1", audit_id: plan1, plan_code: "PAI-A-001", tiene_deficiencia: false })]);
+    });
+
+    it("el Auditor Senior recibe lo que asignó y la Jefa los planes que creó", async () => {
+      const senior = await consultar(u.seniorResponsable, "Auditor Senior");
+      const jefa = await consultar(u.jefe, "Jefe de Auditoría");
+
+      expect(senior.body.map((fila: { audit_id: number }) => fila.audit_id)).toEqual([plan1]);
+      expect(jefa.body.map((fila: { audit_id: number }) => fila.audit_id).sort()).toEqual([plan1, plan2].sort());
+    });
+
+    it("Solo Lectura no recibe controles", async () => {
+      expect((await consultar(u.lectura, "Solo Lectura")).body).toEqual([]);
     });
   });
 

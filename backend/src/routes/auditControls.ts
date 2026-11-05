@@ -91,6 +91,29 @@ router.get("/controles", async (_req, res) => {
   res.json(resultado.rows);
 });
 
+// Controles que el usuario puede citar en un hallazgo nuevo, uno por plan (SF-09): mismo alcance
+// que GET /controles, pero solo con los planes de sus propias asignaciones.
+router.get("/controles/para-hallazgo", async (_req, res) => {
+  const pool = await poolPromise;
+  const usuario = usuarioEnSesion(res);
+  const resultado = await pool.query(
+    `SELECT DISTINCT c.id AS control_id, c.code, c.name, ac.audit_id, ap.code AS plan_code,
+            EXISTS (
+              SELECT 1 FROM control_evaluations ce
+              WHERE ce.control_id = c.id AND ce.audit_id = ac.audit_id AND ce.has_deficiency
+            ) AS tiene_deficiencia
+     FROM audit_controls ac
+     JOIN controls c ON c.id = ac.control_id
+     JOIN audit_plans ap ON ap.id = ac.audit_id
+     WHERE ($1::text = 'Auditor' AND ac.auditor_id = $2)
+        OR ($1::text = 'Auditor Senior' AND ac.assigned_by = $2)
+        OR ($1::text = 'Jefe de Auditoría' AND ap.created_by = $2)
+     ORDER BY c.code, ap.code`,
+    [usuario.rol, usuario.id],
+  );
+  res.json(resultado.rows);
+});
+
 router.get("/controles/:controlId/mi-asignacion", async (req, res) => {
   const usuario = usuarioEnSesion(res);
   const controlId = req.params.controlId;

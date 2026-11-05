@@ -1,7 +1,10 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { crearHallazgo } from "../api/hallazgos";
 import FormularioHallazgo, { controlesConDeficiencia } from "./FormularioHallazgo";
+
+vi.mock("../api/hallazgos", () => ({ crearHallazgo: vi.fn() }));
 
 const CONTROLES = [
   { id: "CTR-001", name: "Conciliación bancaria", vulnerability: "Alta" as const },
@@ -49,5 +52,28 @@ describe("FormularioHallazgo", () => {
     mostrar("CTR-001");
 
     expect(screen.queryByDisplayValue("Seleccionar control")).toBeNull();
+  });
+
+  it("guarda el plan de la opción elegida aunque el control esté en dos planes", async () => {
+    vi.mocked(crearHallazgo).mockResolvedValue({ id: "1", title: "T", severity: "Medio" } as never);
+    render(
+      <FormularioHallazgo
+        controls={[
+          { id: "CTR-1", name: "Uno", vulnerability: "Baja", auditId: "7", etiqueta: "CP-1 - Uno (PAI-7)" },
+          { id: "CTR-1", name: "Uno", vulnerability: "Baja", auditId: "8", etiqueta: "CP-1 - Uno (PAI-8)" },
+        ]}
+        nextFolio="HAL-2026-002"
+        onCreated={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByDisplayValue("Seleccionar control"), { target: { value: "CTR-1::8" } });
+    const textos = document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input[type="text"], input:not([type]), textarea');
+    textos.forEach((campo) => fireEvent.change(campo, { target: { value: "Texto" } }));
+    fireEvent.change(screen.getByDisplayValue(/Seleccionar tipo|Selecciona/), { target: { value: "Otro" } });
+    fireEvent.click(screen.getByRole("button", { name: /Registrar hallazgo/ }));
+
+    await waitFor(() => expect(crearHallazgo).toHaveBeenCalledWith(expect.objectContaining({ controlId: "CTR-1", auditId: "8" })));
   });
 });
