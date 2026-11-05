@@ -212,7 +212,7 @@ export default function VistaControles({ navigate }: Props) {
 
   return (
     <div
-      className="w-full space-y-4 p-6"
+      className="flex-1 overflow-auto w-full space-y-4 p-6"
       style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
     >
       {/* Encabezado */}
