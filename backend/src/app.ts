@@ -20,6 +20,7 @@ import { rutasCatalogos } from "./routes/catalogos.js";
 import { rutasConflictos } from "./routes/conflictos.js";
 import { rutasEstructura } from "./routes/estructura.js";
 import { rutasPlanes } from "./routes/planes.js";
+import { rutasNotificaciones } from "./routes/notificaciones.js";
 import { rutasPlanesAccion } from "./routes/planesAccion.js";
 import { rutasUsuarios } from "./routes/usuarios.js";
 import auditControls from "./routes/auditControls.js";
@@ -92,6 +93,7 @@ export function crearApp(deps: DependenciasApp): Express {
     }),
     rutasPlanes({ repo: deps.repoPlanes, usuarios: deps.repo, registrarEvento }),
     rutasPlanesAccion({ repo: deps.repoPlanesAccion, usuarios: deps.repo, registrarEvento }),
+    rutasNotificaciones({ repo: deps.repoPlanesAccion }),
     rutasAsistente({ proveedor: deps.proveedorIA, evidencias: deps.repoEvidencias, registrarEvento }),
     rutasConflictos({
       repo: deps.repoConflictos ?? new RepositorioConflictosMemoria(deps.repo, deps.repoPlanes),

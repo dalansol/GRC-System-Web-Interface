@@ -12,7 +12,9 @@ import { crearVerificadorDev } from "../src/auth/verificador.js";
 import { registrarPool } from "../src/db.js";
 import { RepositorioEvidenciasMemoria } from "../src/repos/evidenciasMemoria.js";
 import { RepositorioMemoria } from "../src/repos/memoria.js";
+import { huellaContenidoPlan } from "../src/domain/flujoPlanAccion.js";
 import { RepositorioPlanesAccionMemoria } from "../src/repos/planesAccionMemoria.js";
+import { RepositorioPlanesAccionSql } from "../src/repos/planesAccionSql.js";
 import { RepositorioPlanesMemoria } from "../src/repos/planesMemoria.js";
 import { rutasEvidencias } from "../src/routes/evidencias.js";
 import { escuchar } from "./servidor.js";
@@ -234,6 +236,93 @@ describe.skipIf(!env.SQL_TEST_SERVER)("evidencias sobre PostgreSQL", () => {
 
       expect((await eliminar(JEFA, id)).status).toBe(403);
       expect((await eliminar(EMPLEADO_AUDITADO, id)).status).toBe(200);
+    });
+  });
+
+  describe("bloqueo por el flujo de aprobación", () => {
+    const pasoNuevo = async () => {
+      const plan = await uno(
+        `INSERT INTO action_plans (root_cause, responsible_id, due_date, created_by)
+         VALUES ('Causa', $1, '2030-01-01', $2) RETURNING id`,
+        [await idDe(JEFE_AUDITADO), await idDe(JEFA)],
+      );
+      const paso = await uno(
+        `INSERT INTO action_plan_steps (action_plan_id, assigned_user_id, description, due_date)
+         VALUES ($1, $2, 'Paso de prueba', '2029-12-01') RETURNING id`,
+        [plan, await idDe(EMPLEADO_AUDITADO)],
+      );
+      return { plan, paso };
+    };
+    const fijarEstado = (plan: number, estado: string) =>
+      pool.query("UPDATE action_plans SET status = $1 WHERE id = $2", [estado, plan]);
+
+    it.each(["Pendiente", "En Revisión", "Aprobado"])("con el plan %s no se sube evidencia ni se guarda el archivo", async (estado) => {
+      const { plan, paso } = await pasoNuevo();
+      await fijarEstado(plan, estado);
+      const archivos = guardados.size;
+
+      const res = await subir(EMPLEADO_AUDITADO, paso, "action_plan_step");
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.codigo).toBe("PLAN_BLOQUEADO");
+      expect(guardados.size).toBe(archivos);
+      expect(await consultar(EMPLEADO_AUDITADO, paso, "action_plan_step")).toEqual([]);
+    });
+
+    it.each(["Pendiente", "En Revisión", "Aprobado"])("con el plan %s no se elimina evidencia", async (estado) => {
+      const { plan, paso } = await pasoNuevo();
+      const { id } = (await subir(EMPLEADO_AUDITADO, paso, "action_plan_step")).body as { id: string };
+      await fijarEstado(plan, estado);
+
+      const res = await eliminar(EMPLEADO_AUDITADO, id);
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.codigo).toBe("PLAN_BLOQUEADO");
+      expect(await consultar(EMPLEADO_AUDITADO, paso, "action_plan_step")).toEqual([id]);
+    });
+
+    it("con el plan Rechazado se sube y se elimina evidencia", async () => {
+      const { plan, paso } = await pasoNuevo();
+      await fijarEstado(plan, "Rechazado");
+
+      const subida = await subir(EMPLEADO_AUDITADO, paso, "action_plan_step");
+      expect(subida.status).toBe(201);
+      expect((await eliminar(EMPLEADO_AUDITADO, subida.body.id)).status).toBe(200);
+    });
+
+    it("firmaIntegra es falso si cambia en la base el hash de una evidencia aprobada", async () => {
+      const { plan, paso } = await pasoNuevo();
+      const { id } = (await subir(EMPLEADO_AUDITADO, paso, "action_plan_step")).body as { id: string };
+      const planes = new RepositorioPlanesAccionSql(pool);
+      await fijarEstado(plan, "En Revisión");
+      await planes.transicionar(plan, {
+        desde: ["En Revisión"],
+        hacia: "Aprobado",
+        accion: "aprobacion",
+        actor: { id: await idDe(JEFA), nombre: "María García", rol: "Jefe de Auditoría" },
+        firmaHash: huellaContenidoPlan((await planes.buscarPorId(plan))!, await planes.hashesEvidenciaPlan(plan)),
+      });
+      const app = await escuchar(
+        crearApp({
+          repo: usuarios,
+          repoPlanes: new RepositorioPlanesMemoria(usuarios),
+          repoPlanesAccion: planes,
+          repoEvidencias: new RepositorioEvidenciasMemoria(),
+          proveedorIA: null,
+          verificador: crearVerificadorDev(),
+          dominiosPermitidos: ["expedite.com"],
+          corsOrigin: "http://localhost:5173",
+          registrarEvento: () => {},
+        }),
+      );
+      const firmaIntegra = async () =>
+        (await request(app).get(`/api/planes-accion/${plan}/flujo`).set("X-Dev-Usuario", JEFA)).body.firmaIntegra;
+
+      expect(await firmaIntegra()).toBe(true);
+
+      await pool.query("UPDATE evidence SET file_hash = 'alterado' WHERE id = $1", [id]);
+
+      expect(await firmaIntegra()).toBe(false);
     });
   });
 

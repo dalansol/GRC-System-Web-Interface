@@ -1,3 +1,4 @@
+import { ESTADOS_BLOQUEADOS } from "../domain/flujoPlanAccion.js";
 import { Router, Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import path from "path";
@@ -7,6 +8,27 @@ import { upload } from "../middleware/upload.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import type { AlmacenamientoArchivos } from "../almacenamiento.js";
 import { ROLES_EDICION } from "./planesAccion.js";
+
+// La evidencia de un plan en revisión o aprobado forma parte de lo que se revisa y se firma (SF-12).
+const RESPUESTA_PLAN_BLOQUEADO = {
+  error: {
+    codigo: "PLAN_BLOQUEADO",
+    mensaje: "El plan de acción está en revisión o aprobado y su evidencia no puede modificarse.",
+  },
+};
+
+async function pasoEnPlanBloqueado(pasoId: string): Promise<boolean> {
+  const pool = await poolPromise;
+  const resultado = await pool.query(
+    `SELECT 1
+     FROM action_plan_steps step
+     JOIN action_plans plan ON plan.id = step.action_plan_id
+     WHERE step.id::text = $1 AND plan.status = ANY($2::varchar[])
+     LIMIT 1`,
+    [pasoId, [...ESTADOS_BLOQUEADOS]],
+  );
+  return resultado.rowCount === 1;
+}
 
 // Los archivos se guardan en el almacenamiento configurado (disco local o Cloudflare R2,
 // SF-08/INT-03); la tabla evidence guarda la clave en storage_path.
@@ -178,6 +200,9 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
               },
             });
           }
+          if (await pasoEnPlanBloqueado(entityId)) {
+            return res.status(409).json(RESPUESTA_PLAN_BLOQUEADO);
+          }
         } else {
           const pool = await poolPromise;
           const hallazgo = await pool.query(
@@ -278,6 +303,9 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
               mensaje: "Solo quien subió la evidencia puede eliminarla.",
             },
           });
+        }
+        if (evidence.entity_type === "action_plan_step" && (await pasoEnPlanBloqueado(evidence.entity_id))) {
+          return res.status(409).json(RESPUESTA_PLAN_BLOQUEADO);
         }
       } else {
         const asignacion = await pool.query(
