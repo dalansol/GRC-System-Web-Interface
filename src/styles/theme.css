@@ -39,6 +39,18 @@
   --sidebar-accent-foreground: #FFFFFF;
   --sidebar-border: rgba(255,255,255,0.07);
   --sidebar-ring: #2B6FD4;
+  /* Editor de hojas de cálculo (UF-17): la cuadrícula usa la paleta de Expedite. */
+  --hoja-acento: var(--primary);
+  --hoja-acento-oscuro: #0A3BC4;
+  --hoja-acento-claro: #EBF0FF;
+  --hoja-seleccion: rgba(15, 79, 255, 0.08);
+  --hoja-cuadricula: #E4E8EF;
+  --hoja-encabezado: #F4F6FA;
+  --hoja-encabezado-borde: #D8DEE9;
+  --hoja-encabezado-activo: #E2E8F3;
+  --hoja-cinta: #FFFFFF;
+  --hoja-fondo: #FFFFFF;
+  --hoja-texto: #0F1B2D;
 }
 
 .dark {

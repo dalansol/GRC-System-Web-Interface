@@ -62,7 +62,7 @@ function mapApiRow(row: any): EvidenceFile {
     uploadDate: row.created_at ? new Date(row.created_at).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
     uploadedBy: row.uploaded_by || "Auditor",
     entityId: row.entity_id,
-    version: 1,
+    version: row.version ? Number(row.version) : 1,
   };
 }
 
@@ -195,10 +195,6 @@ export default function EvidenciasSection({
     }
   };
 
-  const handleHashUpdate = (fileId: string, newHash: string, newVersion: number) => {
-    setFiles(prev => prev.map(f => f.id === fileId ? { ...f, hash: newHash, version: newVersion } : f));
-  };
-
   const iconClass = (t: string) => t === "pdf" ? "text-red-500" : t === "xlsx" ? "text-emerald-600" : "text-blue-500";
 
   return (
@@ -206,10 +202,10 @@ export default function EvidenciasSection({
       {xlsxTarget && (
         <SpreadsheetEditor
           filename={xlsxTarget.name}
-          fileVersion={xlsxTarget.version ?? 3}
-          entityId={entityId}
+          evidenciaId={String(xlsxTarget.id)}
+          soloLectura={!puedeSubirEvidencia}
           onClose={() => setXlsxTarget(null)}
-          onHashUpdate={(hash, ver) => { handleHashUpdate(xlsxTarget.id, hash, ver); setXlsxTarget(null); }}
+          onGuardado={() => { void fetchEvidences(); }}
         />
       )}
       {iaTarget && (
@@ -277,7 +273,7 @@ export default function EvidenciasSection({
                     onClick={() => setXlsxTarget(f)}
                     className="flex-shrink-0 flex items-center gap-1 text-[10px] px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md hover:bg-emerald-100 font-semibold transition-colors whitespace-nowrap"
                   >
-                    <FileSpreadsheet size={10} /> Editar en Expedite
+                    <FileSpreadsheet size={10} /> {puedeSubirEvidencia ? "Editar en Expedite" : "Ver en Expedite"}
                   </button>
                 )}
                 {puedeSubirEvidencia && (
