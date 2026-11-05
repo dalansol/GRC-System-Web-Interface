@@ -1,12 +1,24 @@
 import { Router } from "express";
 import type { RegistrarEvento } from "../bitacora.js";
 import {
+  destinatariosCambio,
+  ESTADOS_BLOQUEADOS,
+  ESTADOS_EDICION_MANUAL,
+  ESTADOS_ENVIABLES,
+  huellaContenidoPlan,
+  impedimentoRevision,
+  ROLES_REVISION,
+  validarMotivoRechazo,
+} from "../domain/flujoPlanAccion.js";
+import {
   CAMPOS_EDITABLES_PLAN_ACCION,
   normalizarEdicionPlanAccion,
   normalizarPlanAccion,
   validarEdicionPlanAccion,
   validarFechaCompromiso,
   validarPlanAccion,
+  type EstadoPlanAccion,
+  type PlanAccion,
 } from "../domain/planesAccion.js";
 import { ROL_ADMINISTRADOR } from "../domain/tipos.js";
 import { ErrorApi } from "../errores.js";
@@ -24,12 +36,40 @@ interface Dependencias {
   registrarEvento: RegistrarEvento;
 }
 
+const MENSAJE_BLOQUEADO = "El plan de acción está en revisión o aprobado y no puede modificarse.";
+
+function actorDe(usuario: { id: number; nombre: string; rol: string }) {
+  return { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol };
+}
+
 function campos(cuerpo: unknown): Record<string, unknown> {
   return typeof cuerpo === "object" && cuerpo !== null ? (cuerpo as Record<string, unknown>) : {};
 }
 
 export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependencias): Router {
   const rutas = Router();
+
+  async function planDeRuta(valor: unknown): Promise<PlanAccion> {
+    const id = Number(valor);
+    const plan = Number.isInteger(id) && id > 0 ? await repo.buscarPorId(id) : null;
+    if (!plan) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de acción no existe.");
+    return plan;
+  }
+
+  /** Plan que el usuario en sesión puede revisar y que está en el estado esperado para esta acción. */
+  function exigirRevisor(plan: PlanAccion, usuario: { id: number; rol: string }) {
+    const impedimento = impedimentoRevision(plan, usuario);
+    if (impedimento) throw new ErrorApi(403, "REVISOR_IMPEDIDO", impedimento);
+  }
+
+  function exigirEstado(plan: PlanAccion, estado: EstadoPlanAccion, accion: string) {
+    if (plan.estado !== estado) {
+      throw new ErrorApi(409, "ESTADO_INVALIDO", `El plan de acción está en estado "${plan.estado}" y no se puede ${accion}.`);
+    }
+  }
+
+  const conflictoConcurrente = () =>
+    new ErrorApi(409, "ESTADO_INVALIDO", "Otro usuario ya actuó sobre este plan. Actualiza la lista.");
 
   rutas.get("/planes-accion", async (_req, res) => {
     res.json(await repo.listar());
@@ -38,6 +78,29 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
   // Planes asignados al usuario en sesión (portal del auditado).
   rutas.get("/planes-accion/mios", async (_req, res) => {
     res.json(await repo.listarPorResponsable(usuarioEnSesion(res).id));
+  });
+
+  // Bandeja de revisión (SF-12): planes enviados, en revisión, aprobados o rechazados.
+  rutas.get("/planes-accion/revision", autorizar(...ROLES_REVISION), async (_req, res) => {
+    res.json(await repo.listarRevision());
+  });
+
+  // Historial del flujo. Lo consultan el equipo de auditoría y quienes participan en el plan.
+  rutas.get("/planes-accion/:id/flujo", async (req, res) => {
+    const plan = await planDeRuta(req.params.id);
+    const usuario = usuarioEnSesion(res);
+    const participa =
+      plan.responsable.id === usuario.id || plan.pasos.some((paso) => paso.usuarioAsignado?.id === usuario.id);
+    if (!participa && !ROLES_EDICION.includes(usuario.rol)) {
+      throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "No tienes acceso al historial de este plan de acción.");
+    }
+    const eventos = await repo.listarFlujo(plan.id);
+    // Se compara la firma contra el contenido actual para detectar cambios posteriores a la aprobación.
+    const firma = plan.estado === "Aprobado" ? [...eventos].reverse().find((evento) => evento.accion === "aprobacion") : undefined;
+    const firmaIntegra = firma
+      ? firma.firmaHash === huellaContenidoPlan(plan, await repo.hashesEvidenciaPlan(plan.id))
+      : null;
+    res.json({ eventos, firmaIntegra });
   });
 
   // Usuarios activos que pueden ser responsables de un plan. Solo los datos necesarios para elegirlos.
@@ -100,8 +163,8 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     const id = Number(req.params.id);
     const actual = Number.isInteger(id) && id > 0 ? await repo.buscarPorId(id) : null;
     if (!actual) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de acción no existe.");
-    if (actual.estado === "En Revisión") {
-      throw new ErrorApi(409, "PLAN_EN_REVISION", "El plan de acción está en revisión y ya no puede modificarse.");
+    if (ESTADOS_BLOQUEADOS.includes(actual.estado)) {
+      throw new ErrorApi(409, "PLAN_BLOQUEADO", MENSAJE_BLOQUEADO);
     }
     // El auditado no modifica su plan, aunque su rol pertenezca al equipo de auditoría.
     if (actual.responsable.id === usuarioEnSesion(res).id) {
@@ -132,6 +195,13 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
       return;
     }
 
+    if (
+      cambios.includes("estado") &&
+      !(ESTADOS_EDICION_MANUAL.includes(actual.estado) && ESTADOS_EDICION_MANUAL.includes(datos.estado))
+    ) {
+      throw new ErrorApi(409, "ESTADO_CONTROLADO_POR_FLUJO", "Este estado solo cambia con el flujo de aprobación.");
+    }
+
     if (cambios.includes("fechaCompromiso")) {
       const errorFecha = validarFechaCompromiso(datos.fechaCompromiso, actual.hallazgo.fechaCierreAuditoria);
       if (errorFecha) throw new ErrorApi(400, "DATOS_INVALIDOS", errorFecha);
@@ -159,28 +229,128 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     res.json(plan);
   });
 
-  rutas.post("/planes-accion/:id/aprobar", async (req, res) => {
-    const id = Number(req.params.id);
-    const actual = Number.isInteger(id) && id > 0 ? await repo.buscarPorId(id) : null;
-    if (!actual) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de acción no existe.");
-    if (actual.estado === "En Revisión") {
-      throw new ErrorApi(409, "PLAN_EN_REVISION", "El plan de acción ya está en revisión.");
+  // El responsable envía el plan completo a revisión; también lo reenvía después de un rechazo.
+  rutas.post("/planes-accion/:id/enviar-revision", async (req, res) => {
+    const actual = await planDeRuta(req.params.id);
+    const usuario = usuarioEnSesion(res);
+    if (actual.responsable.id !== usuario.id) {
+      throw new ErrorApi(403, "NO_RESPONSABLE", "Solo el responsable puede enviar el plan de acción a revisión.");
+    }
+    if (!ESTADOS_ENVIABLES.includes(actual.estado)) {
+      throw new ErrorApi(409, "ESTADO_INVALIDO", `El plan de acción está en estado "${actual.estado}" y no se puede enviar a revisión.`);
     }
     if (actual.pasos.length === 0 || !actual.pasos.every((paso) => paso.completado)) {
       throw new ErrorApi(400, "PASOS_PENDIENTES", "Todos los pasos deben estar completados antes de enviar el plan a revisión.");
     }
 
-    const sesion = usuarioEnSesion(res);
-    const plan = await repo.transicionar(id, {
-      desde: ["Asignado", "En Progreso", "Completado", "Rechazado"],
+    const revisores = (await usuarios.listarUsuarios()).filter(
+      (candidato) => candidato.estado === "active" && impedimentoRevision(actual, candidato) === null,
+    );
+    const plan = await repo.transicionar(actual.id, {
+      desde: ESTADOS_ENVIABLES,
       hacia: "Pendiente",
       accion: "envio",
-      actor: { id: sesion.id, nombre: sesion.nombre, rol: sesion.rol },
+      actor: actorDe(usuario),
+      notificar: {
+        usuarioIds: revisores.map((revisor) => revisor.id),
+        mensaje: `El plan de acción ${actual.publicId} está pendiente de revisión.`,
+      },
     });
-    if (!plan) throw new ErrorApi(409, "PLAN_EN_REVISION", "El plan de acción ya está en revisión.");
+    if (!plan) throw conflictoConcurrente();
     registrarEvento({
       accion: "plan_accion.envio_revision",
-      actor: usuarioEnSesion(res).correo,
+      actor: usuario.correo,
+      detalle: { planAccionId: plan.id, hallazgoId: plan.hallazgo.id, folio: plan.hallazgo.folio },
+    });
+    res.json(plan);
+  });
+
+  // Al abrir un plan pendiente pasa a En Revisión. Si ya está en revisión no cambia nada.
+  rutas.post("/planes-accion/:id/abrir-revision", autorizar(...ROLES_REVISION), async (req, res) => {
+    const actual = await planDeRuta(req.params.id);
+    const usuario = usuarioEnSesion(res);
+    exigirRevisor(actual, usuario);
+    if (actual.estado === "En Revisión") {
+      res.json(actual);
+      return;
+    }
+    exigirEstado(actual, "Pendiente", "abrir para revisión");
+
+    const plan = await repo.transicionar(actual.id, {
+      desde: ["Pendiente"],
+      hacia: "En Revisión",
+      accion: "apertura",
+      actor: actorDe(usuario),
+    });
+    if (!plan) {
+      // Otro revisor lo abrió al mismo tiempo: el resultado es el que se pidió.
+      const reciente = await planDeRuta(actual.id);
+      if (reciente.estado !== "En Revisión") throw conflictoConcurrente();
+      res.json(reciente);
+      return;
+    }
+    registrarEvento({
+      accion: "plan_accion.apertura_revision",
+      actor: usuario.correo,
+      detalle: { planAccionId: plan.id, hallazgoId: plan.hallazgo.id, folio: plan.hallazgo.folio },
+    });
+    res.json(plan);
+  });
+
+  // Aprobar registra la firma: firmante, rol y fecha en el evento, y la huella del contenido aprobado.
+  rutas.post("/planes-accion/:id/aprobar", autorizar(...ROLES_REVISION), async (req, res) => {
+    const actual = await planDeRuta(req.params.id);
+    const usuario = usuarioEnSesion(res);
+    exigirRevisor(actual, usuario);
+    exigirEstado(actual, "En Revisión", "aprobar");
+
+    const firmaHash = huellaContenidoPlan(actual, await repo.hashesEvidenciaPlan(actual.id));
+    const plan = await repo.transicionar(actual.id, {
+      desde: ["En Revisión"],
+      hacia: "Aprobado",
+      accion: "aprobacion",
+      actor: actorDe(usuario),
+      firmaHash,
+      notificar: {
+        usuarioIds: destinatariosCambio(actual, usuario.id),
+        mensaje: `El plan de acción ${actual.publicId} fue aprobado por ${usuario.nombre}.`,
+      },
+    });
+    if (!plan) throw conflictoConcurrente();
+    registrarEvento({
+      accion: "plan_accion.aprobacion",
+      actor: usuario.correo,
+      detalle: { planAccionId: plan.id, hallazgoId: plan.hallazgo.id, folio: plan.hallazgo.folio, firmaHash },
+    });
+    res.json(plan);
+  });
+
+  rutas.post("/planes-accion/:id/rechazar", autorizar(...ROLES_REVISION), async (req, res) => {
+    const actual = await planDeRuta(req.params.id);
+    const usuario = usuarioEnSesion(res);
+    exigirRevisor(actual, usuario);
+    exigirEstado(actual, "En Revisión", "rechazar");
+
+    const { motivo: valor } = campos(req.body);
+    const error = validarMotivoRechazo(valor);
+    if (error) throw new ErrorApi(400, "MOTIVO_OBLIGATORIO", error);
+    const motivo = (valor as string).trim();
+
+    const plan = await repo.transicionar(actual.id, {
+      desde: ["En Revisión"],
+      hacia: "Rechazado",
+      accion: "rechazo",
+      actor: actorDe(usuario),
+      motivo,
+      notificar: {
+        usuarioIds: destinatariosCambio(actual, usuario.id),
+        mensaje: `El plan de acción ${actual.publicId} fue rechazado por ${usuario.nombre}. Motivo: ${motivo}`,
+      },
+    });
+    if (!plan) throw conflictoConcurrente();
+    registrarEvento({
+      accion: "plan_accion.rechazo",
+      actor: usuario.correo,
       detalle: { planAccionId: plan.id, hallazgoId: plan.hallazgo.id, folio: plan.hallazgo.folio },
     });
     res.json(plan);
@@ -196,8 +366,8 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
 
     const plan = await repo.buscarPorId(planId);
     if (!plan) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de acción no existe.");
-    if (plan.estado === "En Revisión") {
-      throw new ErrorApi(409, "PLAN_EN_REVISION", "El plan de acción está en revisión y sus pasos ya no pueden modificarse.");
+    if (ESTADOS_BLOQUEADOS.includes(plan.estado)) {
+      throw new ErrorApi(409, "PLAN_BLOQUEADO", MENSAJE_BLOQUEADO);
     }
     const paso = plan.pasos.find((item) => item.id === pasoId);
     if (!paso || paso.usuarioAsignado?.id !== usuarioEnSesion(res).id) {
