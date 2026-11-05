@@ -34,6 +34,8 @@ export interface Hoja {
   anchos: Record<number, number>;
   altos: Record<number, number>;
   inmovilizar: { filas: number; columnas: number };
+  /** Rangos de celdas combinadas; el valor y el estilo viven en la esquina superior izquierda. */
+  combinadas: Rango[];
 }
 
 export interface Libro {
@@ -74,7 +76,7 @@ export function claveCelda(f: number, c: number): string {
 }
 
 export function hojaVacia(nombre: string, filas = FILAS_INICIALES, columnas = COLUMNAS_INICIALES): Hoja {
-  return { nombre, celdas: {}, filas, columnas, anchos: {}, altos: {}, inmovilizar: { filas: 0, columnas: 0 } };
+  return { nombre, celdas: {}, filas, columnas, anchos: {}, altos: {}, inmovilizar: { filas: 0, columnas: 0 }, combinadas: [] };
 }
 
 export function obtenerCelda(hoja: Hoja, f: number, c: number): Celda | undefined {

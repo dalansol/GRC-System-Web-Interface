@@ -20,7 +20,7 @@ Que el auditor abra una evidencia `.xlsx` dentro de Expedite y la edite con la m
 
 ### Modelo
 
-- `Libro { hojas }`; `Hoja` dispersa: solo guarda celdas con contenido o formato (`"fila,columna"`), anchos, altos y paneles inmovilizados.
+- `Libro { hojas }`; `Hoja` dispersa: solo guarda celdas con contenido o formato (`"fila,columna"`), anchos, altos, paneles inmovilizados y rangos de celdas combinadas (`combinadas`).
 - `Celda { entrada, estilo? }`: `entrada` es lo que se tecleó (`"1,500.25"`, `"=SUMA(A1:A3)"`). El valor se calcula al mostrarla.
 - Operaciones inmutables: cada cambio produce un libro nuevo; deshacer guarda referencias a libros anteriores.
 
@@ -40,6 +40,7 @@ Que el auditor abra una evidencia `.xlsx` dentro de Expedite y la edite con la m
 - Ratón: arrastrar para seleccionar, Mayús+clic, encabezados de fila/columna, esquina para todo, doble clic para editar, controlador de relleno (copia o continúa series), arrastrar bordes de encabezado para redimensionar y doble clic para autoajustar, clic derecho para el menú contextual.
 - Portapapeles: se escribe TSV y tabla HTML, así que se pega en Excel o Google Sheets y viceversa. Dentro de Expedite se conservan fórmulas (desplazadas) y formato.
 - La cuadrícula está virtualizada (solo pinta lo visible) y crece al desplazarse, hasta los límites de Excel (1 048 576 × 16 384). Operaciones sobre filas o columnas completas se acotan a la zona con datos.
+- **Celdas combinadas** (`domain/hoja/combinadas.ts`): Inicio › Alineación › botón dividido "Combinar y centrar" con el menú de Excel (Combinar y centrar, Combinar horizontalmente —una combinación por fila—, Combinar celdas, Separar celdas); también en el menú contextual. Como en Excel, solo sobrevive el contenido de la celda superior izquierda (se avisa con un toast cuando se pierde algo), la selección siempre abarca la combinación completa con la celda activa en su esquina, las flechas y Enter la saltan, el texto vecino no se desborda sobre ella, insertar filas o columnas dentro la agranda y eliminarlas la recorta (desaparece si queda en una celda). "Borrar todo" también separa. El botón principal alterna: sobre una combinación la separa.
 
 ### Ayudas al usuario
 
@@ -52,9 +53,9 @@ Que el auditor abra una evidencia `.xlsx` dentro de Expedite y la edite con la m
 
 ### Lectura y escritura `.xlsx`
 
-`exceljs` se carga bajo demanda (chunk aparte, no infla la carga inicial). Se conservan valores, fórmulas, negrita/cursiva/subrayado, alineación, relleno, color de fuente, bordes, formatos numéricos (número, moneda, porcentaje, fecha, texto), anchos, altos y paneles inmovilizados.
+`exceljs` se carga bajo demanda (chunk aparte, no infla la carga inicial). Se conservan valores, fórmulas, negrita/cursiva/subrayado, alineación, relleno, color de fuente, bordes, formatos numéricos (número, moneda, porcentaje, fecha, texto), anchos, altos, paneles inmovilizados y celdas combinadas (`ws.model.merges` al leer, `mergeCells` al escribir, después de las celdas).
 
-**No se conserva** (se avisa al abrir, no se descarta en silencio): celdas combinadas, imágenes, validaciones de datos, formato condicional, fórmulas de matriz (se convierten en valor). Gráficos, tablas dinámicas y macros tampoco se conservan; `exceljs` no los lee.
+**No se conserva** (se avisa al abrir, no se descarta en silencio): imágenes, validaciones de datos, formato condicional, fórmulas de matriz (se convierten en valor). Gráficos, tablas dinámicas y macros tampoco se conservan; `exceljs` no los lee.
 
 ### Macros (.xlsm)
 

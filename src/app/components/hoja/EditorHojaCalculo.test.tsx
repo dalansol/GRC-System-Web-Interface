@@ -16,7 +16,7 @@ vi.mock("../../api/evidencias", async (original) => ({
   listarVersionesEvidencia: vi.fn(),
 }));
 
-const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }));
 vi.mock("sonner", () => ({ toast }));
 
 const entrada = () => screen.getByTestId("hoja-entrada");
@@ -51,6 +51,35 @@ describe("Editor de hojas de cálculo", () => {
     fireEvent.keyDown(entrada(), { key: "ArrowUp" });
     teclear("10");
     expect(celda("A4")).toBe("15");
+  });
+
+  it("Combinar y centrar une el rango, avisa si pierde datos y Separar lo deshace", async () => {
+    render(<SpreadsheetEditor filename="Libro.xlsx" onClose={() => {}} />);
+    await screen.findByTestId("hoja-entrada");
+    fireEvent.keyDown(entrada(), { key: "ArrowDown" });
+    teclear("Título", "Tab");
+    teclear("se pierde", "Enter");
+    fireEvent.keyDown(entrada(), { key: "ArrowUp" });
+    fireEvent.keyDown(entrada(), { key: "ArrowLeft" });
+    fireEvent.keyDown(entrada(), { key: "ArrowRight", shiftKey: true });
+    fireEvent.keyDown(entrada(), { key: "ArrowRight", shiftKey: true });
+
+    fireEvent.click(screen.getByLabelText("Combinar y centrar"));
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[data-combinada="A2:C2"]')).not.toBeNull();
+    expect(celda("A2")).toBe("Título");
+    expect(celda("B2")).toBe("");
+    expect(screen.getByLabelText("Combinar y centrar")).toHaveAttribute("aria-pressed", "true");
+    // Al moverse, la combinación se selecciona completa y la flecha la salta.
+    fireEvent.keyDown(entrada(), { key: "ArrowRight" });
+    expect(screen.getByLabelText("Cuadro de nombres")).toHaveValue("D2");
+    fireEvent.keyDown(entrada(), { key: "ArrowLeft" });
+    expect(screen.getByLabelText("Cuadro de nombres")).toHaveValue("A2");
+
+    fireEvent.click(screen.getByLabelText("Combinar y centrar: más opciones"));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Separar celdas" }));
+    expect(document.querySelector("[data-combinada]")).toBeNull();
+    expect(screen.getByLabelText("Combinar y centrar")).toHaveAttribute("aria-pressed", "false");
   });
 
   it("Ctrl+Z deshace y la barra de estado suma el rango seleccionado", async () => {

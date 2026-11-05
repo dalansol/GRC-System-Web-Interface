@@ -2,6 +2,7 @@ import type { Cell, Workbook, Worksheet } from "exceljs";
 
 import { Calculadora, esFormula, interpretarEntrada, serialAFecha } from "./calculo";
 import { ERRORES_EN, ERRORES_ES } from "./formulas";
+import { parsearRango } from "./referencias";
 import { formulaAEspanol, formulaAIngles } from "./reescritura";
 import {
   ANCHO_COLUMNA,
@@ -157,7 +158,10 @@ function hojaDesdeWorksheet(ws: Worksheet, avisos: Set<string>): Hoja {
   if (vista?.state === "frozen") hoja.inmovilizar = { filas: vista.ySplit ?? 0, columnas: vista.xSplit ?? 0 };
 
   const merges = (ws.model as { merges?: string[] }).merges ?? [];
-  if (merges.length) avisos.add("Las celdas combinadas se separarán al guardar.");
+  for (const texto of merges) {
+    const r = parsearRango(texto);
+    if (r && (r.f1 !== r.f2 || r.c1 !== r.c2)) hoja.combinadas.push(r);
+  }
   if (ws.getImages().length) avisos.add("Las imágenes del archivo no se muestran ni se conservan al guardar.");
   const validaciones = (ws as unknown as { dataValidations?: { model?: object } }).dataValidations?.model;
   if (validaciones && Object.keys(validaciones).length) avisos.add("Las validaciones de datos no se conservan al guardar.");
@@ -266,6 +270,9 @@ export async function escribirXlsx(libro: Libro): Promise<Blob> {
       const numFmt = numFmtDesdeEstilo(estilo);
       if (numFmt) cell.numFmt = numFmt;
     }
+
+    // Después de escribir las celdas: combinar vacía las que quedan tapadas.
+    for (const m of hoja.combinadas) ws.mergeCells(m.f1 + 1, m.c1 + 1, m.f2 + 1, m.c2 + 1);
   });
 
   const buffer = await wb.xlsx.writeBuffer();

@@ -26,6 +26,9 @@ import {
   Sigma,
   Search,
   Snowflake,
+  TableCellsMerge,
+  TableCellsSplit,
+  TableRowsSplit,
   Trash2,
   Underline,
   Unlock,
@@ -57,7 +60,11 @@ export interface AccionesCinta {
   insertarHoja: () => void;
   ordenar: (ascendente: boolean) => void;
   inmovilizar: (tipo: "panel" | "fila" | "columna" | "ninguno") => void;
+  combinar: (modo: ModoCombinar) => void;
 }
+
+/** Opciones del menú Combinar y centrar, como en Excel. */
+export type ModoCombinar = "centrar" | "horizontal" | "todo" | "separar";
 
 type Pestana = "Archivo" | "Inicio" | "Insertar" | "Datos" | "Vista";
 const PESTANAS: Pestana[] = ["Archivo", "Inicio", "Insertar", "Datos", "Vista"];
@@ -261,6 +268,60 @@ function MenuColor({ titulo, icono, color, onElegir, deshabilitado, sinColor }: 
   );
 }
 
+/** Botón dividido: la parte principal ejecuta la acción y la flecha abre un menú. */
+function BotonDividido({ titulo, icono, onClick, opciones, activo, deshabilitado, etiqueta }: { titulo: string; icono: React.ReactNode; onClick: () => void; opciones: OpcionMenu[]; activo?: boolean; deshabilitado?: boolean; etiqueta?: string }) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  return (
+    <div className="relative flex" ref={ref}>
+      <button
+        type="button"
+        onMouseDown={sinFoco}
+        onClick={onClick}
+        disabled={deshabilitado}
+        title={titulo}
+        aria-label={titulo}
+        aria-pressed={activo}
+        className={`h-7 px-1.5 flex items-center gap-1 rounded-l-md text-[11px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-40 ${
+          activo ? "bg-primary/10 text-primary hover:bg-primary/15" : "text-foreground hover:bg-secondary"
+        }`}
+      >
+        {icono}
+        {etiqueta && <span className="whitespace-nowrap">{etiqueta}</span>}
+      </button>
+      <button
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onClick={() => {
+          const r = ref.current!.getBoundingClientRect();
+          setMenu((m) => (m ? null : { x: r.left, y: r.bottom + 2 }));
+        }}
+        disabled={deshabilitado}
+        aria-haspopup="menu"
+        aria-expanded={!!menu}
+        aria-label={`${titulo}: más opciones`}
+        className="h-7 w-4 flex items-center justify-center rounded-r-md text-muted-foreground hover:bg-secondary transition-colors disabled:opacity-40"
+      >
+        <ChevronDown size={10} />
+      </button>
+      {menu && <MenuContextual x={menu.x} y={menu.y} opciones={opciones} onCerrar={() => setMenu(null)} />}
+    </div>
+  );
+}
+
+/** Ícono de "Combinar horizontalmente": una fila ancha con flecha, sin equivalente en lucide. */
+function IconoCombinarHorizontal({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M3 10h18M3 14h18M12 4v6M12 14v6" />
+    </svg>
+  );
+}
+
 interface Props {
   vm: VistaModeloHoja;
   acciones: AccionesCinta;
@@ -272,8 +333,15 @@ export default function CintaOpciones({ vm, acciones, puedeGuardar }: Props) {
   const [contraida, setContraida] = useState(false);
   const [colorRelleno, setColorRelleno] = useState("#FFFF00");
   const [colorTexto, setColorTexto] = useState("#C00000");
-  const { estado, estiloActivo, cambiarEstilo, alternar, despachar, hoja } = vm;
+  const { estado, estiloActivo, cambiarEstilo, alternar, despachar, hoja, rango, combinadaActiva } = vm;
   const ro = estado.soloLectura;
+  const variasCeldas = rango.f1 !== rango.f2 || rango.c1 !== rango.c2;
+  const opcionesCombinar: OpcionMenu[] = [
+    { etiqueta: "Combinar y centrar", icono: <TableCellsMerge size={13} />, accion: () => acciones.combinar("centrar"), deshabilitada: !variasCeldas },
+    { etiqueta: "Combinar horizontalmente", icono: <IconoCombinarHorizontal size={13} />, accion: () => acciones.combinar("horizontal"), deshabilitada: rango.c1 === rango.c2 },
+    { etiqueta: "Combinar celdas", icono: <TableRowsSplit size={13} />, accion: () => acciones.combinar("todo"), deshabilitada: !variasCeldas },
+    { etiqueta: "Separar celdas", icono: <TableCellsSplit size={13} />, accion: () => acciones.combinar("separar"), deshabilitada: !hoja.combinadas.length },
+  ];
   const decimales = estiloActivo.decimales ?? (estiloActivo.formato === "numero" || estiloActivo.formato === "moneda" ? 2 : 0);
 
   const contenido: Record<Pestana, React.ReactNode> = {
@@ -337,6 +405,15 @@ export default function CintaOpciones({ vm, acciones, puedeGuardar }: Props) {
           <BotonChico titulo="Alinear a la izquierda" activo={estiloActivo.alineacion === "izquierda"} onClick={() => cambiarEstilo((e) => ({ ...e, alineacion: e.alineacion === "izquierda" ? undefined : "izquierda" }))} deshabilitado={ro}><AlignLeft size={14} /></BotonChico>
           <BotonChico titulo="Centrar" activo={estiloActivo.alineacion === "centro"} onClick={() => cambiarEstilo((e) => ({ ...e, alineacion: e.alineacion === "centro" ? undefined : "centro" }))} deshabilitado={ro}><AlignCenter size={14} /></BotonChico>
           <BotonChico titulo="Alinear a la derecha" activo={estiloActivo.alineacion === "derecha"} onClick={() => cambiarEstilo((e) => ({ ...e, alineacion: e.alineacion === "derecha" ? undefined : "derecha" }))} deshabilitado={ro}><AlignRight size={14} /></BotonChico>
+          <div className="w-px h-5 bg-border mx-0.5" />
+          <BotonDividido
+            titulo="Combinar y centrar"
+            icono={<TableCellsMerge size={14} />}
+            activo={!!combinadaActiva}
+            deshabilitado={ro || (!variasCeldas && !combinadaActiva)}
+            onClick={() => acciones.combinar(combinadaActiva ? "separar" : "centrar")}
+            opciones={opcionesCombinar}
+          />
         </Grupo>
         <Grupo titulo="Número">
           <div className="flex flex-col gap-1">

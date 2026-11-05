@@ -1,4 +1,5 @@
 import { Calculadora, esFormula, interpretarEntrada } from "./calculo";
+import { ajustarCombinadas, rangosACombinar, seCruzan } from "./combinadas";
 import { ajustarPorEstructura, desplazarFormula, renombrarHojaEnFormula, type CambioEstructura } from "./reescritura";
 import { serieRelleno } from "./relleno";
 import { prefijoHoja } from "./tokens";
@@ -57,7 +58,45 @@ export function limpiarRango(libro: Libro, idx: number, r: Rango, tambienFormato
       if (tambienFormato) delete celdas[k];
       else ponerCelda(celdas, f, c, { ...celdas[k], entrada: "" });
     }
-    return { ...h, celdas };
+    // "Borrar todo" también separa las celdas combinadas, como Excel.
+    const combinadas = tambienFormato ? h.combinadas.filter((m) => !seCruzan(m, r)) : h.combinadas;
+    return { ...h, celdas, combinadas };
+  });
+}
+
+// ─── Celdas combinadas ───────────────────────────────────────────────────────
+
+/**
+ * Combina el rango (o cada una de sus filas). Solo sobrevive el contenido de la esquina
+ * superior izquierda de cada combinación; las combinaciones previas que toca se sustituyen.
+ */
+export function combinarCeldas(libro: Libro, idx: number, r: Rango, modo: "todo" | "horizontal", centrar = false): Libro {
+  const nuevas = rangosACombinar(r, modo);
+  if (!nuevas.length) return libro;
+  return conHoja(libro, idx, (h) => {
+    const celdas = { ...h.celdas };
+    for (const m of nuevas) {
+      for (let f = m.f1; f <= m.f2; f++) {
+        for (let c = m.c1; c <= m.c2; c++) {
+          if (f === m.f1 && c === m.c1) continue;
+          delete celdas[claveCelda(f, c)];
+        }
+      }
+      if (centrar) {
+        const principal = celdas[claveCelda(m.f1, m.c1)];
+        celdas[claveCelda(m.f1, m.c1)] = { entrada: principal?.entrada ?? "", estilo: { ...principal?.estilo, alineacion: "centro" } };
+      }
+    }
+    const combinadas = [...h.combinadas.filter((m) => !nuevas.some((n) => seCruzan(m, n))), ...nuevas];
+    return asegurarTamano({ ...h, celdas, combinadas }, r.f2, r.c2);
+  });
+}
+
+/** Separa toda combinación que toque el rango; el contenido se queda en la celda principal. */
+export function separarCeldas(libro: Libro, idx: number, r: Rango): Libro {
+  return conHoja(libro, idx, (h) => {
+    const combinadas = h.combinadas.filter((m) => !seCruzan(m, r));
+    return combinadas.length === h.combinadas.length ? h : { ...h, combinadas };
   });
 }
 
@@ -231,9 +270,10 @@ export function cambiarEstructura(libro: Libro, idx: number, eje: "fila" | "colu
     }
     const total = eje === "fila" ? h.filas : h.columnas;
     const nuevoTotal = Math.max(1, total + cantidad);
+    const combinadas = ajustarCombinadas(h.combinadas, eje, en, cantidad);
     return eje === "fila"
-      ? { ...h, celdas, filas: nuevoTotal, altos: moverIndices(h.altos, en, cantidad) }
-      : { ...h, celdas, columnas: nuevoTotal, anchos: moverIndices(h.anchos, en, cantidad) };
+      ? { ...h, celdas, combinadas, filas: nuevoTotal, altos: moverIndices(h.altos, en, cantidad) }
+      : { ...h, celdas, combinadas, columnas: nuevoTotal, anchos: moverIndices(h.anchos, en, cantidad) };
   });
 }
 

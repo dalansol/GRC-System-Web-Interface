@@ -1,4 +1,5 @@
 import { esFormula } from "./calculo";
+import { ajustarSeleccion, combinadaEn, esCeldaOculta } from "./combinadas";
 import { escribir, saltoCtrl, ultimaCeldaUsada } from "./operaciones";
 import { nombreCelda, nombreRango } from "./referencias";
 import { desplazarFormula, normalizarFormula } from "./reescritura";
@@ -143,21 +144,27 @@ function senalar(e: EstadoHoja, activa: Posicion, extremo: Posicion): EstadoHoja
 
 export function reducirHoja(e: EstadoHoja, a: AccionHoja): EstadoHoja {
   const hoja = e.libro.hojas[e.hojaActiva];
+  // Toda selección respeta las celdas combinadas: abarca cada combinación completa y la
+  // celda activa es su esquina superior izquierda.
+  const seleccionar = (sel: Seleccion): EstadoHoja => ({ ...e, sel: ajustarSeleccion(hoja, sel) });
   switch (a.tipo) {
     case "seleccionar": {
       const pos = limitar(e, a.pos);
-      return { ...e, sel: a.extender ? extenderA(e.sel, pos) : celdaUnica(pos) };
+      return seleccionar(a.extender ? extenderA(e.sel, pos) : celdaUnica(pos));
     }
     case "seleccionarRango": {
       const activa = limitar(e, a.activa);
-      return { ...e, sel: { activa, ancla: activa, extremo: limitar(e, a.extremo) } };
+      return seleccionar({ activa, ancla: activa, extremo: limitar(e, a.extremo) });
     }
 
     case "mover": {
-      const desde = a.extender ? e.sel.extremo : e.sel.activa;
+      let desde = a.extender ? e.sel.extremo : e.sel.activa;
+      // Desde una celda combinada, bajar o ir a la derecha sale por su último borde.
+      const m = a.extender ? undefined : combinadaEn(hoja, desde.f, desde.c);
+      if (m) desde = { f: a.df > 0 ? m.f2 : desde.f, c: a.dc > 0 ? m.c2 : desde.c };
       const destino = a.salto ? saltoCtrl(hoja, desde.f, desde.c, Math.sign(a.df), Math.sign(a.dc)) : { f: desde.f + a.df, c: desde.c + a.dc };
       const pos = limitar(e, destino);
-      return { ...e, sel: a.extender ? extenderA(e.sel, pos) : celdaUnica(pos) };
+      return seleccionar(a.extender ? extenderA(e.sel, pos) : celdaUnica(pos));
     }
 
     case "moverEnRango": {
@@ -165,14 +172,19 @@ export function reducirHoja(e: EstadoHoja, a: AccionHoja): EstadoHoja {
       const r = rangoSeleccion(e.sel);
       if (r.f1 === r.f2 && r.c1 === r.c2) return reducirHoja(e, { tipo: "mover", df: a.df, dc: a.dc });
       let { f, c } = e.sel.activa;
-      if (a.df !== 0) {
-        f += a.df;
-        if (f > r.f2) { f = r.f1; c = c + 1 > r.c2 ? r.c1 : c + 1; }
-        if (f < r.f1) { f = r.f2; c = c - 1 < r.c1 ? r.c2 : c - 1; }
-      } else {
-        c += a.dc;
-        if (c > r.c2) { c = r.c1; f = f + 1 > r.f2 ? r.f1 : f + 1; }
-        if (c < r.c1) { c = r.c2; f = f - 1 < r.f1 ? r.f2 : f - 1; }
+      const total = (r.f2 - r.f1 + 1) * (r.c2 - r.c1 + 1);
+      // Las celdas tapadas por una combinación se saltan (tope: una vuelta completa al rango).
+      for (let paso = 0; paso < total; paso++) {
+        if (a.df !== 0) {
+          f += a.df;
+          if (f > r.f2) { f = r.f1; c = c + 1 > r.c2 ? r.c1 : c + 1; }
+          if (f < r.f1) { f = r.f2; c = c - 1 < r.c1 ? r.c2 : c - 1; }
+        } else {
+          c += a.dc;
+          if (c > r.c2) { c = r.c1; f = f + 1 > r.f2 ? r.f1 : f + 1; }
+          if (c < r.c1) { c = r.c2; f = f - 1 < r.f1 ? r.f2 : f - 1; }
+        }
+        if (!esCeldaOculta(hoja, f, c)) break;
       }
       return { ...e, sel: { ...e.sel, activa: { f, c } } };
     }
@@ -180,10 +192,10 @@ export function reducirHoja(e: EstadoHoja, a: AccionHoja): EstadoHoja {
     case "inicio": {
       const desde = a.extender ? e.sel.extremo : e.sel.activa;
       const pos = { f: a.ctrl ? 0 : desde.f, c: 0 };
-      return { ...e, sel: a.extender ? extenderA(e.sel, pos) : celdaUnica(pos) };
+      return seleccionar(a.extender ? extenderA(e.sel, pos) : celdaUnica(pos));
     }
     case "fin": {
-      return { ...e, sel: celdaUnica(ultimaCeldaUsada(hoja)) };
+      return seleccionar(celdaUnica(ultimaCeldaUsada(hoja)));
     }
 
     case "cambiarHoja": {
