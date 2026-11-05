@@ -8,6 +8,7 @@ import type {
   EdicionNodoInput,
   EdicionPeriodoInput,
   EdicionUnidadInput,
+  NivelCodigo,
   NivelEstructura,
   NivelNodo,
   NodoPlano,
@@ -34,13 +35,19 @@ export interface RepositorioEstructura {
 
   listarDepartamentos(): Promise<DepartamentoAuditoria[]>;
 
+  /**
+   * Código que recibiría la siguiente alta del nivel, sin consumirlo (vista previa del
+   * formulario). Puede quedar adelantado si otra alta se guarda antes.
+   */
+  codigoProximo(nivel: NivelCodigo): Promise<string>;
+
   // Unidades de negocio, con su jerarquía anidada.
   listarUnidades(): Promise<UnidadNegocio[]>;
   buscarUnidadPorId(id: number): Promise<UnidadNegocio | null>;
   /**
-   * Asigna el código: el siguiente número del nivel, por encima del mayor que se haya
-   * asignado o exista (no reutiliza los de unidades borradas). El nombre, si lo tiene, es
-   * único sin distinguir mayúsculas: lanza ErrorNombreDuplicado.
+   * Asigna el código: el mayor que exista en el nivel más uno (si se borró el último, su
+   * código se vuelve a usar). El nombre, si lo tiene, es único sin distinguir mayúsculas:
+   * lanza ErrorNombreDuplicado.
    */
   crearUnidad(datos: AltaUnidadInput, periodoFiscalId: number, creadoPor: number): Promise<UnidadNegocio>;
   /** El código no se edita. Lanza ErrorNombreDuplicado si el nombre ya lo usa otra unidad. */

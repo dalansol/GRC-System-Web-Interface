@@ -14,6 +14,7 @@ interface ControlApi {
   hours_spent?: string | number;
   feedback?: string | null;
   audit_ids?: number[];
+  tiene_deficiencia?: boolean;
 }
 
 function convertirControl(control: ControlApi): ControlRecord {
@@ -35,6 +36,7 @@ function convertirControl(control: ControlApi): ControlRecord {
     horasInvertidas: Number(control.hours_spent ?? 0),
     feedback: control.feedback,
     auditIds: control.audit_ids ?? [],
+    tieneDeficiencia: control.tiene_deficiencia ?? false,
   };
 }
 
@@ -43,7 +45,18 @@ export async function listarControles(): Promise<ControlRecord[]> {
   return controles.map(convertirControl);
 }
 
-export const registrarHoras = (controlId: string, datos: { horas: number }) =>
+export interface ControlParaHallazgo {
+  control_id: string;
+  code: string;
+  name: string;
+  audit_id: number;
+  plan_code: string;
+  tiene_deficiencia: boolean;
+}
+
+export const listarControlesParaHallazgo = () => pedir<ControlParaHallazgo[]>("/controles/para-hallazgo");
+
+export const registrarHoras = (controlId: string, datos: { horas: number; planId?: string | number }) =>
   pedir<{ id: string; hours_spent: string }>(`/controles/${encodeURIComponent(controlId)}/horas`, {
     metodo: "POST",
     cuerpo: datos,

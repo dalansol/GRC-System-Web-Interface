@@ -77,32 +77,32 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
     it("consulta el periodo trimestral activo", async () => {
       const res = await como(AUDITOR).get("/api/periodos/activo");
       expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ nombre: "2026 Q4", activo: true });
+      expect(res.body).toMatchObject({ nombre: "2026 T4", activo: true });
     });
 
     it("al activar un periodo nuevo desactiva el anterior y lo registra en bitácora", async () => {
       const res = await como(ADMIN).post("/api/periodos").send({
-        nombre: "2027 Q1",
+        nombre: "2027 T1",
         fechaInicio: "2027-01-01",
         fechaFin: "2027-03-31",
         activo: true,
       });
       expect(res.status).toBe(201);
       const periodos = (await como(JEFA).get("/api/periodos")).body as Array<{ nombre: string; activo: boolean }>;
-      expect(periodos.filter((p) => p.activo).map((p) => p.nombre)).toEqual(["2027 Q1"]);
+      expect(periodos.filter((p) => p.activo).map((p) => p.nombre)).toEqual(["2027 T1"]);
       expect(eventos.some((e) => e.accion === "periodo.alta")).toBe(true);
     });
 
     it("rechaza fechas invertidas y nombres de periodo repetidos", async () => {
       const invertido = await como(JEFA).post("/api/periodos").send({
-        nombre: "2027 Q2",
+        nombre: "2027 T2",
         fechaInicio: "2027-06-30",
         fechaFin: "2027-04-01",
       });
       expect(invertido.status).toBe(400);
 
       const repetido = await como(JEFA).post("/api/periodos").send({
-        nombre: "2026 q4",
+        nombre: "2026 t4",
         fechaInicio: "2026-10-01",
         fechaFin: "2026-12-31",
       });
@@ -124,7 +124,7 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
         codigo: "UDN-0001",
         nombre: null,
         responsableId: await idDe(JEFA),
-        periodoFiscalNombre: "2026 Q4",
+        periodoFiscalNombre: "2026 T4",
         departamentoAuditoriaNombre: "Retail & Spin",
         divisiones: [],
       });
@@ -223,11 +223,39 @@ describe("Parametrización de la estructura organizacional (SF-03)", () => {
       }
     });
 
-    it("no reutiliza el código de un elemento eliminado", async () => {
+    it("reutiliza el código del último elemento eliminado y deja el hueco de uno intermedio", async () => {
+      const primera = (await altaUnidad()).body.id;
+      await altaUnidad();
+      const tercera = (await altaUnidad()).body.id;
+      // Borrar una intermedia (UDN-0001) deja el hueco: sigue UDN-0004.
+      expect((await como(JEFA).delete(`/api/unidades-negocio/${primera}`)).status).toBe(204);
+      const cuarta = await altaUnidad();
+      expect(cuarta.body.codigo).toBe("UDN-0004");
+      // Borrar la última (UDN-0004) libera su código; la UDN-0003 sigue.
+      expect((await como(JEFA).delete(`/api/unidades-negocio/${cuarta.body.id}`)).status).toBe(204);
+      expect((await altaUnidad()).body.codigo).toBe("UDN-0004");
+      expect((await como(JEFA).get(`/api/unidades-negocio/${tercera}`)).body.codigo).toBe("UDN-0003");
+    });
+
+    it("la vista previa del código coincide con la del alta, también tras borrar, y no lo consume", async () => {
+      const proximo = async (nivel: string) => (await como(JEFA).get(`/api/codigos-proximos/${nivel}`)).body.codigo;
+      expect(await proximo("unidad")).toBe("UDN-0001");
       await altaUnidad();
       const segunda = (await altaUnidad()).body.id;
       expect((await como(JEFA).delete(`/api/unidades-negocio/${segunda}`)).status).toBe(204);
-      expect((await altaUnidad()).body.codigo).toBe("UDN-0003");
+      expect(await proximo("unidad")).toBe("UDN-0002");
+      expect(await proximo("unidad")).toBe("UDN-0002");
+      expect(await proximo("division")).toBe("DIVISION-0001");
+      expect((await altaUnidad()).body.codigo).toBe("UDN-0002");
+    });
+
+    it("la vista previa del código es solo para gestión y valida el nivel", async () => {
+      expect((await como(ADMIN).get("/api/codigos-proximos/subdivision")).status).toBe(200);
+      const auditor = await como(AUDITOR).get("/api/codigos-proximos/unidad");
+      expect(auditor.status).toBe(403);
+      const area = await como(JEFA).get("/api/codigos-proximos/area");
+      expect(area.status).toBe(400);
+      expect(area.body.error.codigo).toBe("DATOS_INVALIDOS");
     });
 
     it("con el Consolidado cargado continúa después del código más alto de cada nivel", async () => {

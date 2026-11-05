@@ -36,6 +36,7 @@ const SCRIPTS = [
   "024_seed_quitar_sin_codigo.sql",
   "025_nombres_unicos.sql",
   "026_nombres_periodos.sql",
+  "035_trimestres_periodos.sql",
 ];
 
 const script = (nombre: string) => readFile(new URL(`../sql/${nombre}`, import.meta.url), "utf8");
@@ -80,37 +81,39 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
     await pool?.end();
   });
 
-  it("026 renombra los periodos al formato '2026 Q1' / '2026 Fiscal' y repetir 015 y 017 no los duplica", async () => {
+  it("026 y 035 renombran los periodos al formato '2026 T1' / '2026 Fiscal' y repetir 015 y 017 no los duplica", async () => {
     await pool.query(
       `INSERT INTO fiscal_periods (name, start_date, end_date, is_active)
-       VALUES ('2031Q2', '2031-04-01', '2031-06-30', FALSE), ('Fiscal 2031', '2031-01-01', '2031-12-31', FALSE)`,
+       VALUES ('2031Q2', '2031-04-01', '2031-06-30', FALSE), ('Fiscal 2031', '2031-01-01', '2031-12-31', FALSE),
+              ('2031 Q3', '2031-07-01', '2031-09-30', FALSE)`,
     );
     await pool.query(await script("026_nombres_periodos.sql"));
-    for (const nombre of ["015_seed_estructura.sql", "017_jerarquia_organizacional.sql", "026_nombres_periodos.sql"]) {
+    await pool.query(await script("035_trimestres_periodos.sql"));
+    for (const nombre of ["015_seed_estructura.sql", "017_jerarquia_organizacional.sql", "026_nombres_periodos.sql", "035_trimestres_periodos.sql"]) {
       await pool.query(await script(nombre));
     }
     const nombres = (await repo.listarPeriodos()).map((p) => p.nombre);
-    expect(nombres).toEqual(expect.arrayContaining(["2031 Q2", "2031 Fiscal", "2026 Fiscal", "2026 Q1", "2026 Q4"]));
-    expect(nombres.filter((n) => /^\d{4}Q|^Fiscal /.test(n))).toEqual([]);
+    expect(nombres).toEqual(expect.arrayContaining(["2031 T2", "2031 T3", "2031 Fiscal", "2026 Fiscal", "2026 T1", "2026 T4"]));
+    expect(nombres.filter((n) => /^\d{4} ?Q|^Fiscal /.test(n))).toEqual([]);
     const de2026 = await pool.query("SELECT count(*)::int AS n FROM fiscal_periods WHERE start_date >= '2026-01-01' AND end_date <= '2026-12-31'");
     expect(de2026.rows[0].n).toBe(5); // cuatro trimestres y el año fiscal
-    await pool.query("DELETE FROM fiscal_periods WHERE name IN ('2031 Q2', '2031 Fiscal')");
+    await pool.query("DELETE FROM fiscal_periods WHERE name IN ('2031 T2', '2031 T3', '2031 Fiscal')");
   });
 
   it("repetir los scripts no cambia el periodo activo elegido en el Catálogo", async () => {
     const fiscal = (await repo.listarPeriodos()).find((p) => p.nombre === "2026 Fiscal")!;
     await repo.editarPeriodo(fiscal.id, { activo: true });
-    for (const nombre of ["015_seed_estructura.sql", "017_jerarquia_organizacional.sql", "026_nombres_periodos.sql"]) {
+    for (const nombre of ["015_seed_estructura.sql", "017_jerarquia_organizacional.sql", "026_nombres_periodos.sql", "035_trimestres_periodos.sql"]) {
       await pool.query(await script(nombre));
     }
     expect((await repo.obtenerPeriodoActivo())?.nombre).toBe("2026 Fiscal");
-    const q4 = (await repo.listarPeriodos()).find((p) => p.nombre === "2026 Q4")!;
+    const q4 = (await repo.listarPeriodos()).find((p) => p.nombre === "2026 T4")!;
     await repo.editarPeriodo(q4.id, { activo: true });
   });
 
-  it("los periodos son trimestrales, con 2026 Q4 como único activo", async () => {
+  it("los periodos son trimestrales, con 2026 T4 como único activo", async () => {
     const activo = await repo.obtenerPeriodoActivo();
-    expect(activo?.nombre).toBe("2026 Q4");
+    expect(activo?.nombre).toBe("2026 T4");
     expect((await repo.listarPeriodos()).filter((p) => p.activo)).toHaveLength(1);
   });
 
@@ -191,14 +194,16 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
     await expect(pool.query("INSERT INTO area (area_name) VALUES ('Suelta')")).rejects.toThrow(/null/i);
   });
 
-  it("asigna el siguiente código por encima del Consolidado y no reutiliza el de una unidad borrada", async () => {
+  it("asigna el siguiente código por encima del Consolidado y reutiliza el de la última unidad borrada", async () => {
     const periodo = (await repo.obtenerPeriodoActivo())!.id;
     const alta = () => repo.crearUnidad({ nombre: null, responsableId: jefeId, departamentoAuditoriaId: null }, periodo, jefeId);
+    expect(await repo.codigoProximo("unidad")).toBe("UDN-0007");
     const nueva = await alta();
     expect(nueva.codigo).toBe("UDN-0007");
     await repo.eliminarUnidad(nueva.id);
+    expect(await repo.codigoProximo("unidad")).toBe("UDN-0007");
     const segunda = await alta();
-    expect(segunda.codigo).toBe("UDN-0008");
+    expect(segunda.codigo).toBe("UDN-0007");
 
     // División: después de DIVISION-0012 (el mayor del Consolidado).
     const division = await repo.crearNodo("division", { nombre: null, padreId: segunda.id, pais: null });
@@ -278,10 +283,10 @@ describe.skipIf(!env.SQL_TEST_SERVER)("jerarquía organizacional sobre PostgreSQ
   });
 
   it("activar un periodo desactiva el anterior", async () => {
-    const nuevo = await repo.crearPeriodo({ nombre: "2027 Q1", fechaInicio: "2027-01-01", fechaFin: "2027-03-31", activo: true });
+    const nuevo = await repo.crearPeriodo({ nombre: "2027 T1", fechaInicio: "2027-01-01", fechaFin: "2027-03-31", activo: true });
     expect((await repo.obtenerPeriodoActivo())?.id).toBe(nuevo.id);
-    const q4 = (await repo.listarPeriodos()).find((p) => p.nombre === "2026 Q4")!;
+    const q4 = (await repo.listarPeriodos()).find((p) => p.nombre === "2026 T4")!;
     await repo.editarPeriodo(q4.id, { activo: true });
-    expect((await repo.obtenerPeriodoActivo())?.nombre).toBe("2026 Q4");
+    expect((await repo.obtenerPeriodoActivo())?.nombre).toBe("2026 T4");
   });
 });

@@ -45,6 +45,7 @@ export class RepositorioMemoria implements RepositorioUsuarios {
       rol: this.roles.find((r) => r.id === fila.rolId)!.nombre,
       estado: fila.estado,
       ultimoAcceso: fila.ultimoAcceso,
+      business_unit_id: 10,
     };
   }
 

@@ -4,7 +4,7 @@ import type { NivelNodo, Riesgo } from "../../api/estructura";
 import type { AltaNodoContexto, NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { nombreVisible, tieneNombre, type ConNombre } from "../../domain/estructura/nombres";
 import { COLOR_NIVEL_RIESGO, distribucionRiesgos, nivelMaximo } from "../../domain/estructura/riesgos";
-import { filtrarSugerencias } from "../../domain/estructura/sugerencias";
+import { filtrarSugerencias, opcionDeCatalogo } from "../../domain/estructura/sugerencias";
 
 // Piezas compartidas por el árbol de navegación (ArbolCatalogo) y el panel de detalle
 // (DetalleCatalogo), para que ambos se vean igual.
@@ -72,7 +72,7 @@ export function NombreConCodigo({ nodo }: { nodo: ConNombre }) {
  * Código de solo lectura en los formularios: el que ya tiene (edición) o el próximo que
  * asignará el sistema (alta). El usuario nunca lo escribe.
  */
-export function CampoCodigo({ codigo, proximo = false }: { codigo: string; proximo?: boolean }) {
+export function CampoCodigo({ codigo, proximo = false }: { codigo: string | null; proximo?: boolean }) {
   return (
     <div>
       <span className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">Código</span>
@@ -80,7 +80,12 @@ export function CampoCodigo({ codigo, proximo = false }: { codigo: string; proxi
         data-testid="campo-codigo"
         className="flex items-center justify-between gap-2 text-sm px-3.5 py-2.5 rounded-lg border border-border bg-slate-50 text-muted-foreground"
       >
-        <span className="font-mono text-foreground truncate">{codigo}</span>
+        {codigo ? (
+          <span className="font-mono text-foreground truncate">{codigo}</span>
+        ) : (
+          // Vista previa aún sin cargar (o no disponible): el aviso del alta confirma el código.
+          <span className="truncate">Se asigna al guardar</span>
+        )}
         {proximo ? (
           // En el alta solo el candado: el código lo asigna el sistema al guardar.
           <span role="img" aria-label="Se asigna al guardar" title="Se asigna al guardar" className="flex-shrink-0">
@@ -101,20 +106,37 @@ type PropsCampoSugerido = Omit<InputHTMLAttributes<HTMLInputElement>, "value" | 
   value: string;
   onChange: (valor: string) => void;
   opciones: readonly string[];
+  /**
+   * Solo acepta valores de `opciones` (catálogos de Ajustes): al salir del campo lo escrito se
+   * cambia por la opción que coincide (sin distinguir mayúsculas) o se borra si no hay ninguna.
+   */
+  estricto?: boolean;
 };
 
 /**
  * Campo de texto con sugerencias (combobox). Al enfocarlo muestra todas; al escribir filtra
  * sin distinguir mayúsculas ni acentos. Acepta cualquier otro valor. Flechas para recorrer,
  * Enter para elegir, Escape para cerrar. Sustituye a `<datalist>`, que no muestra la lista
- * completa con el campo vacío en todos los navegadores.
+ * completa con el campo vacío en todos los navegadores. Con `estricto` funciona como una lista
+ * desplegable con búsqueda.
  */
-export function CampoSugerido({ value, onChange, opciones, className, onBlur, onFocus, onKeyDown, ...props }: PropsCampoSugerido) {
+export function CampoSugerido({
+  value,
+  onChange,
+  opciones,
+  estricto = false,
+  className,
+  onBlur,
+  onFocus,
+  onKeyDown,
+  ...props
+}: PropsCampoSugerido) {
   const idLista = useId();
   const [abierto, setAbierto] = useState(false);
   const [activo, setActivo] = useState(-1);
   const visibles = filtrarSugerencias(opciones, value);
-  const mostrar = abierto && visibles.length > 0 && !props.disabled;
+  // En modo estricto la lista se abre aunque no haya coincidencias, para avisarlo.
+  const mostrar = abierto && (visibles.length > 0 || estricto) && !props.disabled;
 
   const elegir = (opcion: string) => {
     onChange(opcion);
@@ -147,6 +169,10 @@ export function CampoSugerido({ value, onChange, opciones, className, onBlur, on
         onBlur={(e) => {
           setAbierto(false);
           setActivo(-1);
+          if (estricto) {
+            const opcion = opcionDeCatalogo(opciones, value) ?? "";
+            if (opcion !== value) onChange(opcion);
+          }
           onBlur?.(e);
         }}
         onKeyDown={(e) => {
@@ -188,9 +214,23 @@ export function CampoSugerido({ value, onChange, opciones, className, onBlur, on
               {opcion}
             </li>
           ))}
+          {visibles.length === 0 && (
+            <li role="presentation" className="px-3.5 py-1.5 text-xs text-muted-foreground">
+              Sin coincidencias en el catálogo.
+            </li>
+          )}
         </ul>
       )}
     </div>
+  );
+}
+
+/** Aviso bajo los campos que salen de los catálogos de Ajustes (área y país). */
+export function AyudaCatalogo() {
+  return (
+    <p className="text-[11px] text-muted-foreground mt-1">
+      Solo opciones del catálogo. Si falta alguna, pide al Administrador que la agregue en Ajustes.
+    </p>
   );
 }
 

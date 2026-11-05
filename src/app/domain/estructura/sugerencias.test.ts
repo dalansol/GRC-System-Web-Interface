@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { UnidadNegocio } from "../../api/estructura";
-import { AREAS_FRECUENTES } from "../../data/catalogoEstructura";
-import { codigoProximo, filtrarSugerencias, siguienteCodigo, sugerenciasArea, sugerenciasPais } from "./sugerencias";
+import { filtrarSugerencias, opcionDeCatalogo, sugerenciasArea } from "./sugerencias";
 
 const UNIDADES: UnidadNegocio[] = [
   {
@@ -11,7 +10,7 @@ const UNIDADES: UnidadNegocio[] = [
     responsableId: 2,
     responsableNombre: "María García",
     periodoFiscalId: 1,
-    periodoFiscalNombre: "2026 Q4",
+    periodoFiscalNombre: "2026 T4",
     departamentoAuditoriaId: 1,
     departamentoAuditoriaNombre: "Retail & Spin",
     creadoPor: 1,
@@ -42,37 +41,28 @@ const UNIDADES: UnidadNegocio[] = [
   },
 ];
 
-describe("siguienteCodigo", () => {
-  it("toma el número más alto con ese prefijo e ignora otros nombres", () => {
-    expect(siguienteCodigo("division", ["DIVISION-0009", "DIVISION-0012", "Otra división"])).toBe("DIVISION-0013");
-    expect(siguienteCodigo("unidad", [])).toBe("UDN-0001");
+const CATALOGO = ["Compras", "Nómina", "Inventarios", "Área inventada"];
+
+describe("sugerenciasArea", () => {
+  it("ofrece solo el catálogo, sin las áreas que ya tiene la subdivisión", () => {
+    expect(sugerenciasArea(CATALOGO, UNIDADES, 100)).toEqual(["Compras", "Inventarios"]);
+    expect(sugerenciasArea(CATALOGO, UNIDADES, 101)).toEqual(CATALOGO);
+  });
+
+  it("no agrega áreas registradas que no estén en el catálogo", () => {
+    expect(sugerenciasArea(["Compras"], UNIDADES, 101)).toEqual(["Compras"]);
   });
 });
 
-describe("sugerencias", () => {
-  it("muestra como vista previa el siguiente código de unidades, divisiones y subdivisiones", () => {
-    expect(codigoProximo("unidad", UNIDADES)).toBe("UDN-0005");
-    expect(codigoProximo("division", UNIDADES)).toBe("DIVISION-0010");
-    expect(codigoProximo("subdivision", UNIDADES)).toBe("SUBDIVISION-0033");
+describe("opcionDeCatalogo", () => {
+  it("devuelve la grafía del catálogo sin distinguir mayúsculas", () => {
+    expect(opcionDeCatalogo(CATALOGO, "  NÓMINA ")).toBe("Nómina");
   });
 
-  it("para un área ofrece el catálogo de FEMSA y las ya registradas, sin las que ya tiene la subdivisión", () => {
-    const enLaMisma = sugerenciasArea(UNIDADES, 100);
-    expect(enLaMisma).not.toContain("Nómina");
-    expect(enLaMisma).not.toContain("Área inventada");
-    expect(enLaMisma[0]).toBe(AREAS_FRECUENTES[0]);
-
-    const enOtra = sugerenciasArea(UNIDADES, 101);
-    expect(enOtra).toContain("Nómina");
-    expect(enOtra).toContain("Área inventada");
-  });
-
-  it("los países combinan el catálogo con los ya registrados, sin repetir", () => {
-    const paises = sugerenciasPais(UNIDADES);
-    expect(paises[0]).toBe("México");
-    expect(paises).toContain("KFS RTR");
-    expect(paises).toContain("Región Andina");
-    expect(paises.filter((p) => p === "México")).toHaveLength(1);
+  it("distingue acentos y rechaza lo que no está, como el backend", () => {
+    expect(opcionDeCatalogo(CATALOGO, "Nomina")).toBeNull();
+    expect(opcionDeCatalogo(CATALOGO, "Astrología")).toBeNull();
+    expect(opcionDeCatalogo(CATALOGO, "")).toBeNull();
   });
 });
 

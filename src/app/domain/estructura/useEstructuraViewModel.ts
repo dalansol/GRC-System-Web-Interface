@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   crearNodo as apiCrearNodo,
@@ -14,6 +14,7 @@ import {
   listarPeriodos as apiListarPeriodos,
   listarResponsables as apiListarResponsables,
   listarUnidades as apiListarUnidades,
+  obtenerCodigoProximo as apiObtenerCodigoProximo,
   obtenerPeriodoActivo as apiObtenerPeriodoActivo,
   obtenerUnidadPorId as apiObtenerUnidad,
   ROLES_GESTION_ESTRUCTURA,
@@ -28,6 +29,7 @@ import {
   type UnidadNegocio,
   type DatosNodo,
 } from "../../api/estructura";
+import { listarOpciones as apiListarOpciones } from "../../api/catalogos";
 import { useSesion } from "../../auth/SesionContext";
 import { nombreVisible, tieneNombre, type ConNombre } from "./nombres";
 
@@ -67,6 +69,9 @@ export function useEstructuraViewModel() {
   const [periodos, setPeriodos] = useState<PeriodoFiscal[]>([]);
   const [departamentos, setDepartamentos] = useState<DepartamentoAuditoria[]>([]);
   const [responsables, setResponsables] = useState<Responsable[]>([]);
+  /** Catálogos de Ajustes: las únicas opciones para el nombre del área y el país. */
+  const [opcionesArea, setOpcionesArea] = useState<string[]>([]);
+  const [opcionesPais, setOpcionesPais] = useState<string[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
   /** Mensaje si no se pudo leer el catálogo (para no confundirlo con un catálogo vacío). */
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
@@ -82,6 +87,10 @@ export function useEstructuraViewModel() {
   const [unidadEditando, setUnidadEditando] = useState<UnidadNegocio | null>(null);
   const [nodoEditando, setNodoEditando] = useState<NodoSeleccionado | null>(null);
   const [errorModalEdicion, setErrorModalEdicion] = useState<string | null>(null);
+
+  /** Código que asignará el backend en el alta abierta; null mientras carga, si falla o en el área. */
+  const [codigoProximo, setCodigoProximo] = useState<string | null>(null);
+  const consultaCodigo = useRef(0);
 
   const [modalPeriodosAbierto, setModalPeriodosAbierto] = useState<boolean>(false);
   const [errorModalPeriodos, setErrorModalPeriodos] = useState<string | null>(null);
@@ -117,10 +126,39 @@ export function useEstructuraViewModel() {
     cargarDatos();
   }, [cargarDatos]);
 
+  /** Lee los catálogos al abrir un formulario, por si el Administrador los cambió. */
+  const cargarCatalogos = () => {
+    apiListarOpciones("area")
+      .then((opciones) => setOpcionesArea(opciones.map((o) => o.valor)))
+      .catch(() => {
+        // Se conservan las últimas leídas; el backend valida igual.
+      });
+    apiListarOpciones("pais")
+      .then((opciones) => setOpcionesPais(opciones.map((o) => o.valor)))
+      .catch(() => {});
+  };
+
   /** Vuelve a leer una unidad con su jerarquía tras cambiar uno de sus nodos. */
   const refrescarUnidad = async (unidadId: number) => {
     const actualizada = await apiObtenerUnidad(unidadId);
     setUnidades((prev) => prev.map((u) => (u.id === unidadId ? actualizada : u)));
+  };
+
+  /**
+   * Pide al backend el código de la siguiente alta, para que la vista previa siga su misma
+   * regla (el mayor código existente más uno). Ignora la respuesta si ya se abrió otra alta.
+   */
+  const cargarCodigoProximo = (nivel: "unidad" | "division" | "subdivision" | null) => {
+    const consulta = ++consultaCodigo.current;
+    setCodigoProximo(null);
+    if (!nivel) return;
+    apiObtenerCodigoProximo(nivel)
+      .then(({ codigo }) => {
+        if (consulta === consultaCodigo.current) setCodigoProximo(codigo);
+      })
+      .catch(() => {
+        // Sin vista previa el campo dice "Se asigna al guardar"; el aviso confirma el código.
+      });
   };
 
   // ── Alta de unidad de negocio ───────────────────────────────────────────────
@@ -128,6 +166,7 @@ export function useEstructuraViewModel() {
   const abrirModalAlta = () => {
     setErrorModalAlta(null);
     setModalAltaAbierto(true);
+    cargarCodigoProximo("unidad");
   };
 
   const cerrarModalAlta = () => {
@@ -160,6 +199,8 @@ export function useEstructuraViewModel() {
   const abrirAltaNodo = (contexto: AltaNodoContexto) => {
     setErrorModalNodo(null);
     setAltaNodo(contexto);
+    cargarCodigoProximo(contexto.nivel === "area" ? null : contexto.nivel);
+    if (contexto.nivel !== "division") cargarCatalogos();
   };
 
   const cerrarAltaNodo = () => {
@@ -197,6 +238,7 @@ export function useEstructuraViewModel() {
   const abrirEditarNodo = (nodo: NodoSeleccionado) => {
     setErrorModalEdicion(null);
     setNodoEditando(nodo);
+    if (nodo.nivel !== "division") cargarCatalogos();
   };
 
   const cerrarEdicion = () => {
@@ -326,6 +368,8 @@ export function useEstructuraViewModel() {
     periodos,
     departamentos,
     responsables,
+    opcionesArea,
+    opcionesPais,
     cargando,
     errorCarga,
     guardando,
@@ -337,6 +381,8 @@ export function useEstructuraViewModel() {
     cerrarModalPeriodos,
     guardarPeriodo,
     activarPeriodo,
+    // Alta de unidad o nodo
+    codigoProximo,
     // Alta de unidad
     modalAltaAbierto,
     errorModalAlta,

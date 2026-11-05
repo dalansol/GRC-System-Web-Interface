@@ -3,7 +3,7 @@ import { AlertTriangle, Building2, Calendar, ChevronRight, Pencil, Plus, Refresh
 import { ETIQUETA_NIVEL, NIVELES_RIESGO, type AltaUnidadInput, type NivelRiesgo, type UnidadNegocio } from "../../api/estructura";
 import { clavesAncestros, dependientesDe, resolverRuta, type RutaCatalogo } from "../../domain/estructura/navegacion";
 import { filtrarUnidades, riesgosDeNodo } from "../../domain/estructura/riesgos";
-import { codigoProximo, sugerenciasArea, sugerenciasPais } from "../../domain/estructura/sugerencias";
+import { sugerenciasArea } from "../../domain/estructura/sugerencias";
 import { useEstructuraViewModel, type NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
 import { ArbolCatalogo } from "./ArbolCatalogo";
@@ -32,6 +32,8 @@ export function HierarchyView() {
     periodos,
     departamentos,
     responsables,
+    opcionesArea,
+    opcionesPais,
     cargando,
     errorCarga,
     guardando,
@@ -42,6 +44,7 @@ export function HierarchyView() {
     cerrarModalPeriodos,
     guardarPeriodo,
     activarPeriodo,
+    codigoProximo,
     modalAltaAbierto,
     errorModalAlta,
     abrirModalAlta,
@@ -65,14 +68,10 @@ export function HierarchyView() {
     recargar,
   } = useEstructuraViewModel();
 
-  // Sugerencias de los formularios (catálogo de FEMSA + lo ya registrado).
-  const paisesSugeridos = useMemo(() => sugerenciasPais(unidades), [unidades]);
-  // Vista previa del código que asignará el backend; el usuario no lo escribe.
-  const codigoProximoUnidad = useMemo(() => codigoProximo("unidad", unidades), [unidades]);
-  const codigoProximoNodo = altaNodo && altaNodo.nivel !== "area" ? codigoProximo(altaNodo.nivel, unidades) : undefined;
-  const areasSugeridas = useMemo(
-    () => (altaNodo?.nivel === "area" ? sugerenciasArea(unidades, altaNodo.padreId) : []),
-    [altaNodo, unidades],
+  // Opciones de los formularios: catálogos de Ajustes (en el alta de área, sin las que ya tiene).
+  const areasDisponibles = useMemo(
+    () => (altaNodo?.nivel === "area" ? sugerenciasArea(opcionesArea, unidades, altaNodo.padreId) : []),
+    [altaNodo, opcionesArea, unidades],
   );
 
   // Búsqueda y filtro por nivel de riesgo.
@@ -388,7 +387,7 @@ export function HierarchyView() {
         errorServidor={errorModalAlta}
         onGuardar={registrarUnidad}
         onCerrar={cerrarModalAlta}
-        codigoProximo={codigoProximoUnidad}
+        codigoProximo={codigoProximo}
       />
 
       {/* ── Modal de Periodos de Auditoría ── */}
@@ -410,9 +409,9 @@ export function HierarchyView() {
         errorServidor={errorModalNodo}
         onGuardar={guardarNuevoNodo}
         onCerrar={cerrarAltaNodo}
-        codigoProximo={codigoProximoNodo}
-        sugerencias={areasSugeridas}
-        sugerenciasPais={paisesSugeridos}
+        codigoProximo={codigoProximo}
+        opcionesArea={areasDisponibles}
+        opcionesPais={opcionesPais}
       />
 
       {/* ── Modal de Edición de Entidad ── */}
@@ -426,7 +425,8 @@ export function HierarchyView() {
         onGuardarUnidad={guardarEdicionUnidad}
         onGuardarNodo={guardarEdicionNodo}
         onCerrar={cerrarEdicion}
-        sugerenciasPais={paisesSugeridos}
+        opcionesArea={opcionesArea}
+        opcionesPais={opcionesPais}
       />
 
       {/* ── Modal de Confirmación de Eliminación (AC3) ── */}

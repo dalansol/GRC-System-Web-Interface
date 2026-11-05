@@ -53,7 +53,7 @@ describe("CA1: tabla de usuarios", () => {
     const res = await como(ADMIN).get("/api/usuarios");
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(7);
+    expect(res.body).toHaveLength(9);
     expect(res.body).toContainEqual(
       expect.objectContaining({
         nombre: "María García",
@@ -71,7 +71,7 @@ describe("CA1: tabla de usuarios", () => {
     const res = await como(ADMIN).get("/api/usuarios");
 
     for (const usuario of res.body) {
-      expect(Object.keys(usuario).sort()).toEqual(["correo", "estado", "id", "nombre", "rol", "ultimoAcceso"]);
+      expect(Object.keys(usuario).sort()).toEqual(["business_unit_id", "correo", "estado", "id", "nombre", "rol", "ultimoAcceso"]);
     }
   });
 });
@@ -173,7 +173,7 @@ describe("CA3: alta de usuario con validación de dominio corporativo", () => {
     expect(res.body).toMatchObject({ ...nuevo, estado: "active" });
 
     const lista = await como(ADMIN).get("/api/usuarios");
-    expect(lista.body).toHaveLength(8);
+    expect(lista.body).toHaveLength(10);
   });
 
   it.each([
@@ -194,7 +194,7 @@ describe("CA3: alta de usuario con validación de dominio corporativo", () => {
     await como(ADMIN).post("/api/usuarios").send({ ...nuevo, correo: "l.pena@gmail.com" });
 
     const lista = await como(ADMIN).get("/api/usuarios");
-    expect(lista.body).toHaveLength(7);
+    expect(lista.body).toHaveLength(9);
     expect(eventos).toHaveLength(0);
   });
 
@@ -315,6 +315,8 @@ describe("autenticación y autorización por rol", () => {
       "Auditor",
       "Consultor",
       "Solo Lectura",
+      "Jefe Auditado",
+      "Empleado Auditado",
     ]);
     expect(res.body[3].permisos).toEqual(["Ver Dashboard", "Ver Auditorías"]);
   });

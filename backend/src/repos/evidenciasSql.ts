@@ -1,6 +1,7 @@
 import type pg from "pg";
 import type { AlmacenamientoArchivos } from "../almacenamiento.js";
-import type { ArchivoEvidencia, RepositorioEvidencias } from "./evidencias.js";
+import type { ArchivoEvidencia, LectorEvidencia, RepositorioEvidencias } from "./evidencias.js";
+import { condicionEvidenciaVisible } from "./evidenciasAcceso.js";
 
 export class RepositorioEvidenciasSql implements RepositorioEvidencias {
   constructor(
@@ -9,15 +10,18 @@ export class RepositorioEvidenciasSql implements RepositorioEvidencias {
     private readonly almacenamiento: AlmacenamientoArchivos,
   ) {}
 
-  async leerArchivo(id: string): Promise<ArchivoEvidencia | null> {
+  async leerArchivo(id: string, lector: LectorEvidencia): Promise<ArchivoEvidencia | null> {
     const resultado = await this.pool.query<{ file_name: string; mime_type: string; storage_path: string }>(
-      "SELECT file_name, mime_type, storage_path FROM evidence WHERE id = $1",
-      [id],
+      `SELECT e.file_name, e.mime_type, e.storage_path FROM evidence e
+       WHERE e.id = $1 AND ${condicionEvidenciaVisible("$2", "$3")}`,
+      [id, lector.rol, String(lector.id)],
     );
     const fila = resultado.rows[0];
-    if (!fila || (fila.mime_type !== "pdf" && fila.mime_type !== "xlsx")) return null;
+    if (!fila || !["pdf", "xlsx", "xlsm"].includes(fila.mime_type)) return null;
 
     const contenido = await this.almacenamiento.leer(fila.storage_path);
-    return contenido ? { id, nombre: fila.file_name, tipo: fila.mime_type, contenido } : null;
+    // Un libro con macros se lee igual que un .xlsx (las macros se ignoran).
+    const tipo = fila.mime_type === "pdf" ? "pdf" : "xlsx";
+    return contenido ? { id, nombre: fila.file_name, tipo, contenido } : null;
   }
 }

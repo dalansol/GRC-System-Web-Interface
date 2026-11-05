@@ -14,6 +14,7 @@ export interface HallazgoApi {
   failedControl?: string;
   residualRisk?: "Crítico" | "Alto" | "Medio" | "Bajo";
   ownerId?: string;
+  businessUnitId?: number;
 }
 
 export const listarHallazgos = () => pedir<HallazgoApi[]>("/hallazgos");

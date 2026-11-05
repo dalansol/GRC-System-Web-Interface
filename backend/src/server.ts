@@ -6,9 +6,14 @@ import { crearProveedor } from "./asistente/proveedor.js";
 import { crearVerificadorDev, crearVerificadorEntra } from "./auth/verificador.js";
 import { cargarConfig } from "./config.js";
 import { registrarPool } from "./db.js";
+import type { RepositorioCatalogos } from "./repos/catalogos.js";
+import { RepositorioCatalogosMemoria } from "./repos/catalogosMemoria.js";
+import { RepositorioCatalogosSql } from "./repos/catalogosSql.js";
 import type { RepositorioConflictos } from "./repos/conflictos.js";
 import { RepositorioConflictosMemoria } from "./repos/conflictosMemoria.js";
 import { RepositorioConflictosSql } from "./repos/conflictosSql.js";
+import type { RepositorioEvaluaciones } from "./repos/evaluaciones.js";
+import { RepositorioEvaluacionesSql } from "./repos/evaluacionesSql.js";
 import type { RepositorioEvidencias } from "./repos/evidencias.js";
 import { RepositorioEvidenciasMemoria } from "./repos/evidenciasMemoria.js";
 import { RepositorioEvidenciasSql } from "./repos/evidenciasSql.js";
@@ -33,9 +38,11 @@ let repo: RepositorioUsuarios;
 let repoPlanes: RepositorioPlanes;
 let repoPlanesAccion: RepositorioPlanesAccion;
 let repoConflictos: RepositorioConflictos;
+let repoEvaluaciones: RepositorioEvaluaciones | undefined;
 let repoEvidencias: RepositorioEvidencias;
 let repoEstructura: RepositorioEstructura;
-const rutasSinSesion: Router[] = [];
+let repoCatalogos: RepositorioCatalogos;
+const rutasConSesion: Router[] = [];
 
 if (config.datos.modo === "sql") {
   const repoSql = await RepositorioSql.conectar(config.datos);
@@ -43,11 +50,13 @@ if (config.datos.modo === "sql") {
   repoPlanes = new RepositorioPlanesSql(repoSql.pool);
   repoPlanesAccion = new RepositorioPlanesAccionSql(repoSql.pool);
   repoConflictos = new RepositorioConflictosSql(repoSql.pool);
+  repoEvaluaciones = new RepositorioEvaluacionesSql(repoSql.pool);
   repoEvidencias = new RepositorioEvidenciasSql(repoSql.pool, almacenamiento);
   repoEstructura = new RepositorioEstructuraSql(repoSql.pool);
+  repoCatalogos = new RepositorioCatalogosSql(repoSql.pool);
   // Las rutas de hallazgos y evidencias usan la misma conexión que las de usuarios.
   registrarPool(repoSql.pool);
-  rutasSinSesion.push((await import("./routes/hallazgos.js")).default);
+  rutasConSesion.push((await import("./routes/hallazgos.js")).default);
 } else {
   // Sin base de datos no hay rutas de hallazgos ni de evidencias; el frontend usa sus datos de prueba.
   repo = new RepositorioMemoria();
@@ -61,6 +70,8 @@ if (config.datos.modo === "sql") {
   const jefe = (await repo.listarUsuarios()).find((u) => u.rol === "Jefe de Auditoría" && u.estado === "active");
   if (jefe) estructuraMemoria.sembrar(SEMILLA_ESTRUCTURA, jefe.id);
   repoEstructura = estructuraMemoria;
+  // Después de sembrar: las áreas y los países de la semilla también quedan en el catálogo.
+  repoCatalogos = new RepositorioCatalogosMemoria(estructuraMemoria);
 }
 
 const verificador = config.auth.modo === "entra" ? crearVerificadorEntra(config.auth) : crearVerificadorDev();
@@ -72,14 +83,16 @@ const app = crearApp({
   repoEvidencias,
   proveedorIA: crearProveedor(config.ia),
   repoConflictos,
+  repoEvaluaciones,
   repoEstructura,
-  rutasConSesion: config.datos.modo === "sql"
-    ? [(await import("./routes/evidencias.js")).rutasEvidencias(almacenamiento)]
-    : [],
+  repoCatalogos,
+  rutasConSesion: [
+    ...(config.datos.modo === "sql" ? [(await import("./routes/evidencias.js")).rutasEvidencias(almacenamiento)] : []),
+    ...rutasConSesion,
+  ],
   verificador,
   dominiosPermitidos: config.dominiosPermitidos,
   corsOrigin: config.corsOrigin,
-  rutasSinSesion,
 });
 
 app.listen(config.puerto, () => {

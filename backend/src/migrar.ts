@@ -45,8 +45,23 @@ const SCRIPTS = [
   "031_rls_control_horas.sql",
   "032_normalizar_entidad_evidencias_control.sql",
   "033_campos_muestra_rotacion_controles.sql",
+  "034_catalogos_estructura.sql",
+  "034_portal_auditado.sql",
+  "035_normalizar_root_cause_plan.sql",
+  "035_trimestres_periodos.sql",
+  "036_permitir_varios_planes_por_hallazgo.sql",
+  "037_migrar_relacion_planes_hallazgos.sql",
+  "038_public_id_planes_accion.sql",
+  "039_entidad_evidencias.sql",
+  "040_evidencias_entidad_unica.sql",
+  "041_estado_revision_planes.sql",
+  "042_procesos_en_asignaciones.sql",
+  "044_flujo_aprobacion_planes.sql",
+  "045_etapas_planes_accion.sql",
+  "047_evaluacion_controles.sql",
+  "048_versiones_evidencia.sql",
 ];
-const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql", "022_seed_nombres_reales.sql", "024_seed_quitar_sin_codigo.sql", "030_seed_demo.sql"];
+const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql", "022_seed_nombres_reales.sql", "024_seed_quitar_sin_codigo.sql", "030_seed_demo.sql", "043_seed_plan_demo.sql", "046_seed_auditados.sql"];
 
 const huella = (texto: string) => createHash("sha256").update(texto).digest("hex");
 

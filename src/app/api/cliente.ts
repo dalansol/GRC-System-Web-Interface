@@ -76,3 +76,22 @@ export async function pedirFormData<T>(ruta: string, cuerpo: FormData): Promise<
   }
   return datos as T;
 }
+
+/** Descarga un archivo (p. ej. el .xlsx de una evidencia) con las credenciales de la sesión. */
+export async function pedirBinario(ruta: string): Promise<ArrayBuffer> {
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(`${URL_API}${ruta}`, { headers: await obtenerCredenciales() });
+  } catch {
+    throw new ErrorApi(0, "SIN_CONEXION", "No se pudo conectar con el servidor de Expedite.");
+  }
+  if (!respuesta.ok) {
+    const datos = await respuesta.json().catch(() => null);
+    throw new ErrorApi(
+      respuesta.status,
+      datos?.error?.codigo ?? "ERROR_INTERNO",
+      datos?.error?.mensaje ?? "Ocurrió un error inesperado.",
+    );
+  }
+  return respuesta.arrayBuffer();
+}

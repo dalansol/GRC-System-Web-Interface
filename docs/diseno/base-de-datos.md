@@ -44,18 +44,30 @@ Para trabajar sin la base compartida sigue sirviendo `DATA_MODE=memoria`.
 ```bash
 cd backend
 corepack pnpm db:migrar                  # aplica los scripts que falten
-corepack pnpm db:migrar --datos-prueba   # además, hallazgos y controles de prueba
+corepack pnpm db:migrar --datos-prueba   # además, datos de prueba (nunca contra Supabase)
 corepack pnpm db:migrar --admin-nombre "Nombre Apellido" --admin-correo correo@dominio.com
 ```
 
 El comando usa las variables `DB_*` del `.env`, así que corre contra la base a la que
 apunta el backend. Anota cada script aplicado en la tabla `schema_migrations` (nombre,
-huella del contenido y fecha) y la siguiente vez solo corre los que faltan.
+huella del contenido y fecha). La siguiente vez corre los que faltan y **vuelve a aplicar**
+los que cambiaron de contenido.
+
+### Estado de la base compartida
+
+Al 2026-11-04, Supabase está migrada hasta `042` con la rama `integracion-planes-accion`
+(`master` todavía no tiene estos scripts). No se le aplicaron los datos de prueba de esa rama.
+
+Antes de `042` se le hicieron cambios a mano que ningún script registraba: columnas de
+`processes`, `audit_controls.process_id`, `action_plans.title` como `TEXT` y filas de
+`processes`. `042` crea esas columnas en las demás bases, pero **no los datos**. Por eso una base
+nueva y Supabase pueden diferir en detalles (longitud de `processes.title`, llaves foráneas) y
+las filas de `processes` solo existen en Supabase.
 
 | Script | Contenido |
 |---|---|
 | `001_schema.sql` | `roles`, `permissions`, `role_permissions`, `users`, `audit_plans`, `evidence` |
-| `002_seed.sql` | Roles y permisos iniciales; dos evidencias de prueba |
+| `002_seed.sql` | Roles y permisos iniciales, incluidos Jefe Auditado y Empleado Auditado; dos evidencias de prueba |
 | `003_primer_administrador.sql` | Primer Administrador. Lo sustituye `--admin-nombre` y `--admin-correo` |
 | `004_findings.sql` | `findings` |
 | `005_seed_findings.sql` | Hallazgos de prueba. Solo con `--datos-prueba` |
@@ -70,7 +82,7 @@ huella del contenido y fecha) y la siguiente vez solo corre los que faltan.
 | `014_quitar_seguimiento_controles_catalogo.sql` | Quita el seguimiento del catálogo `controls` (queda en cada asignación) |
 | `015_seed_estructura.sql` | Año fiscal 2026 (inactivo) como periodo inicial de la estructura organizacional |
 | `016_mantener_controles_al_eliminar_proceso.sql` | Al borrar un proceso, sus controles se conservan sin proceso |
-| `017_jerarquia_organizacional.sql` | Jerarquía organizacional (SF-03): `division.business_unit_id`, `business.division_id` y `business.country` (`business` = subdivisión), `area.business_id`, `business_units.audit_department_id`, `audit_entity.business_id`; departamentos `Retail & Spin` y `Beverage`; periodos trimestrales `2026Q1…Q4` con `2026Q4` activo |
+| `017_jerarquia_organizacional.sql` | Jerarquía organizacional (SF-03): `division.business_unit_id`, `business.division_id` y `business.country` (`business` = subdivisión), `area.business_id`, `business_units.audit_department_id`, `audit_entity.business_id`; departamentos `Retail & Spin` y `Beverage`; periodos trimestrales `2026 T1…T4` con `2026 T4` activo |
 | `018_seed_jerarquia.sql` | Jerarquía del Consolidado (hoja Catalogs, nombres anonimizados): 6 unidades, 12 divisiones, 39 subdivisiones y 338 áreas (sin la subdivisión B-923765, que no tiene código). Solo con `--datos-prueba`; requiere un Jefe de Auditoría activo. Generado, no editar a mano |
 | `019_riesgos_jerarquia.sql` | Riesgos en la jerarquía: `risk_register.business_id` (el riesgo cuelga de la subdivisión) y `risk_library.level` (Crítico, Alto, Medio o Bajo; opcional) |
 | `020_seed_riesgos.sql` | Biblioteca (69 riesgos) y registro (249) del Consolidado sobre las subdivisiones de 018; el procedimiento de control es el id `CP-…`. **Niveles ficticios** (el archivo no los trae). Solo con `--datos-prueba`. Generado, no editar a mano |
@@ -80,16 +92,40 @@ huella del contenido y fecha) y la siguiente vez solo corre los que faltan.
 | `024_seed_quitar_sin_codigo.sql` | Limpia bases que ya cargaron los datos de prueba anteriores: quita la subdivisión "SIN NOMBRE (B-923765)", que no sigue el formato de código, con sus áreas y riesgos. Solo con `--datos-prueba`; en una base nueva no hace nada |
 | `025_nombres_unicos.sql` | AC2 de la parametrización: `uq_business_units_display_name` (el nombre de la unidad, si lo tiene, no se repite) y `uq_area_business_name` (el nombre del área no se repite dentro de su subdivisión), ambos con la intercalación `sin_mayusculas`. El backend traduce su violación a `409 NOMBRE_DUPLICADO` |
 | `026_nombres_periodos.sql` | Formato de los periodos: "2026 Q1"…"2026 Q4" y "2026 Fiscal" (año completo). Renombra los de formato anterior ("2026Q1" de 017, "Fiscal 2026" de 015) si el nombre nuevo no existe. 015 y 017 ahora insertan por fechas, no por nombre |
+| `035_trimestres_periodos.sql` | Trimestres en español: renombra "2026 Q1"…"2026 Q4" a "2026 T1"…"2026 T4" si el nombre nuevo no existe |
 | `027_formatos_evidencia.sql` | Formatos de evidencia (SF-08): además de PDF y XLSX, correos (`eml`, `msg`) y comprimidos (`zip`, `7z`) |
 | `028_estado_inicial_controles_progreso.sql` | Las asignaciones nuevas empiezan `En Progreso` |
 | `029_conflictos_por_plan.sql` | `conflict_declarations.audit_id` apunta a `audit_plans` (historia #96) |
-| `030_seed_demo.sql` | Usuarios de "Usar un rol de prueba", planes de auditoría, hallazgos y plan de acción del modo en memoria. Solo con `--datos-prueba` |
+| `030_seed_demo.sql` | Usuarios de "Usar un rol de prueba", planes de auditoría y hallazgos del modo en memoria. Solo con `--datos-prueba` |
 | `031_rls_control_horas.sql` | Activa la seguridad por filas en `control_horas` (012 la creó sin ella y quedaba expuesta en la API de Supabase) |
+| `032_normalizar_entidad_evidencias_control.sql` | Ya no hace nada: la normalización pasó a 039 |
+| `033_campos_muestra_rotacion_controles.sql` | Campos de muestra y rotación de controles |
+| `034_catalogos_estructura.sql` | `structure_options`: opciones de nombre de área y de país, editables por el Administrador |
+| `034_portal_auditado.sql` | `users.business_unit_id`, `action_plans.title` y `root_cause`; tablas `action_plan_findings` y `action_plan_steps` |
+| `035_normalizar_root_cause_plan.sql` | Pasa `action_plans.description` a `root_cause` y elimina la columna |
+| `036_permitir_varios_planes_por_hallazgo.sql` | Quita la restricción de un plan por hallazgo |
+| `037_migrar_relacion_planes_hallazgos.sql` | Pasa `action_plans.finding_id` a `action_plan_findings` y elimina la columna |
+| `038_public_id_planes_accion.sql` | Folio `PACC-AAAA-NNN` en `action_plans.public_id`, con `action_plan_public_id_counters` y un trigger |
+| `039_entidad_evidencias.sql` | La evidencia se liga solo por `entity_id` y `entity_type`: copia los vínculos y elimina `control_id`, `finding_id` y `audit_id` de `evidence`; agrega el tipo `action_plan_step` |
+| `040_evidencias_entidad_unica.sql` | Refuerza 039 en bases que ya tenían migraciones previas |
+| `041_estado_revision_planes.sql` | Agrega el estado `En Revisión` a los planes de acción |
+| `042_procesos_en_asignaciones.sql` | `processes.control_id`, `title` y `description`; `audit_controls.process_id`. En Supabase ya existían: no cambia nada |
+| `043_seed_plan_demo.sql` | Plan de acción de prueba (antes en 030; necesita las tablas de 034). Solo con `--datos-prueba` |
+| `044_flujo_aprobacion_planes.sql` | Flujo de aprobación (SF-12): estados `Pendiente`, `Aprobado` y `Rechazado`; `action_plan_approval_events` (inmutable) y `notifications`. Pasa a `Pendiente` los planes en `En Revisión` sin eventos. Aplicado a Supabase (2026-11-05) |
+| `045_etapas_planes_accion.sql` | Dos revisiones por plan (SF-12, SF-11): estado `Borrador`; `action_plans.review_stage` y `action_plan_approval_events.stage`, con `cierre` por omisión; `action_plan_event_evidence` (archivos señalados, inmutable) y `action_plan_extension_requests` (prórrogas). Aplicado a Supabase (2026-11-05) |
+| `046_seed_auditados.sql` | Usuarios `j.ejemplo` y `c.ejemplo` de "Usar un rol de prueba". Solo con `--datos-prueba` |
+| `047_evaluacion_controles.sql` | Criterios, evaluaciones y respuestas de controles (historia #98, SF-07). Los 8 criterios son datos de prueba. Aplicado a Supabase (2026-11-05) |
+| `048_versiones_evidencia.sql` | `evidence.version`, `evidence_versions` y el formato `.xlsm` (UF-17, SF-08). Aplicado a Supabase (2026-11-05) |
+
+034 y 035 son dos scripts cada uno porque se crearon en ramas distintas; no se renombran para que
+no vuelvan a aplicarse. `migrar.ts` los lista en orden alfabético, el mismo que usa `--datos-prueba`.
 
 ### Cómo agregar un cambio al esquema
 
-1. Crear un script nuevo con el siguiente número (`010_...sql`). **No editar uno que ya
-   se aplicó a la base compartida**: quien ya lo corrió no recibiría el cambio.
+1. Crear un script nuevo con el siguiente número (hoy, `047_...sql`). **No editar uno que ya
+   se aplicó a la base compartida**: `db:migrar` lo volvería a aplicar completo y un
+   `CREATE TABLE IF NOT EXISTS` no cambiaría las tablas que ya existen. **Tampoco cambiar
+   Supabase a mano**: el código y la base dejan de coincidir con los scripts.
 2. Escribirlo de modo que se pueda repetir (`CREATE TABLE IF NOT EXISTS`,
    `ON CONFLICT DO NOTHING`) y activar la seguridad por filas en cada tabla nueva
    (`ALTER TABLE ... ENABLE ROW LEVEL SECURITY`).
@@ -119,11 +155,13 @@ Cada script corre dentro de una transacción: si falla, no se aplica nada de él
 
 ### Probar contra un PostgreSQL local
 
-Las pruebas de `test/sql.integracion.test.ts` (repositorios) y de
-`test/esquema.integracion.test.ts` (los scripts completos: las 30 tablas existen, tienen
-la seguridad por filas activada, se pueden consultar y hacen cumplir sus llaves) se
-omiten si no hay conexión. Para
-correrlas hace falta un PostgreSQL con TLS y una base exclusiva de pruebas:
+Las pruebas de integración se omiten si no hay conexión: `sql.integracion` (repositorios),
+`esquema.integracion` (los scripts completos: las tablas existen, tienen la seguridad por filas
+activada, se pueden consultar y hacen cumplir sus llaves), `estructura.integracion` (jerarquía),
+`evidencias.integracion`, `hallazgos.integracion` y `accesoRutas.integracion` (quién consulta y
+modifica cada registro), `evaluaciones.integracion` (evaluación de controles). Para
+correrlas hace falta un PostgreSQL con TLS y una base **exclusiva de pruebas, nunca Supabase**:
+`sql.integracion` borra tablas.
 
 ```bash
 docker run -d --name expedite-pg -e POSTGRES_PASSWORD=<contraseña> -e POSTGRES_DB=expedite_test \
@@ -136,7 +174,10 @@ SQL_TEST_SERVER=localhost SQL_TEST_DATABASE=expedite_test SQL_TEST_USER=postgres
 
 ## Modelo entidad-relación
 
-Las líneas punteadas son referencias que la base todavía no valida con llave foránea.
+Las líneas punteadas son referencias que la base todavía no valida con llave foránea. `evidence`
+apunta a una sola entidad según `entity_type`: `control` → `audit_controls.id`, `hallazgo` →
+`findings.id`, `action_plan_step` → `action_plan_steps.id`. No se dibujan las tablas auxiliares
+`control_horas`, `structure_code_counters`, `action_plan_public_id_counters` y `schema_migrations`.
 
 ```mermaid
 erDiagram
@@ -149,19 +190,31 @@ erDiagram
     business_units ||--o{ processes : "business_unit_id"
     processes ||--o{ controls : "process_id"
     users ||--o{ controls : "owner_id"
-    audits ||--o{ audit_controls : "audit_id"
+    audit_plans ||--o{ audit_controls : "audit_id"
+    processes ||--o{ audit_controls : "process_id"
+    processes }o..o| controls : "control_id"
+    business_units ||--o{ users : "business_unit_id"
     controls ||--o{ audit_controls : "control_id"
     users ||--o{ audit_controls : "auditor_id, assigned_by"
-    audits ||--o{ conflict_declarations : "audit_id"
+    audit_plans ||--o{ conflict_declarations : "audit_id"
     users ||--o{ conflict_declarations : "auditor_id"
-    findings ||--o| action_plans : "finding_id"
+    action_plans ||--o{ action_plan_findings : "action_plan_id"
+    findings ||--o{ action_plan_findings : "finding_id"
+    action_plans ||--o{ action_plan_steps : "action_plan_id"
+    action_plans ||--o{ action_plan_approval_events : "action_plan_id"
+    users ||--o{ action_plan_approval_events : "actor_id"
+    users ||--o{ notifications : "user_id"
+    action_plan_approval_events ||--o{ action_plan_event_evidence : "event_id"
+    action_plans ||--o{ action_plan_extension_requests : "action_plan_id"
+    users ||--o{ action_plan_extension_requests : "requested_by, decided_by"
+    users ||--o{ action_plan_steps : "assigned_user_id"
     users ||--o{ action_plans : "responsible_id, created_by"
     audits ||..o{ findings : "auditId"
     controls ||..o{ findings : "controlId"
     users ||..o{ findings : "ownerId"
-    audits ||..o{ evidence : "audit_id"
-    controls ||..o{ evidence : "control_id"
-    findings ||..o{ evidence : "finding_id"
+    audit_controls ||..o{ evidence : "entity_id"
+    findings ||..o{ evidence : "entity_id"
+    action_plan_steps ||..o{ evidence : "entity_id"
     business_units ||--o{ division : "business_unit_id"
     division ||--o{ business : "division_id"
     business ||--o{ area : "business_id"
@@ -214,6 +267,7 @@ erDiagram
         string entra_oid UK
         datetime last_login
         datetime created_at
+        int business_unit_id FK
     }
     audit_plans {
         int id PK
@@ -252,6 +306,9 @@ erDiagram
         int id PK
         int business_unit_id FK
         string name
+        string title
+        string control_id
+        string description
         datetime created_at
     }
     controls {
@@ -273,16 +330,20 @@ erDiagram
     }
     audit_controls {
         int id PK
-        string audit_id FK
+        int audit_id FK
         string control_id FK
+        int process_id FK
         int auditor_id FK
         boolean is_lead
         int assigned_by FK
+        string status
+        decimal hours_spent
+        string feedback
         datetime created_at
     }
     conflict_declarations {
         int id PK
-        string audit_id FK
+        int audit_id FK
         int auditor_id FK
         boolean has_conflict
         string justification
@@ -305,12 +366,72 @@ erDiagram
     }
     action_plans {
         int id PK
-        string finding_id FK, UK
-        string description
+        string public_id UK
+        string title
+        string root_cause
         int responsible_id FK
         date due_date
         string status
+        string review_stage
         int created_by FK
+        datetime created_at
+    }
+    action_plan_findings {
+        int action_plan_id PK, FK
+        string finding_id PK, FK
+        datetime created_at
+    }
+    action_plan_steps {
+        int id PK
+        int action_plan_id FK
+        int assigned_user_id FK
+        string description
+        date due_date
+        boolean is_completed
+        datetime created_at
+    }
+    action_plan_approval_events {
+        int id PK
+        int action_plan_id FK
+        string stage
+        string action
+        string from_status
+        string to_status
+        int actor_id FK
+        string actor_name
+        string actor_role
+        string reason
+        string signature_hash
+        datetime created_at
+    }
+    action_plan_event_evidence {
+        int event_id PK
+        string evidence_id PK
+        int step_id
+        string file_name
+        string file_hash
+    }
+    action_plan_extension_requests {
+        int id PK
+        int action_plan_id FK
+        int requested_by FK
+        date previous_due_date
+        date proposed_due_date
+        string justification
+        string status
+        int decided_by FK
+        string decision_reason
+        datetime decided_at
+        datetime created_at
+    }
+    notifications {
+        int id PK
+        int user_id FK
+        string type
+        string message
+        string entity_type
+        string entity_id
+        datetime read_at
         datetime created_at
     }
     evidence {
@@ -324,9 +445,12 @@ erDiagram
         string storage_path
         string uploaded_by
         datetime created_at
-        string control_id
-        string finding_id
-        string audit_id
+    }
+    structure_options {
+        int id PK
+        string kind
+        string value
+        datetime created_at
     }
     catalogs {
         int catalog_id PK
@@ -431,18 +555,24 @@ erDiagram
 | `risk_register` | Cuelga de la subdivisión (`business_id`, nulo si el dato no viene en el Consolidado). El backend no deja eliminar una subdivisión con riesgos registrados |
 | `audit_entity` | Cuelga de la subdivisión (`business_id`); si la subdivisión se elimina, la entidad se conserva sin vínculo |
 | `processes` | El nombre no se repite dentro de la misma unidad de negocio |
-| `controls` | Código único. El `id` es texto (`CTR-001`), igual que en `findings.controlId` y `evidence.control_id` |
+| `controls` | Código único. El `id` es texto (`CTR-001`), igual que en `findings.controlId` |
 | `audit_controls` | Un auditor se asigna una sola vez al mismo control en una auditoría; un control tiene a lo más un auditor líder por auditoría |
 | `conflict_declarations` | Una declaración por auditor y auditoría; si hay conflicto, la justificación es obligatoria |
-| `action_plans` | Un plan por hallazgo |
+| `action_plans` | Folio único; etapa `definicion` o `cierre`; estado `Borrador`, `Asignado`, `En Progreso`, `Completado`, `Pendiente`, `En Revisión`, `Aprobado` o `Rechazado`. Un plan puede tener varios hallazgos y un hallazgo varios planes (`action_plan_findings`) |
+| `action_plan_approval_events` | Inmutable: un disparador impide modificar o borrar filas (`TRUNCATE` no lo activa). Un rechazo exige motivo y una aprobación, huella |
+| `action_plan_event_evidence` | Inmutable, igual que los eventos. Copia el nombre y el hash del archivo, sin llave a `evidence`, porque el archivo se puede reemplazar |
+| `action_plan_extension_requests` | Una solicitud abierta por plan (índice único parcial). Rechazarla exige motivo. La fecha del plan solo cambia al aprobarla |
+| `evidence` | `entity_type` es `control`, `hallazgo` o `action_plan_step`; formato `pdf`, `xlsx`, `eml`, `msg`, `zip` o `7z`. Quién la consulta lo decide el backend (ver "Decisiones tomadas" en `CLAUDE.md`) |
 
 ## Pendiente
 
-- `findings` y `evidence` guardan sus referencias (`auditId`, `controlId`, `ownerId`,
-  `control_id`, `finding_id`, `audit_id`) como texto sin llave foránea.
+- `findings` guarda sus referencias (`auditId`, `controlId`, `ownerId`) y `evidence` su
+  `entity_id` como texto sin llave foránea. Los valores de prueba de `auditId` (`AUD-001`) no
+  coinciden con `audit_controls.audit_id` (entero), así que esos hallazgos no quedan ligados a
+  una unidad de negocio.
 - `audits` solo tiene `id`, `name` y `end_date`; falta ligarla a `audit_plans` y a la
   unidad de negocio (SF-05).
-- Las horas invertidas por control (historia de asignación de controles) no tienen tabla.
+- Las horas por control se guardan por asignación, en `audit_controls.hours_spent`.
 - De las tablas de `010_catalogos_riesgos_y_ejecucion.sql`, la estructura (`division`,
   `business`, `area`), `catalog_department`, `risk_library`, `risk_register` y
   `control_procedure` ya las usa el Catálogo (017, 019 y 021; ver
@@ -454,9 +584,14 @@ erDiagram
   unidad, división, subdivisión o área si un `audit_engagement` de un plan `Aprobado` o
   `En Ejecución` apunta a una entidad auditable de su rama (para un área, la de su
   subdivisión), ni si tiene hijos; no se borra en cascada.
-- `processes` y `controls.process_id` ya no los usa la parametrización (el "proceso" de
-  la historia es el área). Falta decidir si se retiran (TBD). Al eliminar una unidad de
-  la primera versión se borran sus procesos y los controles quedan sin proceso (016).
+- `processes` volvió a usarse: la asignación de controles exige un proceso con `control_id`
+  (`audit_controls.process_id`), y de ahí sale la unidad de negocio de un hallazgo. La aplicación
+  no da de alta esas filas (TBD). `controls.process_id` sigue en desuso: en la parametrización, el
+  "proceso" de la historia es el área. Al eliminar una unidad de la primera versión se borran
+  sus procesos y los controles quedan sin proceso (016).
+- `action_plans.public_id` se guarda, pero las consultas lo ignoran y arman el folio con el id del
+  plan; falta decidir cuál es el válido (TBD).
+- La aplicación no permite asignar `users.business_unit_id`; hoy se pone a mano.
 - El comentario de `015_seed_estructura.sql` dice "solo con --datos-prueba", pero el
   script se aplica siempre; no se corrige para no cambiar un script ya aplicado.
 - Mapeo de `UDN-0001…0006` a nombres: **inferido** en 022 (datos de prueba); falta que FEMSA lo confirme, sobre todo Spin / FEMSA Servicios (UDN-0002 / UDN-0005) y DIVISION-0011. Las subdivisiones no tienen nombre en ningún archivo.

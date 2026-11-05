@@ -10,7 +10,8 @@ import {
 } from "../../api/estructura";
 import type { NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
-import { CampoCodigo, CampoSugerido } from "./piezasCatalogo";
+import { opcionDeCatalogo } from "../../domain/estructura/sugerencias";
+import { AyudaCatalogo, CampoCodigo, CampoSugerido } from "./piezasCatalogo";
 
 interface ModalEditarEntidadProps {
   unidad: UnidadNegocio | null;
@@ -22,8 +23,10 @@ interface ModalEditarEntidadProps {
   onGuardarUnidad: (id: number, cambios: EdicionUnidadInput) => Promise<boolean>;
   onGuardarNodo: (nodo: NodoSeleccionado, cambios: EdicionNodoInput) => Promise<boolean>;
   onCerrar: () => void;
-  /** Países o regiones sugeridos al editar una subdivisión. */
-  sugerenciasPais?: readonly string[];
+  /** Áreas del catálogo, para el nombre del área. */
+  opcionesArea?: readonly string[];
+  /** Países o regiones del catálogo, al editar una subdivisión. */
+  opcionesPais?: readonly string[];
 }
 
 export function ModalEditarEntidad({
@@ -36,7 +39,8 @@ export function ModalEditarEntidad({
   onGuardarUnidad,
   onGuardarNodo,
   onCerrar,
-  sugerenciasPais = [],
+  opcionesArea = [],
+  opcionesPais = [],
 }: ModalEditarEntidadProps) {
   const abierto = Boolean(unidad || nodo);
 
@@ -61,6 +65,8 @@ export function ModalEditarEntidad({
   if (!abierto) return null;
 
   const conPais = nodo?.nivel === "subdivision";
+  // El nombre del área sale del catálogo de áreas (Ajustes).
+  const esArea = nodo?.nivel === "area";
   // El código no se edita (identifica al elemento); el área no tiene y su nombre es obligatorio.
   const codigo = unidad?.codigo ?? nodo?.codigo ?? null;
   const nombreObligatorio = !codigo;
@@ -85,8 +91,18 @@ export function ModalEditarEntidad({
       if (responsableId && responsableId !== unidad.responsableId) cambios.responsableId = Number(responsableId);
       await onGuardarUnidad(unidad.id, cambios);
     } else if (nodo) {
-      const cambios: EdicionNodoInput = { nombre: nombre.trim() || null };
-      if (conPais) cambios.pais = pais.trim() || null;
+      const area = esArea ? opcionDeCatalogo(opcionesArea, nombre) : null;
+      if (esArea && !area) {
+        setErrorLocal("Elige un área del catálogo.");
+        return;
+      }
+      const paisElegido = conPais ? opcionDeCatalogo(opcionesPais, pais) : null;
+      if (conPais && pais.trim() && !paisElegido) {
+        setErrorLocal("Elige un país o región del catálogo.");
+        return;
+      }
+      const cambios: EdicionNodoInput = { nombre: esArea ? area : nombre.trim() || null };
+      if (conPais) cambios.pais = paisElegido;
       await onGuardarNodo(nodo, cambios);
     }
   };
@@ -133,22 +149,42 @@ export function ModalEditarEntidad({
             <label htmlFor="editar-nombre" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
               Nombre {nombreObligatorio && <span className="text-red-500">*</span>}
             </label>
-            <input
-              id="editar-nombre"
-              type="text"
-              value={nombre}
-              onChange={(e) => {
-                setNombre(e.target.value);
-                setErrorLocal("");
-              }}
-              placeholder={nombreObligatorio ? undefined : "Sin nombre: se muestra el código"}
-              maxLength={150}
-              disabled={guardando}
-              className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
-                errorLocal ? "border-red-400" : "border-border"
-              }`}
-            />
-            {errorLocal && <p className="text-xs text-red-600 mt-1">{errorLocal}</p>}
+            {esArea ? (
+              <CampoSugerido
+                id="editar-nombre"
+                estricto
+                value={nombre}
+                onChange={(valor) => {
+                  setNombre(valor);
+                  setErrorLocal("");
+                }}
+                opciones={opcionesArea}
+                placeholder="Busca y elige un área del catálogo…"
+                maxLength={150}
+                disabled={guardando}
+                className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
+                  errorLocal ? "border-red-400" : "border-border"
+                }`}
+              />
+            ) : (
+              <input
+                id="editar-nombre"
+                type="text"
+                value={nombre}
+                onChange={(e) => {
+                  setNombre(e.target.value);
+                  setErrorLocal("");
+                }}
+                placeholder={nombreObligatorio ? undefined : "Sin nombre: se muestra el código"}
+                maxLength={150}
+                disabled={guardando}
+                className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
+                  errorLocal && !conPais ? "border-red-400" : "border-border"
+                }`}
+              />
+            )}
+            {errorLocal && !conPais && <p className="text-xs text-red-600 mt-1">{errorLocal}</p>}
+            {esArea && <AyudaCatalogo />}
           </div>
 
           {unidad && (
@@ -206,13 +242,22 @@ export function ModalEditarEntidad({
               </label>
               <CampoSugerido
                 id="editar-pais"
+                estricto
                 value={pais}
-                onChange={setPais}
-                opciones={sugerenciasPais}
+                onChange={(valor) => {
+                  setPais(valor);
+                  setErrorLocal("");
+                }}
+                opciones={opcionesPais}
+                placeholder="Sin país o región (opcional)"
                 maxLength={100}
                 disabled={guardando}
-                className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${
+                  errorLocal ? "border-red-400" : "border-border"
+                }`}
               />
+              {errorLocal && <p className="text-xs text-red-600 mt-1">{errorLocal}</p>}
+              <AyudaCatalogo />
             </div>
           )}
 

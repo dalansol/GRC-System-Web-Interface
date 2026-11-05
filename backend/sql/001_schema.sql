@@ -70,17 +70,15 @@ ALTER TABLE audit_plans ENABLE ROW LEVEL SECURITY;
 CREATE TABLE IF NOT EXISTS evidence (
     id            VARCHAR(50)    NOT NULL CONSTRAINT pk_evidence PRIMARY KEY,
     entity_id     VARCHAR(50)    NULL,
-    entity_type   VARCHAR(20)    NOT NULL CONSTRAINT ck_evidence_entity_type CHECK (entity_type IN ('control', 'hallazgo')),
+    entity_type   VARCHAR(20)    NOT NULL CONSTRAINT ck_evidence_entity_type CHECK (entity_type IN ('control', 'hallazgo', 'action_plan_step')),
     file_name     VARCHAR(255)   NOT NULL,
     mime_type     VARCHAR(10)    NOT NULL CONSTRAINT ck_evidence_mime_type CHECK (mime_type IN ('pdf', 'xlsx')),
     file_size     BIGINT         NOT NULL,
     file_hash     VARCHAR(128)   NOT NULL,
     storage_path  VARCHAR(500)   NOT NULL,
     uploaded_by   VARCHAR(100)   NULL,
-    created_at    TIMESTAMPTZ(0) NOT NULL DEFAULT now(),
-    control_id    VARCHAR(50)    NULL,
-    finding_id    VARCHAR(50)    NULL,
-    audit_id      VARCHAR(50)    NULL
+    created_at    TIMESTAMPTZ(0) NOT NULL DEFAULT now()
+
 );
 ALTER TABLE evidence ENABLE ROW LEVEL SECURITY;
 

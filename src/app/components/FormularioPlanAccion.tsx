@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { AlertCircle, CalendarClock, Loader2 } from "lucide-react";
+import { AlertCircle, CalendarClock, Loader2, Plus, Trash2, AlertTriangle, FileSearch, Type } from "lucide-react";
 import { toast } from "sonner";
+import { useSesion } from "../auth/SesionContext";
 import { ErrorApi } from "../api/cliente";
 import {
   actualizarPlanAccion,
@@ -13,39 +14,94 @@ import {
   type HallazgoResumen,
   type PlanAccion,
   type Responsable,
+  type PasoPlanAccion,
 } from "../api/planesAccion";
 
-// Formulario para crear o editar el plan de acción de un hallazgo (SF-10; historia #91).
-// Valida en el cliente la fecha de compromiso contra el cierre de la auditoría; el backend repite la validación.
-// Con `plan` entra en modo edición (solo equipo de auditoría): permite además cambiar el estado.
+interface PasoFormState {
+  id?: number;
+  descripcion: string;
+  usuarioAsignadoId: string;
+  fechaCompromiso: string;
+}
+
+interface HallazgoSeleccionado {
+  id: string;
+  folio?: string | null;
+  title: string;
+}
 
 interface Props {
-  hallazgoId: string;
-  hallazgoTitulo: string;
+  hallazgoId?: string; // Mantenido por retrocompatibilidad
+  hallazgoTitulo?: string; // Mantenido por retrocompatibilidad
+  hallazgosSeleccionados?: HallazgoSeleccionado[]; // Soporte para múltiples hallazgos seleccionados
   /** Plan existente a editar. Sin él, el formulario crea uno nuevo. */
   plan?: PlanAccion;
   onGuardado: (plan: PlanAccion) => void;
   onCerrar: () => void;
 }
 
-export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, plan, onGuardado, onCerrar }: Props) {
+export default function FormularioPlanAccion({
+  hallazgoId,
+  hallazgoTitulo,
+  hallazgosSeleccionados = [],
+  plan,
+  onGuardado,
+  onCerrar,
+}: Props) {
+  const { usuario } = useSesion();
   const edicion = Boolean(plan);
-  const [hallazgo, setHallazgo] = useState<HallazgoResumen | null>(null);
+  // Lo que el Jefe de Auditoría validó no cambia: solo se reasigna el responsable y la fecha se mueve con una prórroga.
+  const validado = plan?.etapa === "cierre";
+
+  // Normalizar lista de hallazgos (si viene solo uno por props individuales, agregarlo)
+  const listaHallazgos: HallazgoSeleccionado[] =
+    hallazgosSeleccionados.length > 0
+      ? hallazgosSeleccionados
+      : hallazgoId
+      ? [{ id: hallazgoId, title: hallazgoTitulo ?? "Hallazgo" }]
+      : [];
+
+  const primerId = listaHallazgos[0]?.id ?? "";
+
+  const [hallazgoPrincipal, setHallazgoPrincipal] = useState<HallazgoResumen | null>(null);
   const [responsables, setResponsables] = useState<Responsable[]>([]);
   const [cargando, setCargando] = useState(true);
+
+  // Estados del formulario (incluyendo el nuevo campo para el título del plan)
+  const [tituloPlan, setTituloPlan] = useState((plan as any)?.titulo ?? "");
   const [descripcion, setDescripcion] = useState(plan?.descripcion ?? "");
   const [responsableId, setResponsableId] = useState(plan ? String(plan.responsable.id) : "");
   const [fechaCompromiso, setFechaCompromiso] = useState(plan?.fechaCompromiso ?? "");
   const [estado, setEstado] = useState<EstadoPlanAccion>(plan?.estado ?? "Asignado");
+  // Los estados del flujo de aprobación no se fijan a mano: se muestran, pero no se envían.
+  const estadoEditable = ESTADOS_PLAN_ACCION.includes(plan?.estado ?? "Asignado");
+
+  // Estado para gestionar la lista de pasos del plan
+  const [pasos, setPasos] = useState<PasoFormState[]>(
+    plan?.pasos?.map((p: PasoPlanAccion) => ({
+      id: p.id,
+      descripcion: p.descripcion ?? "",
+      usuarioAsignadoId: p.usuarioAsignado ? String(p.usuarioAsignado.id) : "",
+      fechaCompromiso: p.fechaCompromiso ?? "",
+    })) ?? []
+  );
+
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     let vigente = true;
-    Promise.all([obtenerHallazgoParaPlan(hallazgoId), listarResponsables()])
+    const targetId = primerId || hallazgoId;
+
+    if (!targetId) {
+      setCargando(false);
+      return;
+    }
+
+    Promise.all([obtenerHallazgoParaPlan(targetId), listarResponsables()])
       .then(([h, r]) => {
         if (!vigente) return;
-        setHallazgo(h);
+        setHallazgoPrincipal(h);
         setResponsables(r);
       })
       .catch((e: unknown) => {
@@ -57,31 +113,95 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, plan,
     return () => {
       vigente = false;
     };
-  }, [hallazgoId]);
+  }, [primerId, hallazgoId]);
 
-  const fechaCierre = hallazgo?.fechaCierreAuditoria ?? null;
-  // En edición solo se valida si la fecha cambió, igual que en el backend.
+  // Actualizar automáticamente la fecha de compromiso del plan basada en la fecha máxima de los pasos
+  useEffect(() => {
+    if (!validado && pasos.length > 0) {
+      const fechasValidas = pasos.map((p) => p.fechaCompromiso).filter(Boolean);
+      if (fechasValidas.length > 0) {
+        const fechaMaxima = fechasValidas.reduce((max, actual) => (actual > max ? actual : max));
+        setFechaCompromiso(fechaMaxima);
+      }
+    }
+  }, [pasos, validado]);
+
+  const fechaCierre = hallazgoPrincipal?.fechaCierreAuditoria ?? null;
   const fechaCambiada = !plan || fechaCompromiso !== plan.fechaCompromiso;
   const fechaAnteriorAlCierre = Boolean(fechaCambiada && fechaCierre && fechaCompromiso && fechaCompromiso < fechaCierre);
+
+  // Funciones para manipular los pasos
+  const agregarPaso = () => {
+    setPasos((prev) => [
+      ...prev,
+      { descripcion: "", usuarioAsignadoId: "", fechaCompromiso: "" },
+    ]);
+  };
+
+  const eliminarPaso = (index: number) => {
+    setPasos((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const actualizarPaso = (index: number, campo: keyof PasoFormState, valor: string) => {
+    setPasos((prev) => {
+      const nuevos = [...prev];
+      nuevos[index] = { ...nuevos[index], [campo]: valor };
+      return nuevos;
+    });
+  };
 
   const enviar = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!descripcion.trim()) return setError("La descripción de la acción correctiva es obligatoria.");
-    if (!responsableId) return setError("Selecciona al responsable auditado.");
-    if (!fechaCompromiso) return setError("Indica la fecha de compromiso.");
-    if (fechaAnteriorAlCierre) return setError(MENSAJE_FECHA_ANTERIOR_AL_CIERRE);
+
+    if (listaHallazgos.length === 0) return setError("Debe haber al menos un hallazgo asociado.");
+    if (!responsableId) return setError("Selecciona al responsable asignado.");
+    // Un plan validado no cambia de contenido: lo demás no se edita, y los planes anteriores pueden no tenerlo.
+    if (!validado) {
+      if (!tituloPlan.trim()) return setError("El título del plan de acción es obligatorio.");
+      if (!descripcion.trim()) return setError("El análisis de causa raíz es obligatorio.");
+      if (!fechaCompromiso) return setError("Indica la fecha de compromiso.");
+      if (fechaAnteriorAlCierre) return setError(MENSAJE_FECHA_ANTERIOR_AL_CIERRE);
+
+      // Validar que cada paso esté completo si se han agregado
+      for (let i = 0; i < pasos.length; i++) {
+        if (!pasos[i].descripcion.trim()) return setError(`El paso #${i + 1} requiere una descripción.`);
+        if (!pasos[i].usuarioAsignadoId) return setError(`Selecciona un responsable para el paso #${i + 1}.`);
+        if (!pasos[i].fechaCompromiso) return setError(`Indica la fecha de compromiso para el paso #${i + 1}.`);
+      }
+    }
 
     setGuardando(true);
     try {
-      const datos = { descripcion: descripcion.trim(), responsableId: Number(responsableId), fechaCompromiso };
+      const datos: any = {
+        hallazgoId: primerId,
+        hallazgoIds: listaHallazgos.map((h) => h.id),
+        titulo: tituloPlan.trim(),
+        causaRaiz: descripcion.trim(),
+        descripcion: descripcion.trim(),
+        responsableId: Number(responsableId),
+        fechaCompromiso,
+        pasos: pasos.map((p) => ({
+          ...(p.id ? { id: p.id } : {}),
+          descripcion: p.descripcion.trim(),
+          usuarioAsignadoId: Number(p.usuarioAsignadoId),
+          fechaCompromiso: p.fechaCompromiso,
+        })),
+      };
+
       if (plan) {
-        const actualizado = await actualizarPlanAccion(plan.id, { ...datos, estado });
-        toast.success(`Plan de acción actualizado. Estado: ${actualizado.estado}. Fecha límite: ${actualizado.fechaCompromiso}.`);
+        const actualizado = await actualizarPlanAccion(plan.id, {
+          ...(validado
+            ? {}
+            : { titulo: datos.titulo, descripcion: datos.descripcion, fechaCompromiso: datos.fechaCompromiso, pasos: datos.pasos }),
+          responsableId: datos.responsableId,
+          ...(estadoEditable ? { estado } : {}),
+        });
+        toast.success(`Plan de acción actualizado. Estado: ${actualizado.estado}.`);
         onGuardado(actualizado);
       } else {
-        const creado = await crearPlanAccion({ hallazgoId, ...datos });
-        toast.success(`Plan de acción asignado. Fecha límite: ${creado.fechaCompromiso}.`);
+        const creado = await crearPlanAccion(datos);
+        toast.success("Plan de acción creado con éxito.");
         onGuardado(creado);
       }
     } catch (err) {
@@ -92,30 +212,51 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, plan,
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto">
       <form
         onSubmit={enviar}
         aria-label={edicion ? "Editar plan de acción" : "Crear plan de acción"}
-        className="w-full max-w-lg space-y-4 rounded-xl border border-border bg-card p-6 shadow-2xl"
+        className="w-full max-w-5xl h-[88vh] max-h-[850px] flex flex-col justify-between rounded-xl border border-border bg-card p-6 shadow-2xl my-auto"
       >
-        <div>
-          <h3 className="text-lg font-bold text-foreground">{edicion ? "Editar plan de acción" : "Crear plan de acción"}</h3>
-          <p className="text-xs text-muted-foreground">
-            Hallazgo <span className="font-mono font-semibold text-primary">{hallazgo?.folio ?? hallazgoId}</span> — {hallazgoTitulo}
-          </p>
+        <div className="flex-shrink-0 space-y-2">
+          <h3 className="text-lg font-bold text-foreground">
+            {edicion ? "Editar plan de acción" : "Crear plan de acción"}
+          </h3>
+
+          {/* Visualización de los hallazgos seleccionados */}
+          <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-1.5">
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+              <AlertTriangle size={13} className="text-primary" /> Hallazgos Asociados ({listaHallazgos.length}):
+            </span>
+            <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto pr-1">
+              {listaHallazgos.map((h) => (
+                <span
+                  key={h.id}
+                  className="inline-flex items-center gap-1.5 text-xs font-mono bg-card border border-border px-2.5 py-1 rounded-md shadow-2xs text-foreground"
+                >
+                  <strong className="text-primary">{h.folio || h.id}</strong> — {h.title}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
 
         {cargando ? (
-          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-            <Loader2 size={16} className="animate-spin" /> Cargando información del hallazgo...
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground flex-1">
+            <Loader2 size={16} className="animate-spin" /> Cargando información...
           </div>
         ) : (
-          <>
+          <div className="flex-1 overflow-y-auto space-y-4 my-3 pr-1">
+            {validado && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                Este plan ya fue validado: solo se puede cambiar su responsable, y la fecha se mueve con una prórroga.
+              </p>
+            )}
             <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
               <CalendarClock size={14} className="flex-shrink-0" />
               {fechaCierre ? (
                 <span>
-                  Cierre de la auditoría {hallazgo?.auditoriaId}: <strong className="font-mono">{fechaCierre}</strong>. La fecha de
+                  Cierre de la auditoría {hallazgoPrincipal?.auditoriaId}: <strong className="font-mono">{fechaCierre}</strong>. La fecha de
                   compromiso debe ser igual o posterior.
                 </span>
               ) : (
@@ -123,9 +264,27 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, plan,
               )}
             </div>
 
+            {/* Nuevo Slot / Campo para el Título del Plan */}
             <div>
-              <label htmlFor="plan-descripcion" className="mb-1 block text-xs font-semibold text-muted-foreground">
-                Descripción de la acción correctiva
+              <label htmlFor="plan-titulo" className="mb-1 block text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <Type size={14} className="text-primary" /> Título del Plan de Acción
+              </label>
+              <input
+                id="plan-titulo"
+                type="text"
+                value={tituloPlan}
+                onChange={(e) => setTituloPlan(e.target.value)}
+                maxLength={150}
+                required
+                disabled={validado}
+                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm disabled:bg-muted disabled:opacity-80"
+                placeholder="Ej. Mitigación de riesgos de acceso..."
+              />
+            </div>
+
+            <div>
+              <label htmlFor="plan-descripcion" className="mb-1 block text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <FileSearch size={14} className="text-primary" /> Análisis de Causa Raíz (RCA)
               </label>
               <textarea
                 id="plan-descripcion"
@@ -134,15 +293,16 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, plan,
                 rows={4}
                 maxLength={2000}
                 required
-                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
-                placeholder="Qué se va a corregir, cómo y con qué alcance."
+                disabled={validado}
+                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm disabled:bg-muted disabled:opacity-80"
+                placeholder="Describe el análisis de causa raíz que originó el hallazgo..."
               />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="plan-responsable" className="mb-1 block text-xs font-semibold text-muted-foreground">
-                  Responsable auditado
+                  Responsable principal
                 </label>
                 <select
                   id="plan-responsable"
@@ -152,7 +312,6 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, plan,
                   className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
                 >
                   <option value="">Selecciona un responsable</option>
-                  {/* Si el responsable actual ya no está activo, se conserva como opción para no perderlo al editar otros campos. */}
                   {plan && !responsables.some((r) => r.id === plan.responsable.id) && (
                     <option value={plan.responsable.id}>{plan.responsable.nombre}</option>
                   )}
@@ -165,7 +324,7 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, plan,
               </div>
               <div>
                 <label htmlFor="plan-fecha" className="mb-1 block text-xs font-semibold text-muted-foreground">
-                  Fecha de compromiso
+                  Fecha de compromiso {pasos.length > 0 && <span className="text-[10px] text-primary font-normal">(Calculada automáticamente por los pasos)</span>}
                 </label>
                 <input
                   id="plan-fecha"
@@ -174,30 +333,117 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, plan,
                   min={fechaCambiada ? fechaCierre ?? undefined : undefined}
                   onChange={(e) => setFechaCompromiso(e.target.value)}
                   required
-                  aria-invalid={fechaAnteriorAlCierre}
-                  className={`w-full rounded-md border bg-white px-3 py-2 text-sm ${fechaAnteriorAlCierre ? "border-red-400" : "border-border"}`}
+                  disabled={validado || pasos.length > 0}
+                  className={`w-full rounded-md border bg-white px-3 py-2 text-sm disabled:bg-muted disabled:opacity-80 ${
+                    fechaAnteriorAlCierre ? "border-red-400" : "border-border"
+                  }`}
                 />
               </div>
             </div>
 
             {edicion && (
               <div>
-                <label htmlFor="plan-estado" className="mb-1 block text-xs font-semibold text-muted-foreground">
-                  Estado
-                </label>
-                <select
-                  id="plan-estado"
-                  value={estado}
-                  onChange={(e) => setEstado(e.target.value as EstadoPlanAccion)}
-                  className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
-                >
-                  {ESTADOS_PLAN_ACCION.map((e) => (
-                    <option key={e} value={e}>
-                      {e}
-                    </option>
-                  ))}
-                </select>
+                {estadoEditable ? (
+                  <>
+                    <label htmlFor="plan-estado" className="mb-1 block text-xs font-semibold text-muted-foreground">
+                      Estado
+                    </label>
+                    <select
+                      id="plan-estado"
+                      value={estado}
+                      onChange={(e) => setEstado(e.target.value as EstadoPlanAccion)}
+                      className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+                    >
+                      {ESTADOS_PLAN_ACCION.map((e) => (
+                        <option key={e} value={e}>
+                          {e}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <div className="mb-1 text-xs font-semibold text-muted-foreground">Estado (lo controla el flujo de aprobación)</div>
+                    <div className="text-sm font-semibold text-foreground">{estado}</div>
+                  </>
+                )}
               </div>
+            )}
+
+            {/* SECCIÓN DE PASOS / SUB-TAREAS */}
+            {!validado && (
+            <div className="border-t border-border pt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground">Pasos o Actividades del Plan</h4>
+                  <p className="text-xs text-muted-foreground">Agrega pasos detallados y asigna colaboradores y fechas específicas.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={agregarPaso}
+                  className="inline-flex items-center gap-1 rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-secondary/80"
+                >
+                  <Plus size={14} /> Agregar paso
+                </button>
+              </div>
+
+              {pasos.length === 0 ? (
+                <p className="text-xs italic text-muted-foreground py-2">No hay pasos agregados a este plan todavía.</p>
+              ) : (
+                <div className="space-y-3">
+                  {pasos.map((paso, index) => (
+                    <div key={index} className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-2.5">
+                      <span className="text-xs font-bold text-foreground w-5 text-center flex-shrink-0">{index + 1}</span>
+
+                      <div className="flex-1">
+                        <textarea
+                          value={paso.descripcion}
+                          onChange={(e) => actualizarPaso(index, "descripcion", e.target.value)}
+                          placeholder="Descripción de la actividad..."
+                          required
+                          rows={1}
+                          className="w-full rounded-md border border-border bg-white px-3 py-2 text-xs resize-none h-10 focus:h-24 transition-all duration-200"
+                        />
+                      </div>
+
+                      <div className="w-52 flex-shrink-0 space-y-2">
+                        <select
+                          value={paso.usuarioAsignadoId}
+                          onChange={(e) => actualizarPaso(index, "usuarioAsignadoId", e.target.value)}
+                          required
+                          className="w-full rounded-md border border-border bg-white px-3 py-1.5 text-xs"
+                        >
+                          <option value="">Selecciona responsable</option>
+                          {responsables.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.nombre}
+                            </option>
+                          ))}
+                        </select>
+
+                        <input
+                          type="date"
+                          value={paso.fechaCompromiso}
+                          min={fechaCierre ?? undefined}
+                          onChange={(e) => actualizarPaso(index, "fechaCompromiso", e.target.value)}
+                          required
+                          className="w-full rounded-md border border-border bg-white px-3 py-1.5 text-xs"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => eliminarPaso(index)}
+                        className="text-red-500 hover:text-red-700 p-2 flex-shrink-0"
+                        title="Eliminar paso"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             )}
 
             {(error || fechaAnteriorAlCierre) && (
@@ -206,10 +452,10 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, plan,
                 <span>{error ?? MENSAJE_FECHA_ANTERIOR_AL_CIERRE}</span>
               </div>
             )}
-          </>
+          </div>
         )}
 
-        <div className="flex justify-end gap-2 border-t border-border pt-4">
+        <div className="flex justify-end gap-2 border-t border-border pt-4 flex-shrink-0">
           <button
             type="button"
             onClick={onCerrar}
@@ -220,7 +466,7 @@ export default function FormularioPlanAccion({ hallazgoId, hallazgoTitulo, plan,
           </button>
           <button
             type="submit"
-            disabled={guardando || cargando || !hallazgo}
+            disabled={guardando || cargando || listaHallazgos.length === 0}
             className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
           >
             {guardando && <Loader2 size={14} className="animate-spin" />}

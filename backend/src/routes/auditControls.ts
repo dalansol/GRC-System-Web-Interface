@@ -9,7 +9,6 @@ import { declaracionPendiente } from "../repos/conflictosSql.js";
 
 const router = Router();
 const ROL_SENIOR = "Auditor Senior";
-// El Administrador tiene "Ver Auditorías": consulta las asignaciones como la Jefatura, sin editarlas.
 const ROLES_CONSULTA_ASIGNACIONES = [ROL_SENIOR, "Auditor", "Jefe de Auditoría", "Supervisor", ROL_ADMINISTRADOR];
 
 function idNumerico(valor: string | string[] | undefined, nombre: string): number {
@@ -19,6 +18,25 @@ function idNumerico(valor: string | string[] | undefined, nombre: string): numbe
   }
   return Number(texto);
 }
+
+// ── GET /processes (Fetch processes filtered by controlId) ──
+router.get("/processes", async (req, res) => {
+  const { controlId } = req.query;
+  const pool = await poolPromise;
+
+  let query = `SELECT id, business_unit_id, control_id, title, description, created_at FROM processes`;
+  const values: unknown[] = [];
+
+  if (typeof controlId === "string" && controlId.trim()) {
+    query += ` WHERE control_id = $1`;
+    values.push(controlId.trim());
+  }
+
+  query += ` ORDER BY title`;
+
+  const resultado = await pool.query(query, values);
+  res.json(resultado.rows);
+});
 
 router.get("/controles/asignables", autorizar(ROL_SENIOR), async (_req, res) => {
   const pool = await poolPromise;
@@ -41,7 +59,10 @@ router.get("/controles", async (_req, res) => {
             END AS status,
             COALESCE(SUM(COALESCE(ac.hours_spent, 0)), 0) AS hours_spent,
             COALESCE(MAX(ac.feedback), '') AS feedback,
-            COALESCE(array_agg(DISTINCT ac.audit_id) FILTER (WHERE ac.audit_id IS NOT NULL), '{}') AS audit_ids
+            COALESCE(array_agg(DISTINCT ac.audit_id) FILTER (WHERE ac.audit_id IS NOT NULL), '{}') AS audit_ids,
+            EXISTS (
+              SELECT 1 FROM control_evaluations ce WHERE ce.control_id = c.id AND ce.has_deficiency
+            ) AS tiene_deficiencia
      FROM controls c
      LEFT JOIN audit_controls ac ON ac.control_id = c.id
      WHERE CASE
@@ -70,6 +91,29 @@ router.get("/controles", async (_req, res) => {
   res.json(resultado.rows);
 });
 
+// Controles que el usuario puede citar en un hallazgo nuevo, uno por plan (SF-09): mismo alcance
+// que GET /controles, pero solo con los planes de sus propias asignaciones.
+router.get("/controles/para-hallazgo", async (_req, res) => {
+  const pool = await poolPromise;
+  const usuario = usuarioEnSesion(res);
+  const resultado = await pool.query(
+    `SELECT DISTINCT c.id AS control_id, c.code, c.name, ac.audit_id, ap.code AS plan_code,
+            EXISTS (
+              SELECT 1 FROM control_evaluations ce
+              WHERE ce.control_id = c.id AND ce.audit_id = ac.audit_id AND ce.has_deficiency
+            ) AS tiene_deficiencia
+     FROM audit_controls ac
+     JOIN controls c ON c.id = ac.control_id
+     JOIN audit_plans ap ON ap.id = ac.audit_id
+     WHERE ($1::text = 'Auditor' AND ac.auditor_id = $2)
+        OR ($1::text = 'Auditor Senior' AND ac.assigned_by = $2)
+        OR ($1::text = 'Jefe de Auditoría' AND ap.created_by = $2)
+     ORDER BY c.code, ap.code`,
+    [usuario.rol, usuario.id],
+  );
+  res.json(resultado.rows);
+});
+
 router.get("/controles/:controlId/mi-asignacion", async (req, res) => {
   const usuario = usuarioEnSesion(res);
   const controlId = req.params.controlId;
@@ -79,13 +123,13 @@ router.get("/controles/:controlId/mi-asignacion", async (req, res) => {
   }
   const pool = await poolPromise;
   const resultado = await pool.query(
-    `    SELECT ac.id, ac.audit_id, ac.control_id, ac.status
-    FROM audit_controls ac
-    JOIN controls c ON c.id = ac.control_id
-    WHERE (c.id::text = $1 OR c.code = $1)
-    AND ($2::text IS NULL OR ac.audit_id::text = $2)
-    AND ac.auditor_id = $3
-    ORDER BY ac.created_at DESC
+    `SELECT ac.id, ac.audit_id, ac.control_id, ac.status
+     FROM audit_controls ac
+     JOIN controls c ON c.id = ac.control_id
+     WHERE (c.id::text = $1 OR c.code = $1)
+     AND ($2::text IS NULL OR ac.audit_id::text = $2)
+     AND ac.auditor_id = $3
+     ORDER BY ac.created_at DESC
      LIMIT 1`,
     [controlId, auditId ? String(auditId) : null, usuario.id],
   );
@@ -122,6 +166,19 @@ router.get("/controles/:controlId/revision", async (req, res) => {
      JOIN audit_plans ap ON ap.id = ac.audit_id
      WHERE (c.id::text = $1 OR c.code = $1)
        AND ($4::text IS NULL OR ac.audit_id::text = $4)
+       -- Solo planes que el usuario puede consultar. Filtra el plan entero, no las filas,
+       -- para que el estatus siga tomando en cuenta a todos los auditores asignados.
+       AND (
+         $3 IN ('Jefe de Auditoría', 'Supervisor', 'Administrador')
+         OR ap.responsible_id = $2
+         OR ap.created_by = $2
+         OR EXISTS (
+           SELECT 1 FROM audit_controls propio
+           WHERE propio.audit_id = ac.audit_id
+             AND propio.control_id = ac.control_id
+             AND (propio.auditor_id = $2 OR propio.assigned_by = $2)
+         )
+       )
      GROUP BY ac.audit_id
      ORDER BY
        bool_or(ap.created_by = $2 AND $3 = 'Jefe de Auditoría') DESC,
@@ -143,32 +200,34 @@ router.get("/controles/:controlId/revision", async (req, res) => {
 router.post("/controles/:controlId/horas", async (req, res) => {
   const usuario = usuarioEnSesion(res);
   const { controlId } = req.params;
-  const { horas } = req.body as {
-    horas?: unknown;
-  };
+  const { horas } = req.body as { horas?: unknown };
+
   if (typeof horas !== "number" || !Number.isFinite(horas) || horas <= 0 || horas >= 24) {
     throw new ErrorApi(400, "DATOS_INVALIDOS", "Las horas deben ser mayores que 0 y menores que 24.");
   }
 
+  const { planId } = req.body as { planId?: unknown };
   const pool = await poolPromise;
   const acceso = await pool.query(
     `SELECT ac.id, ac.audit_id FROM audit_controls ac
      JOIN controls c ON c.id = ac.control_id
+     JOIN audit_plans ap ON ap.id = ac.audit_id
      WHERE (c.id::text = $1 OR c.code = $1)
+     AND ($5::text IS NULL OR ac.audit_id::text = $5)
      AND (
-       ($2 = 'Auditor' AND ac.auditor_id = $3)
-       OR ($2 = 'Auditor Senior' AND ac.assigned_by = $3)
-       OR ($2 = 'Jefe de Auditoría' AND EXISTS (
-         SELECT 1 FROM audit_plans ap WHERE ap.id = ac.audit_id AND ap.created_by = $4
-       ))
+       $2 IN ('Administrador', 'Jefe de Auditoría', 'Supervisor')
+       OR ($2 = 'Auditor Senior' AND (ac.assigned_by = $3 OR ac.auditor_id = $3 OR ap.responsible_id = $3))
+       OR ($2 = 'Auditor' AND (ac.auditor_id = $3 OR EXISTS (
+         SELECT 1 FROM audit_controls ac2 WHERE ac2.audit_id = ac.audit_id AND ac2.auditor_id = $3
+       )))
      )
-     ORDER BY ac.created_at DESC
+     ORDER BY (ac.auditor_id = $3) DESC, ac.is_lead DESC, ac.created_at DESC
      LIMIT 1`,
-    [controlId, usuario.rol, usuario.id, usuario.id],
+    [controlId, usuario.rol, usuario.id, usuario.id, planId ? String(planId) : null],
   );
   if (acceso.rowCount !== 1) throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "No puedes registrar horas para este control.");
   const asignacion = acceso.rows[0] as { id: number; audit_id: number };
-  // Historia #96: el auditor asignado no evalúa controles del plan sin declarar sus conflictos de interés.
+
   if (await declaracionPendiente(pool, asignacion.audit_id, usuario.id)) {
     throw new ErrorApi(403, "DECLARACION_PENDIENTE", MENSAJE_DECLARACION_PENDIENTE);
   }
@@ -217,7 +276,7 @@ router.patch("/controles/:controlId/status", async (req, res) => {
     [controlId, usuario.rol, usuario.id, typeof auditId === "string" ? auditId : null],
   );
   if (actual.rowCount !== 1) throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "No puedes actualizar este control.");
-  // Historia #96: el auditor asignado no envía a revisión sin declarar sus conflictos de interés.
+
   if (await declaracionPendiente(pool, actual.rows[0].audit_id as number, usuario.id)) {
     throw new ErrorApi(403, "DECLARACION_PENDIENTE", MENSAJE_DECLARACION_PENDIENTE);
   }
@@ -277,14 +336,31 @@ router.get("/planes/:planId/controles", autorizar(...ROLES_CONSULTA_ASIGNACIONES
   const planId = idNumerico(req.params.planId, "El plan");
   const usuario = usuarioEnSesion(res);
   const pool = await poolPromise;
+  
   const resultado = await pool.query(
-    `SELECT ac.id, ac.audit_id, ac.control_id, c.code AS control_code,
-            c.name AS control_name, ac.hours_spent, ac.status,
-            ac.feedback, ac.auditor_id, u.name AS auditor_name, r.name AS auditor_role,
-            ap.responsible_id AS plan_responsible_id, ap.created_by AS plan_created_by,
-            ac.is_lead, ac.assigned_by, ac.created_at
+    `SELECT ac.id, 
+            ac.audit_id, 
+            ac.control_id, 
+            ac.process_id, 
+            c.code AS control_code,
+            c.name AS control_name, 
+            p.title AS process_title, 
+            bu.name AS business_unit_name,
+            ac.hours_spent, 
+            ac.status,
+            ac.feedback, 
+            ac.auditor_id, 
+            u.name AS auditor_name, 
+            r.name AS auditor_role,
+            ap.responsible_id AS plan_responsible_id, 
+            ap.created_by AS plan_created_by,
+            ac.is_lead, 
+            ac.assigned_by, 
+            ac.created_at
      FROM audit_controls ac
      JOIN controls c ON c.id = ac.control_id
+     LEFT JOIN processes p ON p.id = ac.process_id
+     LEFT JOIN business_units bu ON bu.id = p.business_unit_id
      JOIN users u ON u.id = ac.auditor_id
      JOIN roles r ON r.id = u.role_id
      JOIN audit_plans ap ON ap.id = ac.audit_id
@@ -297,6 +373,7 @@ router.get("/planes/:planId/controles", autorizar(...ROLES_CONSULTA_ASIGNACIONES
      ORDER BY c.code, u.name`,
     [planId, usuario.rol, usuario.id],
   );
+
   res.json(resultado.rows);
 });
 
@@ -356,17 +433,32 @@ router.patch("/planes/:planId/controles/:controlId/status", async (req, res) => 
   res.json(resultado.rows[0]);
 });
 
+// ── POST /planes/:planId/controles (Assign Control + Process) ──
 router.post("/planes/:planId/controles", autorizar(ROL_SENIOR), async (req, res) => {
   const planId = idNumerico(req.params.planId, "El plan");
-  const { controlId, auditorId } = req.body as { controlId?: unknown; auditorId?: unknown };
-  if (typeof controlId !== "string" || !controlId.trim() || !Number.isInteger(auditorId)) {
-    throw new ErrorApi(400, "DATOS_INVALIDOS", "El control y el auditor son obligatorios.");
+  const { controlId, processId, auditorId } = req.body as {
+    controlId?: unknown;
+    processId?: unknown;
+    auditorId?: unknown;
+  };
+
+  if (
+    typeof controlId !== "string" ||
+    !controlId.trim() ||
+    !Number.isInteger(processId) ||
+    !Number.isInteger(auditorId)
+  ) {
+    throw new ErrorApi(400, "DATOS_INVALIDOS", "El control, el proceso y el auditor son obligatorios.");
   }
 
   const senior = usuarioEnSesion(res);
   const pool = await poolPromise;
-  const plan = await pool.query("SELECT id FROM audit_plans WHERE id = $1", [planId]);
+  const plan = await pool.query("SELECT responsible_id FROM audit_plans WHERE id = $1", [planId]);
   if (plan.rowCount !== 1) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan no existe.");
+  // Solo asigna el Auditor Senior responsable del plan, el mismo que lo ve en su lista de planes.
+  if (plan.rows[0].responsible_id !== senior.id) {
+    throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "Solo el Auditor Senior responsable del plan puede asignar controles.");
+  }
 
   const auditor = await pool.query(
     `SELECT u.id, r.name AS role
@@ -381,10 +473,10 @@ router.post("/planes/:planId/controles", autorizar(ROL_SENIOR), async (req, res)
   try {
     const resultado = await pool.query(
       `INSERT INTO audit_controls
-         (audit_id, control_id, auditor_id, is_lead, assigned_by, status)
-       VALUES ($1, $2, $3, $4, $5, 'En Progreso')
-       RETURNING id, audit_id, control_id, auditor_id, is_lead, assigned_by, status, created_at`,
-      [planId, controlId.trim(), auditorId, auditorId === senior.id, senior.id],
+         (audit_id, control_id, process_id, auditor_id, is_lead, assigned_by, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'En Progreso')
+       RETURNING id, audit_id, control_id, process_id, auditor_id, is_lead, assigned_by, status, created_at`,
+      [planId, controlId.trim(), processId, auditorId, auditorId === senior.id, senior.id],
     );
     res.status(201).json(resultado.rows[0]);
   } catch (error) {
@@ -392,7 +484,7 @@ router.post("/planes/:planId/controles", autorizar(ROL_SENIOR), async (req, res)
       throw new ErrorApi(409, "ASIGNACION_DUPLICADA", "El control ya está asignado a ese auditor en este plan.");
     }
     if ((error as { code?: string }).code === "23503") {
-      throw new ErrorApi(400, "DATOS_INVALIDOS", "El control no existe.");
+      throw new ErrorApi(400, "DATOS_INVALIDOS", "El control o el proceso especificado no existe.");
     }
     throw error;
   }

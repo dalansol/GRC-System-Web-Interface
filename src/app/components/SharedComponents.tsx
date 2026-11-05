@@ -63,7 +63,7 @@ export type {
 type Navigate = (type: DetailType, id: string, auditId?: string) => void;
 
 type DetailType =
-  "general_risk" | "specific_risk" | "audit_entity" | "control";
+  "general_risk" | "specific_risk" | "audit_entity" | "control" | "finding";
 
 type StatusKey =
   "completed" | "in_progress" | "overdue" | "pending";
@@ -153,6 +153,8 @@ interface ControlRecord {
   horasInvertidas?: number;
   feedback?: string | null;
   auditIds?: number[];
+  /** Su evaluación marcó deficiencia (historia #98). */
+  tieneDeficiencia?: boolean;
 }
 interface ProcedureTracking {
   id: string;

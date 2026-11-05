@@ -1,10 +1,12 @@
 // Rutas Express para parametrización de estructura organizacional (SF-03).
 // Periodos de auditoría, departamentos, unidades de negocio y su jerarquía
 // (división → subdivisión → área). Consultan todos los usuarios con sesión;
-// escriben Administrador y Jefe de Auditoría.
+// escriben Administrador y Jefe de Auditoría. El nombre del área y el país de la subdivisión
+// deben estar en sus catálogos (routes/catalogos.ts).
 
 import { Router } from "express";
 import type { RegistrarEvento } from "../bitacora.js";
+import { MENSAJE_FUERA_DE_CATALOGO, type TipoCatalogo } from "../domain/catalogos.js";
 import {
   NIVEL_PADRE,
   normalizarAltaNodo,
@@ -19,6 +21,7 @@ import {
   validarEdicionPeriodo,
   validarEdicionUnidad,
   type AltaPeriodoInput,
+  type NivelCodigo,
   type NivelEstructura,
   type NivelNodo,
 } from "../domain/estructura.js";
@@ -26,11 +29,13 @@ import { ROL_ADMINISTRADOR } from "../domain/tipos.js";
 import { ErrorApi } from "../errores.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import { autorizar } from "../middleware/autorizar.js";
+import type { RepositorioCatalogos } from "../repos/catalogos.js";
 import { ErrorNombreDuplicado, type RepositorioEstructura } from "../repos/estructura.js";
 import type { RepositorioUsuarios } from "../repos/repositorio.js";
 
 const ROL_JEFATURA = "Jefe de Auditoría";
 const ROLES_GESTION = [ROL_ADMINISTRADOR, ROL_JEFATURA];
+const NIVELES_CODIGO: NivelCodigo[] = ["unidad", "division", "subdivision"];
 
 /** Ruta y textos de cada nivel. */
 const NIVELES: Record<NivelEstructura, { ruta: string; etiqueta: string; articulo: string }> = {
@@ -43,6 +48,7 @@ const NIVELES: Record<NivelEstructura, { ruta: string; etiqueta: string; articul
 interface Dependencias {
   repo: RepositorioEstructura;
   usuarios: RepositorioUsuarios;
+  catalogos: RepositorioCatalogos;
   registrarEvento: RegistrarEvento;
 }
 
@@ -73,8 +79,29 @@ async function sinDuplicados<T>(trabajo: () => Promise<T>): Promise<T> {
   }
 }
 
-export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencias): Router {
+export function rutasEstructura({ repo, usuarios, catalogos, registrarEvento }: Dependencias): Router {
   const rutas = Router();
+
+  /**
+   * El valor debe ser una opción del catálogo; devuelve su grafía registrada ("NÓMINA" → "Nómina").
+   * null y undefined pasan tal cual (país opcional, campo no editado).
+   */
+  async function deCatalogo<T extends string | null | undefined>(tipo: TipoCatalogo, valor: T): Promise<T> {
+    if (valor === null || valor === undefined) return valor;
+    const opcion = await catalogos.buscarPorValor(tipo, valor);
+    if (!opcion) throw new ErrorApi(400, "OPCION_NO_VALIDA", MENSAJE_FUERA_DE_CATALOGO[tipo]);
+    return opcion.valor as T;
+  }
+
+  /** Nombre del área y país de la subdivisión, con la grafía del catálogo. */
+  async function conValoresDeCatalogo<D extends { nombre?: string | null; pais?: string | null }>(
+    nivel: NivelNodo,
+    datos: D,
+  ): Promise<D> {
+    if (nivel === "area") datos.nombre = await deCatalogo("area", datos.nombre);
+    if (nivel === "subdivision") datos.pais = await deCatalogo("pais", datos.pais);
+    return datos;
+  }
 
   /** El gerente responsable debe ser un usuario activo con rol Jefe de Auditoría. */
   async function validarGerente(id: number): Promise<void> {
@@ -165,6 +192,16 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
 
   rutas.get("/departamentos-auditoria", async (_req, res) => {
     res.json(await repo.listarDepartamentos());
+  });
+
+  // Vista previa del código para el formulario de alta: lo calcula el repositorio con la
+  // misma regla que el alta (el mayor código existente más uno) pero sin reservarlo.
+  rutas.get("/codigos-proximos/:nivel", autorizar(...ROLES_GESTION), async (req, res) => {
+    const nivel = req.params.nivel;
+    if (!NIVELES_CODIGO.includes(nivel as NivelCodigo)) {
+      throw new ErrorApi(400, "DATOS_INVALIDOS", "El nivel debe ser unidad, division o subdivision.");
+    }
+    res.json({ codigo: await repo.codigoProximo(nivel as NivelCodigo) });
   });
 
   // ── Unidades de negocio ─────────────────────────────────────────────────────
@@ -269,7 +306,7 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
       const error = validarAltaNodo(nivel, cuerpo);
       if (error) throw new ErrorApi(400, "DATOS_INVALIDOS", error);
 
-      const datos = normalizarAltaNodo(nivel, cuerpo);
+      const datos = await conValoresDeCatalogo(nivel, normalizarAltaNodo(nivel, cuerpo));
       if (!(await existe(NIVEL_PADRE[nivel], datos.padreId))) throw noEncontrado(NIVEL_PADRE[nivel]);
 
       const nodo = await sinDuplicados(() => repo.crearNodo(nivel, datos));
@@ -287,7 +324,7 @@ export function rutasEstructura({ repo, usuarios, registrarEvento }: Dependencia
       const error = validarEdicionNodo(nivel, cuerpo);
       if (error) throw new ErrorApi(400, "DATOS_INVALIDOS", error);
 
-      const datos = normalizarEdicionNodo(nivel, cuerpo);
+      const datos = await conValoresDeCatalogo(nivel, normalizarEdicionNodo(nivel, cuerpo));
       const nodo = await sinDuplicados(() => repo.editarNodo(nivel, id, datos));
       if (!nodo) throw noEncontrado(nivel);
       registrarEvento({

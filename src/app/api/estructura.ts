@@ -170,6 +170,10 @@ export const editarPeriodo = (id: number, cambios: EdicionPeriodoInput) =>
 
 export const listarDepartamentos = () => pedir<DepartamentoAuditoria[]>("/departamentos-auditoria");
 
+/** Código que asignará el backend en la siguiente alta del nivel (vista previa; no lo reserva). */
+export const obtenerCodigoProximo = (nivel: "unidad" | "division" | "subdivision") =>
+  pedir<{ codigo: string }>(`/codigos-proximos/${nivel}`);
+
 export const listarUnidades = () => pedir<UnidadNegocio[]>("/unidades-negocio");
 
 export const listarResponsables = () => pedir<Responsable[]>("/unidades-negocio/responsables");

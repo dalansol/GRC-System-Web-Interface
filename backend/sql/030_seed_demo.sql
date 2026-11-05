@@ -70,12 +70,4 @@ VALUES
      'Conciliación Bancaria Mensual', 'Bajo', '2024-11-05T00:00:00Z')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO action_plans (finding_id, description, responsible_id, due_date, created_by)
-SELECT 'HAL-2025-001',
-       'Revisar y reasignar roles en SAP para eliminar conflictos de acceso. Implementar aprobación dual en todas las conciliaciones.',
-       responsable.id, DATE '2025-09-15', creador.id
-FROM users responsable
-JOIN users creador ON creador.email = 's.ramirez@expedite.com'
-WHERE responsable.email = 'c.morales@expedite.com'
-  AND EXISTS (SELECT 1 FROM findings WHERE id = 'HAL-2025-001')
-ON CONFLICT (finding_id) DO NOTHING;
+-- El plan de acción de prueba está en 043_seed_plan_demo.sql (necesita action_plan_findings, de 034).

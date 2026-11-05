@@ -80,7 +80,7 @@ interface Props {
 export default function VistaControles({ navigate }: Props) {
   const { usuario } = useSesion();
   const [controles, setControles] = useState<ControlRecord[]>([]);
-  const [asignacionesPropias, setAsignacionesPropias] = useState<Record<string, boolean>>({});
+  const [asignacionesPropias, setAsignacionesPropias] = useState<Record<string, number | null>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -92,9 +92,9 @@ export default function VistaControles({ navigate }: Props) {
           datos.map(async (control) => {
             try {
               const resultado = await consultarMiAsignacionControl(control.id);
-              return [control.id, resultado.asignado] as const;
+              return [control.id, resultado.asignacion?.id ?? null] as const;
             } catch {
-              return [control.id, false] as const;
+              return [control.id, null] as const;
             }
           }),
         );
@@ -353,6 +353,11 @@ export default function VistaControles({ navigate }: Props) {
                           <span className="text-[10px] text-muted-foreground">
                             {control.frequency}
                           </span>
+                          {control.tieneDeficiencia && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">
+                              Con deficiencia
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -413,11 +418,10 @@ export default function VistaControles({ navigate }: Props) {
                               {control.feedback && <p className="mt-2 text-xs text-amber-700">Feedback: {control.feedback}</p>}
                             </div>
                             <EvidenciasSection 
-                              entityId={control.id} 
+                              entityId={String(asignacionesPropias[control.id] ?? control.id)} 
                               entityType="control" 
-                              controlId={control.id}
                               puedeSubir={
-                                asignacionesPropias[control.id] === true &&
+                                asignacionesPropias[control.id] !== null &&
                                 control.status === "En Progreso" &&
                                 !esJefatura &&
                               !esAuditorSenior &&

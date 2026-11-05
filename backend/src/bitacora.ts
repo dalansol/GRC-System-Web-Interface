@@ -9,8 +9,15 @@ export interface EventoBitacora {
     | "plan.edicion"
     | "plan_accion.alta"
     | "plan_accion.edicion"
+    | "plan_accion.envio_revision"
+    | "plan_accion.apertura_revision"
+    | "plan_accion.aprobacion"
+    | "plan_accion.rechazo"
+    | "plan_accion.solicitud_prorroga"
+    | "plan_accion.decision_prorroga"
     | "conflicto.declaracion"
     | "conflicto.aviso_jefatura"
+    | "control.evaluacion"
     | "asistente.resumen"
     | "asistente.pregunta"
     | "asistente.consulta"
@@ -18,7 +25,10 @@ export interface EventoBitacora {
     | "estructura.edicion"
     | "estructura.baja"
     | "periodo.alta"
-    | "periodo.edicion";
+    | "periodo.edicion"
+    | "catalogo.alta"
+    | "catalogo.edicion"
+    | "catalogo.baja";
   actor: string;
   detalle: Record<string, unknown>;
 }

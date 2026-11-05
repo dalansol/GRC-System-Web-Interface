@@ -57,18 +57,18 @@ INSERT INTO catalog_department (name)
 SELECT nombre FROM (VALUES ('Retail & Spin'), ('Beverage')) AS d (nombre)
 WHERE NOT EXISTS (SELECT 1 FROM catalog_department c WHERE c.name = d.nombre);
 
--- El periodo de auditoría es el trimestre (2026 Q1…); las unidades nuevas toman el activo.
+-- El periodo de auditoría es el trimestre (2026 T1…); las unidades nuevas toman el activo.
 -- Los trimestres se buscan por fechas, no por nombre: 026 cambió el formato ("2026Q1" →
--- "2026 Q1") y repetir este script no debe volver a insertarlos con otro nombre.
+-- "2026 T1") y repetir este script no debe volver a insertarlos con otro nombre.
 -- Las bases anteriores tenían activo "Fiscal 2026" (015 antes de 026): deja de serlo una
 -- sola vez, por su nombre anterior; las unidades que ya lo tienen lo conservan. Así, repetir
 -- el script no desactiva un "2026 Fiscal" que se haya activado desde el Catálogo.
 INSERT INTO fiscal_periods (name, start_date, end_date, is_active)
 SELECT v.nombre, v.inicio, v.fin, FALSE
-FROM (VALUES ('2026 Q1', DATE '2026-01-01', DATE '2026-03-31'),
-             ('2026 Q2', DATE '2026-04-01', DATE '2026-06-30'),
-             ('2026 Q3', DATE '2026-07-01', DATE '2026-09-30'),
-             ('2026 Q4', DATE '2026-10-01', DATE '2026-12-31')) AS v (nombre, inicio, fin)
+FROM (VALUES ('2026 T1', DATE '2026-01-01', DATE '2026-03-31'),
+             ('2026 T2', DATE '2026-04-01', DATE '2026-06-30'),
+             ('2026 T3', DATE '2026-07-01', DATE '2026-09-30'),
+             ('2026 T4', DATE '2026-10-01', DATE '2026-12-31')) AS v (nombre, inicio, fin)
 WHERE NOT EXISTS (SELECT 1 FROM fiscal_periods f WHERE f.start_date = v.inicio AND f.end_date = v.fin);
 
 UPDATE fiscal_periods SET is_active = FALSE

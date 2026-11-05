@@ -8,7 +8,7 @@ import { ROL_ADMINISTRADOR } from "../domain/tipos.js";
 import { ErrorApi } from "../errores.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import { autorizar } from "../middleware/autorizar.js";
-import type { RepositorioEvidencias } from "../repos/evidencias.js";
+import type { LectorEvidencia, RepositorioEvidencias } from "../repos/evidencias.js";
 
 // Roles del equipo de auditoría que usan el asistente (HU #105).
 const ROLES_ASISTENTE = [ROL_ADMINISTRADOR, "Jefe de Auditoría", "Auditor Senior", "Auditor"];
@@ -34,8 +34,9 @@ export function rutasAsistente({ proveedor, evidencias, registrarEvento }: Depen
     res.json({ disponible: asistente !== null });
   });
 
-  async function documento(id: string): Promise<DocumentoParaIA> {
-    const archivo = await evidencias.leerArchivo(id);
+  // Una evidencia que el usuario no puede ver responde igual que una que no existe.
+  async function documento(id: string, lector: LectorEvidencia): Promise<DocumentoParaIA> {
+    const archivo = await evidencias.leerArchivo(id, lector);
     if (!archivo) throw new ErrorApi(404, "NO_ENCONTRADO", "La evidencia no existe.");
     const { texto, recortado } = await extraerTexto(archivo);
     if (!texto.trim()) {
@@ -67,7 +68,7 @@ export function rutasAsistente({ proveedor, evidencias, registrarEvento }: Depen
   rutas.post("/asistente/evidencias/:id/resumen", autorizar(...ROLES_ASISTENTE), async (req, res) => {
     if (!asistente) throw IA_DESACTIVADA;
     const evidenciaId = String(req.params.id);
-    const doc = await documento(evidenciaId);
+    const doc = await documento(evidenciaId, usuarioEnSesion(res));
     const resultado = await consultar(res, "asistente.resumen", { evidenciaId }, () => asistente.resumir(doc));
     res.json({ evidenciaId, tipo: "resumen", ...resultado, recortado: doc.recortado });
   });
@@ -77,7 +78,7 @@ export function rutasAsistente({ proveedor, evidencias, registrarEvento }: Depen
     if ("error" in validacion) throw new ErrorApi(400, "DATOS_INVALIDOS", validacion.error);
     if (!asistente) throw IA_DESACTIVADA;
     const evidenciaId = String(req.params.id);
-    const doc = await documento(evidenciaId);
+    const doc = await documento(evidenciaId, usuarioEnSesion(res));
     const resultado = await consultar(res, "asistente.pregunta", { evidenciaId }, () =>
       asistente.preguntar(doc, validacion.pregunta),
     );

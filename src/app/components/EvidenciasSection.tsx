@@ -21,8 +21,9 @@ import { ErrorApi, pedir, pedirFormData } from "../api/cliente";
 
 // ─── Evidencias Section ───────────────────────────────────────────────────────
 const BLOCKED_EXTENSIONS = [".exe", ".bat", ".js", ".msi", ".sh", ".cmd", ".vbs", ".ps1"];
-const ALLOWED_EXTENSIONS = [".pdf", ".xlsx", ".eml", ".msg", ".zip", ".7z"];
-const ALLOWED_FORMATS_LABEL = ".pdf, .xlsx, .eml, .msg, .zip y .7z";
+const ALLOWED_EXTENSIONS = [".pdf", ".xlsx", ".xlsm", ".eml", ".msg", ".zip", ".7z"];
+const LIBROS_EXCEL = ["xlsx", "xlsm"];
+const ALLOWED_FORMATS_LABEL = ".pdf, .xlsx, .xlsm, .eml, .msg, .zip y .7z";
 const MAX_FILE_SIZE_MB = 100;
 
 interface EvidenceFile {
@@ -36,6 +37,8 @@ interface EvidenceFile {
   entityId: string;
   version?: number;
 }
+
+type EvidenceEntityType = "control" | "hallazgo" | "action_plan_step";
 
 // ─── Fallback mock data (used when the API is unavailable) ────────────────────
 const FALLBACK_EVIDENCES: EvidenceFile[] = [
@@ -62,30 +65,24 @@ function mapApiRow(row: any): EvidenceFile {
     uploadDate: row.created_at ? new Date(row.created_at).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
     uploadedBy: row.uploaded_by || "Auditor",
     entityId: row.entity_id,
-    version: 1,
+    version: row.version ? Number(row.version) : 1,
   };
 }
 
 export default function EvidenciasSection({ 
   entityId, 
   entityType = "control",
-  controlId,
-  findingId,
   auditId,
-  businessEntityId,
   puedeSubir,
+  onEvidenceCountChange,
 }: { 
   entityId: string; 
-  entityType?: "control" | "hallazgo";
-  controlId?: string;
-  findingId?: string;
+  entityType?: EvidenceEntityType;
   auditId?: string;
-  businessEntityId?: string;
   puedeSubir?: boolean;
+  onEvidenceCountChange?: (count: number) => void;
 }) {
-  // Hallazgo: TBD quién sube evidencia (CLAUDE.md §7 #19); por ahora cualquier usuario en sesión.
-  const puedeSubirEvidencia =
-    entityType === "control" ? puedeSubir === true : true;
+  const puedeSubirEvidencia = puedeSubir === true;
   const [files, setFiles] = useState<EvidenceFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -103,9 +100,11 @@ export default function EvidenciasSection({
       if (auditId) query.set("auditId", auditId);
       const data = await pedir<any[]>(`/evidencias?${query.toString()}`);
       setFiles(data.map(mapApiRow));
+      onEvidenceCountChange?.(data.length);
       setUsingFallback(false);
     } catch (reason: unknown) {
       setFiles([]);
+      onEvidenceCountChange?.(0);
       setUsingFallback(false);
       setError(reason instanceof Error ? reason.message : "No se pudieron cargar las evidencias.");
     }
@@ -150,6 +149,7 @@ export default function EvidenciasSection({
         uploadedBy: "M. García", entityId, version: 1,
       };
       setFiles(prev => [newEv, ...prev]);
+      onEvidenceCountChange?.(files.length + 1);
       toast.success(`Evidencia "${file.name}" cargada correctamente`);
       if (inputRef.current) inputRef.current.value = "";
       return;
@@ -162,11 +162,6 @@ export default function EvidenciasSection({
       formData.append("file", file);
       formData.append("entityId", entityId);
       formData.append("entityType", entityType);
-      if (auditId) formData.append("auditId", auditId);
-      if (controlId) formData.append("controlId", controlId);
-      if (findingId) formData.append("findingId", findingId);
-      if (businessEntityId) formData.append("businessEntityId", businessEntityId);
-
       await pedirFormData("/evidencias/upload", formData);
 
       toast.success(`Evidencia "${file.name}" cargada correctamente`);
@@ -183,6 +178,7 @@ export default function EvidenciasSection({
   const removeFile = async (id: string) => {
     if (usingFallback) {
       setFiles(prev => prev.filter(f => f.id !== id));
+      onEvidenceCountChange?.(Math.max(0, files.length - 1));
       return;
     }
 
@@ -195,21 +191,17 @@ export default function EvidenciasSection({
     }
   };
 
-  const handleHashUpdate = (fileId: string, newHash: string, newVersion: number) => {
-    setFiles(prev => prev.map(f => f.id === fileId ? { ...f, hash: newHash, version: newVersion } : f));
-  };
-
-  const iconClass = (t: string) => t === "pdf" ? "text-red-500" : t === "xlsx" ? "text-emerald-600" : "text-blue-500";
+  const iconClass = (t: string) => t === "pdf" ? "text-red-500" : LIBROS_EXCEL.includes(t) ? "text-emerald-600" : "text-blue-500";
 
   return (
     <>
       {xlsxTarget && (
         <SpreadsheetEditor
           filename={xlsxTarget.name}
-          fileVersion={xlsxTarget.version ?? 3}
-          entityId={entityId}
+          evidenciaId={String(xlsxTarget.id)}
+          soloLectura={!puedeSubirEvidencia}
           onClose={() => setXlsxTarget(null)}
-          onHashUpdate={(hash, ver) => { handleHashUpdate(xlsxTarget.id, hash, ver); setXlsxTarget(null); }}
+          onGuardado={() => { void fetchEvidences(); }}
         />
       )}
       {iaTarget && (
@@ -272,16 +264,16 @@ export default function EvidenciasSection({
                     <Sparkles size={10} /> Analizar con IA
                   </button>
                 )}
-                {f.mimeType === "xlsx" && (
+                {LIBROS_EXCEL.includes(f.mimeType) && (
                   <button
                     onClick={() => setXlsxTarget(f)}
                     className="flex-shrink-0 flex items-center gap-1 text-[10px] px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md hover:bg-emerald-100 font-semibold transition-colors whitespace-nowrap"
                   >
-                    <FileSpreadsheet size={10} /> Editar en Expedite
+                    <FileSpreadsheet size={10} /> {puedeSubirEvidencia ? "Editar en Expedite" : "Ver en Expedite"}
                   </button>
                 )}
                 {puedeSubirEvidencia && (
-                  <button onClick={() => removeFile(f.id)} className="p-1 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0">
+                  <button onClick={() => removeFile(f.id)} aria-label={`Eliminar ${f.name}`} className="p-1 text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0">
                     <Trash2 size={12} />
                   </button>
                 )}
@@ -290,7 +282,7 @@ export default function EvidenciasSection({
           </div>
         )}
         <div className="mt-3 pt-3 border-t border-border text-[10px] text-muted-foreground">
-          Formatos aceptados: PDF, XLSX, EML, MSG, ZIP, 7Z · Máx. {MAX_FILE_SIZE_MB} MB · Hash SHA-256 · Los archivos .xlsx se pueden editar directamente en Expedite
+          Formatos aceptados: PDF, XLSX, XLSM, EML, MSG, ZIP, 7Z · Máx. {MAX_FILE_SIZE_MB} MB · Hash SHA-256 · Los libros de Excel se pueden editar directamente en Expedite (las macros no son compatibles)
         </div>
       </Card>
     </>

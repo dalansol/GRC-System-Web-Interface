@@ -3,11 +3,13 @@ import { AlertCircle, GitBranch, Loader2, X } from "lucide-react";
 import { ETIQUETA_NIVEL, type DatosNodo } from "../../api/estructura";
 import type { AltaNodoContexto } from "../../domain/estructura/useEstructuraViewModel";
 import { Card } from "../SharedComponents";
-import { CampoCodigo, CampoSugerido } from "./piezasCatalogo";
+import { opcionDeCatalogo } from "../../domain/estructura/sugerencias";
+import { AyudaCatalogo, CampoCodigo, CampoSugerido } from "./piezasCatalogo";
 
 // Alta de división, subdivisión o área dentro de su nivel padre (SF-03).
 // División y subdivisión: el código lo asigna el sistema (aquí solo se muestra el próximo) y
 // el nombre es opcional. El área no tiene código: solo su nombre, que se repite entre ramas.
+// El nombre del área y el país salen de los catálogos que edita el Administrador en Ajustes.
 
 interface ModalRegistrarNodoProps {
   contexto: AltaNodoContexto | null;
@@ -17,16 +19,16 @@ interface ModalRegistrarNodoProps {
   onCerrar: () => void;
   /** Vista previa del código que asignará el sistema (división y subdivisión). */
   codigoProximo?: string;
-  /** Áreas sugeridas (solo área); ver domain/estructura/sugerencias.ts. */
-  sugerencias?: readonly string[];
-  /** Países o regiones sugeridos para la subdivisión. */
-  sugerenciasPais?: readonly string[];
+  /** Áreas del catálogo que aún no tiene la subdivisión (solo área); ver domain/estructura/sugerencias.ts. */
+  opcionesArea?: readonly string[];
+  /** Países o regiones del catálogo para la subdivisión. */
+  opcionesPais?: readonly string[];
 }
 
 const PLACEHOLDER_NOMBRE: Record<AltaNodoContexto["nivel"], string> = {
   division: "Ej. Latam, Oxxo México…",
   subdivision: "Ej. Brasil, Centroamérica…",
-  area: "Ej. Nómina, Inventarios, Compras…",
+  area: "Busca y elige un área del catálogo…",
 };
 
 export function ModalRegistrarNodo({
@@ -36,8 +38,8 @@ export function ModalRegistrarNodo({
   onGuardar,
   onCerrar,
   codigoProximo,
-  sugerencias = [],
-  sugerenciasPais = [],
+  opcionesArea = [],
+  opcionesPais = [],
 }: ModalRegistrarNodoProps) {
   const [nombre, setNombre] = useState("");
   const [pais, setPais] = useState("");
@@ -59,13 +61,20 @@ export function ModalRegistrarNodo({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!conCodigo && !nombre.trim()) {
-      setErrorLocal("El nombre es obligatorio.");
+    // Enter envía sin salir del campo: se resuelve aquí también contra el catálogo.
+    const area = conCodigo ? null : opcionDeCatalogo(opcionesArea, nombre);
+    if (!conCodigo && !area) {
+      setErrorLocal(nombre.trim() ? "Elige un área del catálogo." : "El nombre es obligatorio.");
+      return;
+    }
+    const paisElegido = conPais ? opcionDeCatalogo(opcionesPais, pais) : null;
+    if (conPais && pais.trim() && !paisElegido) {
+      setErrorLocal("Elige un país o región del catálogo.");
       return;
     }
 
-    const datos: DatosNodo = { nombre: nombre.trim() || null };
-    if (conPais) datos.pais = pais.trim() || null;
+    const datos: DatosNodo = { nombre: conCodigo ? nombre.trim() || null : area };
+    if (conPais) datos.pais = paisElegido;
     const exito = await onGuardar(datos);
     if (exito) {
       setNombre("");
@@ -110,7 +119,7 @@ export function ModalRegistrarNodo({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {conCodigo && codigoProximo && <CampoCodigo codigo={codigoProximo} proximo />}
+          {conCodigo && <CampoCodigo codigo={codigoProximo ?? null} proximo />}
 
           <div>
             <label htmlFor="nodo-nombre" className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">
@@ -129,15 +138,16 @@ export function ModalRegistrarNodo({
                 className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${!conCodigo && errorLocal ? "border-red-400" : "border-border"}`}
               />
             ) : (
-              // Área: sugiere las del catálogo de FEMSA y las registradas que aún no tiene.
+              // Área: solo las del catálogo que aún no tiene la subdivisión.
               <CampoSugerido
                 id="nodo-nombre"
+                estricto
                 value={nombre}
                 onChange={(valor) => {
                   setNombre(valor);
                   setErrorLocal("");
                 }}
-                opciones={sugerencias}
+                opciones={opcionesArea}
                 placeholder={PLACEHOLDER_NOMBRE[contexto.nivel]}
                 maxLength={150}
                 disabled={guardando}
@@ -145,8 +155,10 @@ export function ModalRegistrarNodo({
               />
             )}
             {!conCodigo && errorLocal && <p className="text-xs text-red-600 mt-1">{errorLocal}</p>}
-            {conCodigo && (
+            {conCodigo ? (
               <p className="text-[11px] text-muted-foreground mt-1">Opcional. Si lo dejas vacío se muestra el código.</p>
+            ) : (
+              <AyudaCatalogo />
             )}
           </div>
 
@@ -157,14 +169,20 @@ export function ModalRegistrarNodo({
               </label>
               <CampoSugerido
                 id="nodo-pais"
+                estricto
                 value={pais}
-                onChange={setPais}
-                opciones={sugerenciasPais}
-                placeholder="Ej. México, Centroamérica Sur, Corporativo…"
+                onChange={(valor) => {
+                  setPais(valor);
+                  setErrorLocal("");
+                }}
+                opciones={opcionesPais}
+                placeholder="Sin país o región (opcional)"
                 maxLength={100}
                 disabled={guardando}
-                className="w-full text-sm px-3.5 py-2.5 rounded-lg border border-border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                className={`w-full text-sm px-3.5 py-2.5 rounded-lg border bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all ${errorLocal ? "border-red-400" : "border-border"}`}
               />
+              {errorLocal && <p className="text-xs text-red-600 mt-1">{errorLocal}</p>}
+              <AyudaCatalogo />
             </div>
           )}
 
