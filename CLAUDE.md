@@ -28,7 +28,7 @@
 ### Estado del trabajo (leer antes de empezar)
 
 - **Rama base:** `integracion-planes-accion` reúne los planes de acción y la vista del auditado (Héctor) con los catálogos, los trimestres y R2. Aún no se fusiona a `master`, que no tiene nada de esto: las ramas nuevas salen de ella.
-- **Base compartida (Supabase):** migrada con `db:migrar` hasta el script `045` (2026-11-05); `047` y `048` aún no se aplican y el backend de esta rama los necesita (pendiente 36). Tenía columnas agregadas a mano; 042 las replica en las demás bases. Detalle en `docs/diseno/base-de-datos.md`.
+- **Base compartida (Supabase):** migrada con `db:migrar` hasta el script `048` (2026-11-05). Tenía columnas agregadas a mano; 042 las replica en las demás bases. Detalle en `docs/diseno/base-de-datos.md`.
 - **Cambios de esquema:** siempre en un script nuevo (el siguiente es `049`) agregado a `backend/src/migrar.ts`. No editar scripts ya aplicados ni cambiar Supabase a mano.
 - **Nunca contra Supabase:** `db:migrar --datos-prueba` ni las pruebas con `SQL_TEST_*` (`sql.integracion.test.ts` borra tablas). Usar una base exclusiva de pruebas.
 - **Pruebas:** sin `SQL_TEST_*` se omiten las de integración, que cubren los permisos de hallazgos y evidencias. Las 10 fallas de `planes.test.ts` son conocidas (pendiente 22); todo lo demás debe pasar.
@@ -208,7 +208,7 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 33. **`Completado` manual:** `PATCH /planes-accion/:id` todavía permite fijar `Completado` fuera del flujo de aprobación; falta decidir si se retira.
 34. **Evidencia para completar un paso:** solo la pantalla la exige al completar un paso; el envío a la revisión de cierre sí la exige en el backend.
 35. ~~**Usuarios de prueba en SQL**~~: resuelto con `046_seed_auditados.sql`.
-36. **Scripts 047 y 048 en Supabase:** el backend de esta rama necesita `047_evaluacion_controles.sql` y `048_versiones_evidencia.sql`, que aún no se aplican a la base compartida (`045` ya se aplicó el 2026-11-05). Agregan tablas, una columna y un formato; no modifican filas existentes. Hay que aplicarlos antes de usar este backend.
+36. ~~**Scripts 045, 047 y 048 en Supabase**~~: resuelto; se aplicaron a la base compartida (2026-11-05).
 37. **Reglas de planes de acción por confirmar con FEMSA:** quién envía a revisión y qué es un "entregable" no están en el SRS; el equipo decidió que el entregable es la evidencia de un plan y que envía el auditor. También falta anotar en el SRS que un plan nuevo empieza en `Borrador` (SF-10 dice `Asignado`).
 38. **Papeles de trabajo (paso 8 del proceso E2E):** la revisión de controles sigue sin firma ni bitácora del flujo; quedó fuera del flujo de aprobación de planes.
 39. **SF-16 fuera de los planes:** el portal filtra por asignación y no por área, porque los usuarios no tienen unidad confiable (pendiente 21). Tampoco se revisó qué calificaciones internas muestra la pantalla de hallazgos al auditado.

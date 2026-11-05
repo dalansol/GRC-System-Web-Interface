@@ -114,8 +114,8 @@ las filas de `processes` solo existen en Supabase.
 | `044_flujo_aprobacion_planes.sql` | Flujo de aprobación (SF-12): estados `Pendiente`, `Aprobado` y `Rechazado`; `action_plan_approval_events` (inmutable) y `notifications`. Pasa a `Pendiente` los planes en `En Revisión` sin eventos. Aplicado a Supabase (2026-11-05) |
 | `045_etapas_planes_accion.sql` | Dos revisiones por plan (SF-12, SF-11): estado `Borrador`; `action_plans.review_stage` y `action_plan_approval_events.stage`, con `cierre` por omisión; `action_plan_event_evidence` (archivos señalados, inmutable) y `action_plan_extension_requests` (prórrogas). Aplicado a Supabase (2026-11-05) |
 | `046_seed_auditados.sql` | Usuarios `j.ejemplo` y `c.ejemplo` de "Usar un rol de prueba". Solo con `--datos-prueba` |
-| `047_evaluacion_controles.sql` | Criterios, evaluaciones y respuestas de controles (historia #98, SF-07). Los 8 criterios son datos de prueba. **Aún no se aplica a Supabase** |
-| `048_versiones_evidencia.sql` | `evidence.version`, `evidence_versions` y el formato `.xlsm` (UF-17, SF-08). **Aún no se aplica a Supabase** |
+| `047_evaluacion_controles.sql` | Criterios, evaluaciones y respuestas de controles (historia #98, SF-07). Los 8 criterios son datos de prueba. Aplicado a Supabase (2026-11-05) |
+| `048_versiones_evidencia.sql` | `evidence.version`, `evidence_versions` y el formato `.xlsm` (UF-17, SF-08). Aplicado a Supabase (2026-11-05) |
 
 034 y 035 son dos scripts cada uno porque se crearon en ramas distintas; no se renombran para que
 no vuelvan a aplicarse. `migrar.ts` los lista en orden alfabético, el mismo que usa `--datos-prueba`.
