@@ -76,8 +76,24 @@ describe("proveedor Gemini", () => {
     expect(JSON.parse(String(llamada?.init.body))).toEqual({
       systemInstruction: { parts: [{ text: "Responde en español." }] },
       contents: [{ role: "user", parts: [{ text: "Resume el documento." }] }],
-      generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
     });
+  });
+
+  // Gemini 2.5 Flash admite apagar el razonamiento con presupuesto 0; Gemini 3 usa thinkingLevel y
+  // rechaza el presupuesto 0 con 400; los demás modelos no aceptan thinkingConfig.
+  it.each([
+    ["gemini-2.5-flash", { thinkingBudget: 0 }],
+    ["gemini-2.5-flash-lite", { thinkingBudget: 0 }],
+    ["gemini-2.5-pro", undefined],
+    ["gemini-3.8-flash", { thinkingLevel: "low" }],
+    ["gemini-3-pro-preview", { thinkingLevel: "low" }],
+    ["gemini-2.0-flash", undefined],
+  ])("ajusta el razonamiento según el modelo (%s)", async (modelo, thinkingConfig) => {
+    const { fetch, llamadas } = fetchFalso(200, respuesta);
+
+    await crearProveedorGemini({ ...GEMINI, modelo, fetch }).completar(MENSAJES);
+
+    expect(JSON.parse(String(llamadas[0]?.init.body)).generationConfig?.thinkingConfig).toEqual(thinkingConfig);
   });
 
   it("manda los turnos previos del modelo con el rol model", async () => {
@@ -95,7 +111,11 @@ describe("proveedor Gemini", () => {
   it("aplica temperatura, longitud máxima y modo JSON", async () => {
     const { fetch, llamadas } = fetchFalso(200, respuesta);
 
-    await crearProveedorGemini({ ...GEMINI, fetch }).completar(MENSAJES, { temperatura: 0.2, maxTokens: 100, json: true });
+    await crearProveedorGemini({ ...GEMINI, modelo: "gemini-2.5-flash", fetch }).completar(MENSAJES, {
+      temperatura: 0.2,
+      maxTokens: 100,
+      json: true,
+    });
 
     expect(JSON.parse(String(llamadas[0]?.init.body)).generationConfig).toEqual({
       temperature: 0.2,
