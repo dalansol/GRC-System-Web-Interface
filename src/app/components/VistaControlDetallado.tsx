@@ -23,10 +23,7 @@ import { obtenerPlanAuditoria, type PlanAuditoria } from "../api/planes";
 
 // Muestra y rotación vienen del backend; si no están definidas se dice en lugar de inventar un valor,
 // porque lo que enseña la pantalla es lo mismo que recibe el asistente de IA (expediente del control).
-const valorODefecto = (valor: unknown) => {
-  const strVal = typeof valor === "string" ? valor : valor != null ? String(valor) : "";
-  return strVal.trim() ? strVal : "No definido";
-};
+const valorODefecto = (valor: string | number | null | undefined) => (valor != null && String(valor).trim() ? String(valor) : "No definido");
 
 export default function VistaControlDetallado({
   id,

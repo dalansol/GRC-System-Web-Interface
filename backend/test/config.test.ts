@@ -104,7 +104,7 @@ describe("configuración del asistente de IA", () => {
   };
 
   it("deja la IA desactivada si no se indica un proveedor", () => {
-    expect(cargarConfig(DEV).ia).toEqual({ proveedor: "ninguno", tiempoEsperaMs: 30000 });
+    expect(cargarConfig(DEV).ia).toEqual({ proveedor: "ninguno", tiempoEsperaMs: 60000 });
   });
 
   it("carga Gemini", () => {
@@ -112,7 +112,7 @@ describe("configuración del asistente de IA", () => {
       proveedor: "gemini",
       apiKey: "clave",
       modelo: "gemini-flash",
-      tiempoEsperaMs: 30000,
+      tiempoEsperaMs: 60000,
     });
   });
 
@@ -123,7 +123,7 @@ describe("configuración del asistente de IA", () => {
       apiKey: "clave",
       despliegue: "expedite-chat",
       versionApi: "2024-10-21",
-      tiempoEsperaMs: 30000,
+      tiempoEsperaMs: 60000,
     });
   });
 

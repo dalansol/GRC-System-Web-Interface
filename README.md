@@ -131,7 +131,7 @@ Backend (`backend/.env`):
 | `IA_PROVEEDOR` | Asistente de IA (SF-19): `gemini`, `azure` o `ninguno` (por omisión; la función queda desactivada y el resto de la plataforma funciona). Comprueba la conexión con `corepack pnpm ia:probar` y las reglas de contención con `corepack pnpm ia:evaluar`. |
 | `GEMINI_API_KEY`, `GEMINI_MODELO` | Obligatorias con `IA_PROVEEDOR=gemini` (clave de Google AI Studio y modelo, p. ej. `gemini-2.5-flash`). El plan gratuito solo es para documentos de prueba. |
 | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION` | Obligatorias con `IA_PROVEEDOR=azure`. |
-| `IA_TIEMPO_ESPERA_MS` | Tiempo máximo de espera de la IA. Por omisión `30000`. |
+| `IA_TIEMPO_ESPERA_MS` | Tiempo máximo de espera de la IA. Por omisión `60000` (los expedientes con evidencias largas tardan más). |
 | `ALMACENAMIENTO` | Dónde se guardan los archivos de evidencia (SF-08): `local` (carpeta `backend/uploads`, por omisión; en Vercel y Render se pierde al reiniciar) o `r2` (Cloudflare R2). |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Obligatorias con `ALMACENAMIENTO=r2`: ID de la cuenta de Cloudflare, credenciales de un token de API de R2 con permiso "Object Read & Write" sobre el bucket, y nombre del bucket. Los archivos quedan bajo el prefijo `evidencias/`. |
 
