@@ -10,12 +10,13 @@ import {
   ValidityBadge,
 } from "./SharedComponents";
 import type { ControlRecord } from "./SharedComponents";
+import EvaluacionControl from "./EvaluacionControl";
 import EvidenciasSection from "./EvidenciasSection";
 import { listarControles, actualizarstatusControl } from "../api/controles";
 import { AvisoDeclaracionesPendientes, useDeclaracionesPendientes } from "./ConflictosPlan";
 import { actualizarAsignacionStatus, consultarMiAsignacionControl, consultarRevisionControl, type RevisionControl } from "../api/auditControls";
 import { CONTROLS, PROCEDURE_TRACKING } from "../data/mock_data";
-import FormularioHallazgo, { type FindingControlOption } from "./FormularioHallazgo";
+import FormularioHallazgo, { controlesConDeficiencia, type FindingControlOption } from "./FormularioHallazgo";
 import { useSesion } from "../auth/SesionContext";
 import { listarHallazgos, type HallazgoApi } from "../api/hallazgos";
 import VistaHallazgoDetallado from "./VistaHallazgoDetallado";
@@ -43,6 +44,8 @@ export default function VistaControlDetallado({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showHallazgoForm, setShowHallazgoForm] = useState(false);
+  // El hallazgo que nace de una evaluación con deficiencia lleva vulnerabilidad alta (historia #98).
+  const [hallazgoPorDeficiencia, setHallazgoPorDeficiencia] = useState(false);
 
   // Selected finding state for detail view navigation
   const [selectedHallazgoId, setSelectedHallazgoId] = useState<string | null>(null);
@@ -195,6 +198,8 @@ export default function VistaControlDetallado({
     (ctrl?.auditIds ?? []).some((planId) => String(planId) === String(plan.id)),
   );
   const evaluacionBloqueada = pendientesDelControl.length > 0;
+  // Sin plan en la navegación se usa el que resolvió la revisión del control.
+  const planEvaluacion = auditId ?? (revision?.plan_id ? String(revision.plan_id) : null);
   const puedeEnviarARevision =
     puedeSubirEvidencia &&
     !evaluacionBloqueada &&
@@ -378,7 +383,17 @@ export default function VistaControlDetallado({
         auditId={auditId}
         puedeSubir={Boolean(miAsignacionId) && puedeEnviarARevision}
       />
-
+      {planEvaluacion && (
+        <EvaluacionControl
+          key={planEvaluacion}
+          planId={planEvaluacion}
+          controlId={ctrl.id}
+          onGenerarHallazgo={() => {
+            setHallazgoPorDeficiencia(true);
+            setShowHallazgoForm(true);
+          }}
+        />
+      )}
       {puedeSubirEvidencia && (
         <Card className="mb-5 p-5">
           {evaluacionBloqueada && (
@@ -420,7 +435,10 @@ export default function VistaControlDetallado({
               </div>
               <button
                 type="button"
-                onClick={() => setShowHallazgoForm(true)}
+                onClick={() => {
+                  setHallazgoPorDeficiencia(false);
+                  setShowHallazgoForm(true);
+                }}
                 className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
               >
                 + Nuevo hallazgo
@@ -489,7 +507,11 @@ export default function VistaControlDetallado({
       {/* ── Modal: Formulario de hallazgo ── */}
       {showHallazgoForm && (
         <FormularioHallazgo
-          controls={controlParaHallazgo}
+          controls={
+            hallazgoPorDeficiencia
+              ? controlesConDeficiencia(controlParaHallazgo, { id: ctrl.id, nombre: ctrl.controlProcedureName })
+              : controlParaHallazgo
+          }
           fixedControlId={ctrl.id}
           ownerId={usuario ? String(usuario.id) : undefined}
           nextFolio={`HAL-${Date.now()}`}

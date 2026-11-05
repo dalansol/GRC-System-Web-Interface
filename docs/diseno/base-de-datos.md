@@ -114,6 +114,7 @@ las filas de `processes` solo existen en Supabase.
 | `044_flujo_aprobacion_planes.sql` | Flujo de aprobación (SF-12): estados `Pendiente`, `Aprobado` y `Rechazado`; `action_plan_approval_events` (inmutable) y `notifications`. Pasa a `Pendiente` los planes en `En Revisión` sin eventos. Aplicado a Supabase (2026-11-05) |
 | `045_etapas_planes_accion.sql` | Dos revisiones por plan (SF-12, SF-11): estado `Borrador`; `action_plans.review_stage` y `action_plan_approval_events.stage`, con `cierre` por omisión; `action_plan_event_evidence` (archivos señalados, inmutable) y `action_plan_extension_requests` (prórrogas). **Aún no se aplica a Supabase** |
 | `046_seed_auditados.sql` | Usuarios `j.ejemplo` y `c.ejemplo` de "Usar un rol de prueba". Solo con `--datos-prueba` |
+| `047_evaluacion_controles.sql` | Criterios, evaluaciones y respuestas de controles (historia #98, SF-07). Los 8 criterios son datos de prueba. **Aún no se aplica a Supabase** |
 
 034 y 035 son dos scripts cada uno porque se crearon en ramas distintas; no se renombran para que
 no vuelvan a aplicarse. `migrar.ts` los lista en orden alfabético, el mismo que usa `--datos-prueba`.
@@ -156,7 +157,8 @@ Cada script corre dentro de una transacción: si falla, no se aplica nada de él
 Las pruebas de integración se omiten si no hay conexión: `sql.integracion` (repositorios),
 `esquema.integracion` (los scripts completos: las tablas existen, tienen la seguridad por filas
 activada, se pueden consultar y hacen cumplir sus llaves), `estructura.integracion` (jerarquía),
-`evidencias.integracion` y `hallazgos.integracion` (quién consulta y modifica cada registro). Para
+`evidencias.integracion`, `hallazgos.integracion` y `accesoRutas.integracion` (quién consulta y
+modifica cada registro), `evaluaciones.integracion` (evaluación de controles). Para
 correrlas hace falta un PostgreSQL con TLS y una base **exclusiva de pruebas, nunca Supabase**:
 `sql.integracion` borra tablas.
 

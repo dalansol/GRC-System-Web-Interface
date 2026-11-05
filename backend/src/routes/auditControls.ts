@@ -59,7 +59,10 @@ router.get("/controles", async (_req, res) => {
             END AS status,
             COALESCE(SUM(COALESCE(ac.hours_spent, 0)), 0) AS hours_spent,
             COALESCE(MAX(ac.feedback), '') AS feedback,
-            COALESCE(array_agg(DISTINCT ac.audit_id) FILTER (WHERE ac.audit_id IS NOT NULL), '{}') AS audit_ids
+            COALESCE(array_agg(DISTINCT ac.audit_id) FILTER (WHERE ac.audit_id IS NOT NULL), '{}') AS audit_ids,
+            EXISTS (
+              SELECT 1 FROM control_evaluations ce WHERE ce.control_id = c.id AND ce.has_deficiency
+            ) AS tiene_deficiencia
      FROM controls c
      LEFT JOIN audit_controls ac ON ac.control_id = c.id
      WHERE CASE
@@ -140,6 +143,19 @@ router.get("/controles/:controlId/revision", async (req, res) => {
      JOIN audit_plans ap ON ap.id = ac.audit_id
      WHERE (c.id::text = $1 OR c.code = $1)
        AND ($4::text IS NULL OR ac.audit_id::text = $4)
+       -- Solo planes que el usuario puede consultar. Filtra el plan entero, no las filas,
+       -- para que el estatus siga tomando en cuenta a todos los auditores asignados.
+       AND (
+         $3 IN ('Jefe de Auditoría', 'Supervisor', 'Administrador')
+         OR ap.responsible_id = $2
+         OR ap.created_by = $2
+         OR EXISTS (
+           SELECT 1 FROM audit_controls propio
+           WHERE propio.audit_id = ac.audit_id
+             AND propio.control_id = ac.control_id
+             AND (propio.auditor_id = $2 OR propio.assigned_by = $2)
+         )
+       )
      GROUP BY ac.audit_id
      ORDER BY
        bool_or(ap.created_by = $2 AND $3 = 'Jefe de Auditoría') DESC,
@@ -414,8 +430,12 @@ router.post("/planes/:planId/controles", autorizar(ROL_SENIOR), async (req, res)
 
   const senior = usuarioEnSesion(res);
   const pool = await poolPromise;
-  const plan = await pool.query("SELECT id FROM audit_plans WHERE id = $1", [planId]);
+  const plan = await pool.query("SELECT responsible_id FROM audit_plans WHERE id = $1", [planId]);
   if (plan.rowCount !== 1) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan no existe.");
+  // Solo asigna el Auditor Senior responsable del plan, el mismo que lo ve en su lista de planes.
+  if (plan.rows[0].responsible_id !== senior.id) {
+    throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "Solo el Auditor Senior responsable del plan puede asignar controles.");
+  }
 
   const auditor = await pool.query(
     `SELECT u.id, r.name AS role

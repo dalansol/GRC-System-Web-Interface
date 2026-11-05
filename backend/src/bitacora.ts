@@ -17,6 +17,7 @@ export interface EventoBitacora {
     | "plan_accion.decision_prorroga"
     | "conflicto.declaracion"
     | "conflicto.aviso_jefatura"
+    | "control.evaluacion"
     | "asistente.resumen"
     | "asistente.pregunta"
     | "asistente.consulta"

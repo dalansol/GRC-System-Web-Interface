@@ -308,6 +308,16 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
           return res.status(409).json(RESPUESTA_PLAN_BLOQUEADO);
         }
       } else {
+        // Solo quien la subió, igual que en la consulta del Auditor.
+        if (evidence.uploaded_by !== String(usuario.id)) {
+          return res.status(403).json({
+            error: {
+              codigo: "ROL_NO_AUTORIZADO",
+              mensaje: "Solo quien subió la evidencia puede eliminarla.",
+            },
+          });
+        }
+
         const asignacion = await pool.query(
           `SELECT 1
            FROM audit_controls ac

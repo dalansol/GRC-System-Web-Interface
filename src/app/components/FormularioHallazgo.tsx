@@ -79,6 +79,22 @@ function calculateResidualRisk(
   return "Bajo";
 }
 
+/**
+ * Lista de controles para un hallazgo que nace de una evaluación (historia #98). Una deficiencia
+ * significa que el control no mitiga el riesgo, así que su vulnerabilidad es alta, sea cual sea la
+ * de la lista; si no está en ella se agrega, porque los controles del backend no vienen ahí.
+ */
+export function controlesConDeficiencia(
+  controles: FindingControlOption[],
+  deficiente: { id: string; nombre: string } | null,
+): FindingControlOption[] {
+  if (!deficiente) return controles;
+  const opcion: FindingControlOption = { id: deficiente.id, name: deficiente.nombre, vulnerability: "Alta" };
+  return controles.some((c) => c.id === deficiente.id)
+    ? controles.map((c) => (c.id === deficiente.id ? opcion : c))
+    : [...controles, opcion];
+}
+
 const USE_REAL_BACKEND = import.meta.env.VITE_USE_REAL_BACKEND !== "false";
 
 export default function FormularioHallazgo({

@@ -153,6 +153,8 @@ interface ControlRecord {
   horasInvertidas?: number;
   feedback?: string | null;
   auditIds?: number[];
+  /** Su evaluación marcó deficiencia (historia #98). */
+  tieneDeficiencia?: boolean;
 }
 interface ProcedureTracking {
   id: string;

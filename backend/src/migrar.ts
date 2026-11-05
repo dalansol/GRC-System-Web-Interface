@@ -58,6 +58,7 @@ const SCRIPTS = [
   "042_procesos_en_asignaciones.sql",
   "044_flujo_aprobacion_planes.sql",
   "045_etapas_planes_accion.sql",
+  "047_evaluacion_controles.sql",
 ];
 const SCRIPTS_DATOS_PRUEBA = ["005_seed_findings.sql", "009_seed_controles.sql", "018_seed_jerarquia.sql", "020_seed_riesgos.sql", "022_seed_nombres_reales.sql", "024_seed_quitar_sin_codigo.sql", "030_seed_demo.sql", "043_seed_plan_demo.sql", "046_seed_auditados.sql"];
 

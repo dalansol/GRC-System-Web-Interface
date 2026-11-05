@@ -29,7 +29,7 @@
 
 - **Rama base:** `integracion-planes-accion` reúne los planes de acción y la vista del auditado (Héctor) con los catálogos, los trimestres y R2. Aún no se fusiona a `master`, que no tiene nada de esto: las ramas nuevas salen de ella.
 - **Base compartida (Supabase):** migrada con `db:migrar` hasta el script `044` (2026-11-05); `045` aún no se aplica y el backend de esta rama lo necesita (pendiente 36). Tenía columnas agregadas a mano; 042 las replica en las demás bases. Detalle en `docs/diseno/base-de-datos.md`.
-- **Cambios de esquema:** siempre en un script nuevo (el siguiente es `047`) agregado a `backend/src/migrar.ts`. No editar scripts ya aplicados ni cambiar Supabase a mano.
+- **Cambios de esquema:** siempre en un script nuevo (el siguiente es `048`) agregado a `backend/src/migrar.ts`. No editar scripts ya aplicados ni cambiar Supabase a mano.
 - **Nunca contra Supabase:** `db:migrar --datos-prueba` ni las pruebas con `SQL_TEST_*` (`sql.integracion.test.ts` borra tablas). Usar una base exclusiva de pruebas.
 - **Pruebas:** sin `SQL_TEST_*` se omiten las de integración, que cubren los permisos de hallazgos y evidencias. Las 10 fallas de `planes.test.ts` son conocidas (pendiente 22); todo lo demás debe pasar.
 - **Modo memoria:** con `DATA_MODE=memoria` no existen las rutas de hallazgos ni de evidencias.
@@ -44,6 +44,7 @@
 - Diseño y pruebas de usuarios y roles: `docs/diseno/usuarios-roles.md`, `docs/pruebas/usuarios-roles.md`.
 - Diseño y pruebas de la estructura organizacional (Catálogo, SF-03): `docs/diseno/estructura-organizacional.md`, `docs/pruebas/estructura-organizacional.md`.
 - Diseño y pruebas del flujo de aprobación de planes de acción (SF-12): `docs/diseno/aprobacion-planes-accion.md`, `docs/pruebas/aprobacion-planes-accion.md`.
+- Diseño y pruebas de la evaluación de controles (historia #98, SF-07): `docs/diseno/evaluacion-controles.md`, `docs/pruebas/evaluacion-controles.md`.
 - Alias `@` → `src/`. Plugin `figma:asset/…` → `src/assets/`. **No quitar** los plugins `react()` ni `tailwindcss()` de `vite.config.ts`.
 
 ### Estructura
@@ -54,7 +55,7 @@ src/
   app/App.tsx              ← la mayoría de las vistas (en proceso de refactorización para reducir su tamaño)
   app/api/                 ← cliente HTTP y llamadas a la API
   app/auth/                ← sesión, inicio de sesión (MSAL / modo dev)
-  app/components/          ← SharedComponents, UsuariosRolesView, VistaDashboard, VistaHallazgo, VistaHallazgoDetallado, VistaPlanesAccion, PortalPlanesAuditado, BandejaRevisionPlanes, BandejaProrrogas, FormularioPlanAccion, VistaControles, EvidenciasSection, SpreadsheetEditor, PanelAsistenteEvidencia, CopilotPanel, ConflictosPlan
+  app/components/          ← SharedComponents, UsuariosRolesView, VistaDashboard, VistaHallazgo, VistaHallazgoDetallado, VistaPlanesAccion, PortalPlanesAuditado, BandejaRevisionPlanes, BandejaProrrogas, FormularioPlanAccion, VistaControles, EvidenciasSection, SpreadsheetEditor, PanelAsistenteEvidencia, CopilotPanel, ConflictosPlan, EvaluacionControl
   app/components/catalogo/ ← Catálogo Organizacional: HierarchyView (explorador), ArbolCatalogo (árbol de navegación), DetalleCatalogo (panel de detalle), modales y piezasCatalogo
   app/components/ui/       ← shadcn/ui (no editar salvo necesidad)
   app/components/figma/    ← ImageWithFallback
@@ -64,14 +65,14 @@ src/
   imports/logo.svg         ← logo Expedite
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
 backend/
-  sql/                     ← scripts de PostgreSQL (esquema, datos iniciales, primer administrador, hallazgos y sus datos de prueba, auditorías, planes de acción, estructura y controles, catálogos, riesgos y ejecución; 017 jerarquía, 019 riesgos en la jerarquía, 021 nombre opcional; 023 código asignado por el sistema; 018/020/022 datos del Consolidado; 024 quita la subdivisión sin código; 025 nombres únicos; 026 formato de periodos; 027 formatos de evidencia; 028–029 seguimiento de controles y conflictos por plan; 030 datos de prueba del modo en memoria; 034 y 035 son dos scripts cada uno: catálogos de área y país y portal del auditado, relación de planes y trimestres "T1…T4"; 036–037 varios planes por hallazgo; 038 folio del plan; 039–040 evidencia ligada a una sola entidad; 041 estado "En Revisión"; 042 columnas de `processes` y `audit_controls.process_id`; 043 plan de prueba; 044 flujo de aprobación; 045 etapas, archivos señalados y prórrogas; 046 usuarios auditados de prueba)
+  sql/                     ← scripts de PostgreSQL (esquema, datos iniciales, primer administrador, hallazgos y sus datos de prueba, auditorías, planes de acción, estructura y controles, catálogos, riesgos y ejecución; 017 jerarquía, 019 riesgos en la jerarquía, 021 nombre opcional; 023 código asignado por el sistema; 018/020/022 datos del Consolidado; 024 quita la subdivisión sin código; 025 nombres únicos; 026 formato de periodos; 027 formatos de evidencia; 028–029 seguimiento de controles y conflictos por plan; 030 datos de prueba del modo en memoria; 034 y 035 son dos scripts cada uno: catálogos de área y país y portal del auditado, relación de planes y trimestres "T1…T4"; 036–037 varios planes por hallazgo; 038 folio del plan; 039–040 evidencia ligada a una sola entidad; 041 estado "En Revisión"; 042 columnas de `processes` y `audit_controls.process_id`; 043 plan de prueba; 044 flujo de aprobación; 045 etapas, archivos señalados y prórrogas; 046 usuarios auditados de prueba; 047 evaluación de controles)
   src/server.ts            ← único punto de arranque; abre la conexión a la base y monta las rutas
   src/app.ts               ← app Express; recibe repositorio, verificador de tokens y rutas
   src/db.ts                ← conexión compartida (la registra server.ts)
-  src/routes/              ← endpoints: usuarios.ts, planes.ts, planesAccion.ts, estructura.ts, catalogos.ts, conflictos.ts, asistente.ts, auditControls.ts (con sesión); evidencias.ts y hallazgos.ts (con sesión, solo con DATA_MODE=sql)
+  src/routes/              ← endpoints: usuarios.ts, planes.ts, planesAccion.ts, estructura.ts, catalogos.ts, conflictos.ts, evaluaciones.ts, asistente.ts, auditControls.ts (con sesión); evidencias.ts y hallazgos.ts (con sesión, solo con DATA_MODE=sql)
   src/asistente/           ← gateway de IA: interfaz ProveedorIA, adaptadores Gemini y Azure OpenAI, extracción de texto, instrucciones y reglas de contención
   src/scripts/             ← ia:probar e ia:evaluar
-  src/domain/              ← tipos y validaciones (planes.ts, planesAccion.ts, estructura.ts, conflictos.ts)
+  src/domain/              ← tipos y validaciones (planes.ts, planesAccion.ts, estructura.ts, conflictos.ts, evaluaciones.ts)
   src/middleware/          ← autenticar (token → usuario), autorizar (por rol) y upload (archivos de evidencia)
   src/repos/               ← repositorio SQL y en memoria (incluye evidencias para el asistente y documentos de ejemplo EV-001…EV-004; semillaEstructura.ts: datos del Consolidado para DATA_MODE=memoria, generado)
   test/                    ← pruebas (las de SQL requieren SQL_TEST_*)
@@ -206,6 +207,8 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 37. **Reglas de planes de acción por confirmar con FEMSA:** quién envía a revisión y qué es un "entregable" no están en el SRS; el equipo decidió que el entregable es la evidencia de un plan y que envía el auditor. También falta anotar en el SRS que un plan nuevo empieza en `Borrador` (SF-10 dice `Asignado`).
 38. **Papeles de trabajo (paso 8 del proceso E2E):** la revisión de controles sigue sin firma ni bitácora del flujo; quedó fuera del flujo de aprobación de planes.
 39. **SF-16 fuera de los planes:** el portal filtra por asignación y no por área, porque los usuarios no tienen unidad confiable (pendiente 21). Tampoco se revisó qué calificaciones internas muestra la pantalla de hallazgos al auditado.
+40. **Modelo de madurez (SF-07, historia #98):** FEMSA no definió los criterios, si todos son obligatorios, la fórmula, qué es madurez baja ni los estatus. Son **datos de prueba**: 8 criterios en `evaluation_criteria`; calificación = el menor de los promedios de diseño y efectividad; 4 o más Efectivo, de 3 a menos de 4 Parcialmente efectivo, menos de 3 Deficiente. Detalle en `docs/diseno/evaluacion-controles.md`.
+41. **Evaluar antes de enviar a revisión:** hoy un control puede enviarse y aprobarse sin evaluación; falta decidir si debe bloquearse (toca el flujo de aprobación de controles).
 
 ### Decisiones tomadas
 
@@ -223,6 +226,7 @@ Otros identificadores del SRS: requisitos de usuario **UF-01…UF-17**, **UNF-RE
 
 - **Asistente de IA (historia #105, tasks #134/#135, SF-19):** el backend es el único que habla con la IA (Copilot API Gateway del SRS); la clave vive en `backend/.env` y nunca llega al frontend. El proveedor queda detrás de la interfaz `ProveedorIA` y se elige con `IA_PROVEEDOR` (`gemini`, `azure` o `ninguno`; sin proveedor la plataforma funciona y la función queda desactivada). Llamadas sin reintentos y con tiempo de espera (`IA_TIEMPO_ESPERA_MS`); cualquier falla responde 503 y el frontend desactiva el panel con un aviso. Rutas `/api/asistente/estado`, `/asistente/evidencias/:id/resumen`, `/asistente/evidencias/:id/preguntas` y `/asistente/consultas` (datos de la vista; acepta hasta 100 kB), para Administrador, Jefe de Auditoría, Auditor Senior y Auditor. Bitácora: `asistente.resumen`, `asistente.pregunta` y `asistente.consulta`, sin guardar preguntas ni respuestas.
 - **Reglas de contención de la IA:** instrucciones del sistema en `backend/src/asistente/instrucciones.ts`; el documento o los datos de la vista van delimitados y se tratan como datos, no instrucciones; temperatura 0.2 y tope de longitud; cada pregunta es independiente (sin historial); pregunta de 5 a 500 caracteres. La IA responde un JSON con `estado` (`respondida`, `fuera_de_tema`, `sin_informacion`) y el backend sustituye los dos últimos por mensajes fijos. Cualquier cambio a las reglas debe pasar `corepack pnpm ia:evaluar` (22/22 al 2026-10-09).
+- **Evaluación de controles (historia #98, SF-07, 2026-11-02):** una evaluación por control y plan; evalúa el auditor asignado, con declaración de conflictos y la asignación en `En Progreso`. La calificación la calcula siempre el backend (`backend/src/domain/evaluaciones.ts`). El resultado (`control_evaluations.result`) es independiente del flujo de revisión (`audit_controls.status`).
 
 ## 8. Referencias
 

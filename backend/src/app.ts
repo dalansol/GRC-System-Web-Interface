@@ -11,6 +11,8 @@ import type { RepositorioConflictos } from "./repos/conflictos.js";
 import { RepositorioConflictosMemoria } from "./repos/conflictosMemoria.js";
 import type { RepositorioEstructura } from "./repos/estructura.js";
 import { RepositorioEstructuraMemoria } from "./repos/estructuraMemoria.js";
+import type { RepositorioEvaluaciones } from "./repos/evaluaciones.js";
+import { RepositorioEvaluacionesMemoria } from "./repos/evaluacionesMemoria.js";
 import type { RepositorioEvidencias } from "./repos/evidencias.js";
 import type { RepositorioPlanes } from "./repos/planes.js";
 import type { RepositorioPlanesAccion } from "./repos/planesAccion.js";
@@ -19,6 +21,7 @@ import { rutasAsistente } from "./routes/asistente.js";
 import { rutasCatalogos } from "./routes/catalogos.js";
 import { rutasConflictos } from "./routes/conflictos.js";
 import { rutasEstructura } from "./routes/estructura.js";
+import { rutasEvaluaciones } from "./routes/evaluaciones.js";
 import { rutasPlanes } from "./routes/planes.js";
 import { rutasNotificaciones } from "./routes/notificaciones.js";
 import { rutasPlanesAccion } from "./routes/planesAccion.js";
@@ -40,6 +43,8 @@ export interface DependenciasApp {
    * `repoEstructura` cuando también está en memoria.
    */
   repoCatalogos?: RepositorioCatalogos;
+  /** Evaluaciones de controles. Si no se indica se usa el repositorio en memoria. */
+  repoEvaluaciones?: RepositorioEvaluaciones;
   verificador: VerificadorToken;
   dominiosPermitidos: readonly string[];
   corsOrigin: string | string[];
@@ -72,6 +77,7 @@ export function crearApp(deps: DependenciasApp): Express {
     new RepositorioCatalogosMemoria(
       deps.repoEstructura instanceof RepositorioEstructuraMemoria ? deps.repoEstructura : undefined,
     );
+  const repoConflictos = deps.repoConflictos ?? new RepositorioConflictosMemoria(deps.repo, deps.repoPlanes);
   const app = express();
   app.disable("x-powered-by");
   app.use(cors({ origin: deps.corsOrigin }));
@@ -95,16 +101,18 @@ export function crearApp(deps: DependenciasApp): Express {
     rutasPlanesAccion({ repo: deps.repoPlanesAccion, usuarios: deps.repo, registrarEvento }),
     rutasNotificaciones({ repo: deps.repoPlanesAccion }),
     rutasAsistente({ proveedor: deps.proveedorIA, evidencias: deps.repoEvidencias, registrarEvento }),
-    rutasConflictos({
-      repo: deps.repoConflictos ?? new RepositorioConflictosMemoria(deps.repo, deps.repoPlanes),
-      registrarEvento,
-    }),
+    rutasConflictos({ repo: repoConflictos, registrarEvento }),
     ...(deps.repoEstructura
       ? [
           rutasEstructura({ repo: deps.repoEstructura, usuarios: deps.repo, catalogos: repoCatalogos, registrarEvento }),
           rutasCatalogos({ repo: repoCatalogos, registrarEvento }),
         ]
       : []),
+    rutasEvaluaciones({
+      repo: deps.repoEvaluaciones ?? new RepositorioEvaluacionesMemoria(deps.repo),
+      conflictos: repoConflictos,
+      registrarEvento,
+    }),
     auditControls,
     ...(deps.rutasConSesion ?? []),
     () => {
