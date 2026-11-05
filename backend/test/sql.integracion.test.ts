@@ -51,11 +51,13 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
 
     // Los scripts se ejecutan dos veces cada uno: deben poder repetirse.
     await pool.query(`
-      DROP TABLE IF EXISTS action_plans, findings, conflict_declarations, audit_controls, controls, processes, business_units, fiscal_periods,
+      DROP TABLE IF EXISTS action_plan_public_id_counters, action_plan_steps, action_plan_findings, action_plans, findings, conflict_declarations, audit_controls, controls, processes, business_units, fiscal_periods,
                            audits, audit_plans, users, role_permissions, permissions, roles CASCADE`);
     const scripts = [
       "001_schema.sql", "002_seed.sql", "004_findings.sql", "006_auditorias.sql", "007_action_plans.sql",
-      "008_estructura_y_controles.sql",
+      "008_estructura_y_controles.sql", "034_portal_auditado.sql", "035_normalizar_root_cause_plan.sql",
+      "036_permitir_varios_planes_por_hallazgo.sql", "037_migrar_relacion_planes_hallazgos.sql",
+      "038_public_id_planes_accion.sql", "041_estado_revision_planes.sql", "042_procesos_en_asignaciones.sql",
     ];
     for (const nombre of [...scripts, ...scripts]) {
       await pool.query(await script(nombre));
@@ -84,7 +86,7 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
              (SELECT COUNT(*)::int FROM permissions) AS permisos,
              (SELECT COUNT(*)::int FROM role_permissions) AS asignaciones`);
 
-    expect(rows[0]).toEqual({ roles: 6, permisos: 8, asignaciones: 24 });
+    expect(rows[0]).toEqual({ roles: 8, permisos: 10, asignaciones: 30 });
   });
 
   it("crea los índices de la tabla users", async () => {

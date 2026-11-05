@@ -375,6 +375,7 @@ export default function VistaControlDetallado({
       <EvidenciasSection
         entityId={String(miAsignacionId ?? ctrl.id)}
         entityType="control"
+        auditId={auditId}
         puedeSubir={Boolean(miAsignacionId) && puedeEnviarARevision}
       />
 

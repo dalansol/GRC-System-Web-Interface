@@ -71,11 +71,13 @@ function mapApiRow(row: any): EvidenceFile {
 export default function EvidenciasSection({ 
   entityId, 
   entityType = "control",
+  auditId,
   puedeSubir,
   onEvidenceCountChange,
 }: { 
   entityId: string; 
   entityType?: EvidenceEntityType;
+  auditId?: string;
   puedeSubir?: boolean;
   onEvidenceCountChange?: (count: number) => void;
 }) {
@@ -94,6 +96,7 @@ export default function EvidenciasSection({
   const fetchEvidences = useCallback(async () => {
     try {
       const query = new URLSearchParams({ entityId, entityType });
+      if (auditId) query.set("auditId", auditId);
       const data = await pedir<any[]>(`/evidencias?${query.toString()}`);
       setFiles(data.map(mapApiRow));
       onEvidenceCountChange?.(data.length);
@@ -104,7 +107,7 @@ export default function EvidenciasSection({
       setUsingFallback(false);
       setError(reason instanceof Error ? reason.message : "No se pudieron cargar las evidencias.");
     }
-  }, [entityId, entityType]);
+  }, [entityId, entityType, auditId]);
 
   useEffect(() => {
     fetchEvidences();

@@ -8,7 +8,9 @@ VALUES
     ('Auditor Senior'),
     ('Auditor'),
     ('Consultor'),
-    ('Solo Lectura')
+    ('Solo Lectura'),
+    ('Jefe Auditado'),
+    ('Empleado Auditado')
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO permissions (name)
@@ -20,12 +22,16 @@ VALUES
     ('Exportar Datos'),
     ('Ver Auditorías'),
     ('Crear Auditorías'),
-    ('Eliminar Registros')
+    ('Eliminar Registros'),
+    ('Ver Hallazgos'),
+    ('Ver Plan de Accion')
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id
 FROM (VALUES
+    ('Administrador',     'Ver Hallazgos'),
+    ('Administrador',     'Ver Plan de Accion'),
     ('Administrador',     'Ver Dashboard'),
     ('Administrador',     'Editar Registros'),
     ('Administrador',     'Gestionar Usuarios'),
@@ -49,7 +55,11 @@ FROM (VALUES
     ('Consultor',         'Ver Dashboard'),
     ('Consultor',         'Ver Auditorías'),
     ('Solo Lectura',      'Ver Dashboard'),
-    ('Solo Lectura',      'Ver Auditorías')
+    ('Solo Lectura',      'Ver Auditorías'),
+    ('Jefe Auditado',     'Ver Hallazgos'),
+    ('Jefe Auditado',     'Ver Plan de Accion'),
+    ('Empleado Auditado', 'Ver Hallazgos'),
+    ('Empleado Auditado', 'Ver Plan de Accion')
 ) AS v (role_name, permission_name)
 JOIN roles r ON r.name = v.role_name
 JOIN permissions p ON p.name = v.permission_name

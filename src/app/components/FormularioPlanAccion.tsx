@@ -302,6 +302,9 @@ export default function FormularioPlanAccion({
                   className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
                 >
                   <option value="">Selecciona un responsable</option>
+                  {plan && !responsables.some((r) => r.id === plan.responsable.id) && (
+                    <option value={plan.responsable.id}>{plan.responsable.nombre}</option>
+                  )}
                   {responsables.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.nombre}

@@ -6,6 +6,7 @@ import { poolPromise } from "../db.js";
 import { upload } from "../middleware/upload.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import type { AlmacenamientoArchivos } from "../almacenamiento.js";
+import { ROLES_EDICION } from "./planesAccion.js";
 
 // Los archivos se guardan en el almacenamiento configurado (disco local o Cloudflare R2,
 // SF-08/INT-03); la tabla evidence guarda la clave en storage_path.
@@ -14,7 +15,7 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
 
   // ─── GET: Fetch evidences for an entity ──────────────────────────────────────
   router.get("/evidencias", async (req: Request, res: Response) => {
-    const { entityId, entityType } = req.query;
+    const { entityId, entityType, auditId } = req.query;
 
     if (!entityId) {
       return res.status(400).json({ error: "entityId query parameter is required." });
@@ -23,44 +24,46 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
     try {
       const pool = await poolPromise;
       const usuario = usuarioEnSesion(res);
+      // El equipo de auditoría consulta la evidencia de hallazgos y de pasos de planes de acción para revisarla.
+      const esEquipoAuditoria = (ROLES_EDICION as readonly string[]).includes(usuario.rol);
       let query = `
         SELECT e.* FROM evidence e
         WHERE e.entity_id = $1
           AND e.uploaded_by = $2
         ORDER BY e.created_at DESC`;
-      let params: string[] = [entityId as string, String(usuario.id)];
+      let params: unknown[] = [entityId as string, String(usuario.id)];
 
       if (entityType === "control") {
+        // entity_id guarda la asignación (audit_controls.id). Quien revisa no tiene asignación propia
+        // y consulta con el id del control: recibe la evidencia de las asignaciones que le tocan revisar.
         query = `
           SELECT e.* FROM evidence e
-          WHERE e.entity_id = $1
-            AND e.entity_type = 'control'
+          JOIN audit_controls ac ON ac.id::text = e.entity_id
+          WHERE e.entity_type = 'control'
+            AND (ac.id::text = $1 OR ac.control_id = $1)
+            AND ($4::text IS NULL OR ac.audit_id::text = $4)
             AND (
               ($2 = 'Auditor' AND e.uploaded_by = $3)
-              OR ($2 = 'Auditor Senior' AND EXISTS (
-                SELECT 1 FROM audit_controls ac
-                WHERE ac.id::text = e.entity_id
+              OR ($2 = 'Auditor Senior'
                 AND ac.assigned_by = $3::integer
-                  AND ac.auditor_id::text = e.uploaded_by
-              ))
-              OR ($2 = 'Jefe de Auditoría' AND EXISTS (
-                SELECT 1 FROM audit_controls ac
-                JOIN audit_plans ap ON ap.id::text = ac.audit_id::text
-                WHERE ac.id::text = e.entity_id
-                AND ap.created_by = $3::integer
-                  AND ac.auditor_id::text = e.uploaded_by
-              ))
+                AND ac.auditor_id::text = e.uploaded_by)
+              OR ($2 = 'Jefe de Auditoría'
+                AND ac.auditor_id::text = e.uploaded_by
+                AND EXISTS (
+                  SELECT 1 FROM audit_plans ap
+                  WHERE ap.id = ac.audit_id AND ap.created_by = $3::integer
+                ))
             )
           ORDER BY e.created_at DESC`;
-        params = [entityId as string, usuario.rol, String(usuario.id)];
+        params = [entityId as string, usuario.rol, String(usuario.id), (auditId as string | undefined) ?? null];
       } else if (entityType === "hallazgo") {
         query = `
           SELECT e.* FROM evidence e
           WHERE e.entity_id = $1
             AND e.entity_type = 'hallazgo'
-            AND e.uploaded_by = $2
+            AND (e.uploaded_by = $2 OR $3::boolean)
           ORDER BY e.created_at DESC`;
-        params = [entityId as string, String(usuario.id)];
+        params = [entityId as string, String(usuario.id), esEquipoAuditoria];
       } else if (entityType === "action_plan_step") {
         query = `
           SELECT e.* FROM evidence e
@@ -74,10 +77,11 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
                 AND (
                   target_plan.responsible_id = $2::integer
                   OR target_step.assigned_user_id = $2::integer
+                  OR $3::boolean
                 )
             )
           ORDER BY e.created_at DESC`;
-        params = [entityId as string, String(usuario.id)];
+        params = [entityId as string, String(usuario.id), esEquipoAuditoria];
       }
 
       const result = await pool.query(query, params);

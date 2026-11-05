@@ -64,6 +64,9 @@ export default function VistaHallazgoDetallado({
   // Verificación específica para Jefe Auditado (control de creación de planes)
   const esJefeAuditado = usuario?.rol === "Jefe Auditado";
 
+  // La evidencia del hallazgo es de solo lectura y la consulta el equipo de auditoría.
+  const esEquipoAuditoria = Boolean(usuario && ROLES_EDICION_PLAN_ACCION.includes(usuario.rol));
+
   const puedeEditarPlan = (plan: PlanAccion) =>
     Boolean(
       usuario &&
@@ -272,6 +275,12 @@ export default function VistaHallazgoDetallado({
           )}
         </div>
       </Card>
+
+      {esEquipoAuditoria && (
+        <div className="mb-5">
+          <EvidenciasSection entityId={String(hallazgo.id)} entityType="hallazgo" puedeSubir={false} />
+        </div>
+      )}
 
       {/* Plan de Acción Correctivo */}
       <Card className="p-6">

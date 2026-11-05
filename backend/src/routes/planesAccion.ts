@@ -16,7 +16,7 @@ import type { RepositorioPlanesAccion } from "../repos/planesAccion.js";
 import type { RepositorioUsuarios } from "../repos/repositorio.js";
 
 // Roles que crean planes de acción (el equipo de auditoría). Todos los usuarios con sesión los consultan.
-const ROLES_EDICION = [ROL_ADMINISTRADOR, "Jefe de Auditoría", "Auditor Senior", "Auditor"];
+export const ROLES_EDICION = [ROL_ADMINISTRADOR, "Jefe de Auditoría", "Auditor Senior", "Auditor"];
 
 interface Dependencias {
   repo: RepositorioPlanesAccion;

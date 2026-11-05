@@ -43,15 +43,29 @@ const SCRIPTS = [
   "029_conflictos_por_plan.sql",
   "030_seed_demo.sql",
   "031_rls_control_horas.sql",
+  "032_normalizar_entidad_evidencias_control.sql",
+  "033_campos_muestra_rotacion_controles.sql",
+  "034_catalogos_estructura.sql",
+  "034_portal_auditado.sql",
+  "035_normalizar_root_cause_plan.sql",
+  "035_trimestres_periodos.sql",
+  "036_permitir_varios_planes_por_hallazgo.sql",
+  "037_migrar_relacion_planes_hallazgos.sql",
+  "038_public_id_planes_accion.sql",
+  "039_entidad_evidencias.sql",
+  "040_evidencias_entidad_unica.sql",
+  "041_estado_revision_planes.sql",
+  "042_procesos_en_asignaciones.sql",
+  "043_seed_plan_demo.sql",
 ];
 
 // Las tablas del modelo entidad-relación de docs/diseno/base-de-datos.md.
 const TABLAS = [
-  "action_plans", "area", "audit_controls", "audit_engagement", "audit_engagement_team", "audit_entity",
+  "action_plan_findings", "action_plan_public_id_counters", "action_plan_steps", "action_plans", "area", "audit_controls", "audit_engagement", "audit_engagement_team", "audit_entity",
   "audit_plans", "audit_procedure_type", "audit_procedures", "audit_status", "audits", "business",
   "business_units", "catalog_department", "catalog_domain", "catalogs", "conflict_declarations", "control_horas",
   "control_procedure", "controls", "division", "evidence", "findings", "fiscal_periods", "permissions",
-  "processes", "risk_library", "risk_register", "role_permissions", "roles", "structure_code_counters", "users",
+  "processes", "risk_library", "risk_register", "role_permissions", "roles", "structure_code_counters", "structure_options", "users",
 ];
 
 const script = (nombre: string) => readFile(new URL(`../sql/${nombre}`, import.meta.url), "utf8");
@@ -84,7 +98,7 @@ describe.skipIf(!env.SQL_TEST_SERVER)("esquema completo sobre PostgreSQL", () =>
     await pool?.end();
   });
 
-  it("los scripts crean las 30 tablas del modelo y ninguna más", async () => {
+  it("los scripts crean las tablas del modelo y ninguna más", async () => {
     const { rows } = await pool.query<{ tablename: string }>(
       "SELECT tablename FROM pg_tables WHERE schemaname = $1 ORDER BY tablename",
       [ESQUEMA],
@@ -111,9 +125,9 @@ describe.skipIf(!env.SQL_TEST_SERVER)("esquema completo sobre PostgreSQL", () =>
   });
 
   it("los scripts repetidos no duplican los datos iniciales", async () => {
-    expect(await contar("roles")).toBe(6);
-    expect(await contar("permissions")).toBe(8);
-    expect(await contar("role_permissions")).toBe(24);
+    expect(await contar("roles")).toBe(8);
+    expect(await contar("permissions")).toBe(10);
+    expect(await contar("role_permissions")).toBe(30);
     expect(await contar("audits")).toBe(4);
     expect(await contar("evidence")).toBe(2);
     // 5 de 005_seed_findings y 5 de 030_seed_demo.
@@ -138,7 +152,7 @@ describe.skipIf(!env.SQL_TEST_SERVER)("esquema completo sobre PostgreSQL", () =>
         `INSERT INTO business_units (name, manager_id, fiscal_period_id, created_by, catalog_id) VALUES ('Finanzas', $1, $2, $1, $3) RETURNING id`,
         [usuario, periodo, catalogo],
       );
-      const proceso = await uno(`INSERT INTO processes (business_unit_id, name) VALUES ($1, 'Cierre contable') RETURNING id`, [unidad]);
+      const proceso = await uno(`INSERT INTO processes (business_unit_id, name, title) VALUES ($1, 'Cierre contable', 'Cierre contable') RETURNING id`, [unidad]);
       await cliente.query(`UPDATE controls SET process_id = $1, owner_id = $2 WHERE id = 'CTR-001'`, [proceso, usuario]);
       const plan = await uno(
         `INSERT INTO audit_plans (code, name, type, start_date, end_date, status, estimated_hours, responsible_id, created_by)
@@ -227,7 +241,7 @@ describe.skipIf(!env.SQL_TEST_SERVER)("esquema completo sobre PostgreSQL", () =>
         await expect(cliente.query(sql)).rejects.toThrow(restriccion);
         await cliente.query("ROLLBACK TO SAVEPOINT intento");
       };
-      await rechaza(`INSERT INTO processes (business_unit_id, name) VALUES (999999, 'Huérfano')`, /fk_processes_business_unit/);
+      await rechaza(`INSERT INTO processes (business_unit_id, name, title) VALUES (999999, 'Huérfano', 'Huérfano')`, /fk_processes_business_unit/);
       await rechaza(`INSERT INTO risk_register (risk_library_id) VALUES (999999)`, /fk_risk_register_risk_library/);
       await rechaza(
         `INSERT INTO audit_procedures (code, audit_engagement_id) VALUES ('PRC-X', 999999)`,
