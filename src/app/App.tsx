@@ -184,6 +184,7 @@ function Sidebar({
     : NAV_ITEMS;
   const itemsAuditoriaVisibles = esEquipoAuditados
     ? [{ id: "findings" as NavView, label: "Hallazgos", icon: <Flag size={16} /> },
+      { id: "controles" as NavView, label: "Controles", icon: <ShieldCheck size={16} /> },
       { id: "auditado" as NavView, label: "Planes de Accion", icon: <UserCheck size={16} /> }]
     : [
         { id: "plans" as NavView, label: "Planes de Auditoría", icon: <BookOpen size={16} /> },
@@ -2540,7 +2541,7 @@ export default function App() {
   });
 
   const goToNav = (v: NavView) => {
-    if (esEquipoAuditados && !["dashboard", "findings", "auditado", "settings"].includes(v)) {
+    if (esEquipoAuditados && !["dashboard", "findings", "controles", "auditado", "settings"].includes(v)) {
       return;
     }
     setNavView(v);

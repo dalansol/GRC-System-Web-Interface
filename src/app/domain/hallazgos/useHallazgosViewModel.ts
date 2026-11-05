@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { INITIAL_FINDINGS } from "../../data/mock_data";
-import { listarPlanesAccion, type PlanAccion } from "../../api/planesAccion";
+import { listarPlanesAccion, listarPlanesAccionDeHallazgo, type PlanAccion } from "../../api/planesAccion";
 import {
   actualizarHallazgo,
   eliminarHallazgo,
@@ -40,7 +40,13 @@ const orderFindings = (findings: HallazgoViewModel[]) =>
   });
 
 /** `consultarPlanes`: el auditado no consulta la lista completa de planes; ve los suyos en su propia vista (SF-16). */
-export function useHallazgosViewModel({ consultarPlanes = true }: { consultarPlanes?: boolean } = {}) {
+export function useHallazgosViewModel({
+  consultarPlanes = true,
+  consultarPlanesRelacionados = false,
+}: {
+  consultarPlanes?: boolean;
+  consultarPlanesRelacionados?: boolean;
+} = {}) {
   const [hallazgos, setHallazgos] = useState<HallazgoViewModel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -70,6 +76,18 @@ export function useHallazgosViewModel({ consultarPlanes = true }: { consultarPla
     }
   };
 
+  const fetchPlanesRelacionados = async (hallazgoIds: string[]) => {
+    try {
+      const grupos = await Promise.all(hallazgoIds.map(async (hallazgoId) => [
+        hallazgoId,
+        await listarPlanesAccionDeHallazgo(hallazgoId),
+      ] as const));
+      setPlanesPorHallazgo(Object.fromEntries(grupos));
+    } catch (error: any) {
+      toast.error(error.message || "Error al cargar los planes de acción relacionados.");
+    }
+  };
+
   const handlePlanCreado = (plan: PlanAccion) => {
     setPlanesPorHallazgo((prev) => ({
       ...prev,
@@ -95,6 +113,9 @@ export function useHallazgosViewModel({ consultarPlanes = true }: { consultarPla
       if (USE_REAL_BACKEND) {
         const data = await listarHallazgos();
         setHallazgos(orderFindings(data as HallazgoViewModel[]));
+        if (consultarPlanesRelacionados) {
+          await fetchPlanesRelacionados(data.map((hallazgo) => hallazgo.id));
+        }
       } else {
         // Fallback a mock_data.tsx
         setHallazgos(orderFindings(INITIAL_FINDINGS as unknown as HallazgoViewModel[]));

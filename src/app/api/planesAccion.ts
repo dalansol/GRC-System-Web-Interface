@@ -87,6 +87,10 @@ export const listarPlanesAccion = () => pedir<PlanAccion[]>("/planes-accion");
 
 export const listarMisPlanesAccion = () => pedir<PlanAccion[]>("/planes-accion/mios");
 
+/** Planes validados relacionados con un hallazgo visible para el usuario actual. */
+export const listarPlanesAccionDeHallazgo = (hallazgoId: string) =>
+  pedir<PlanAccion[]>(`/hallazgos/${encodeURIComponent(hallazgoId)}/planes-accion`);
+
 export const listarResponsables = () => pedir<Responsable[]>("/planes-accion/responsables");
 
 export const obtenerHallazgoParaPlan = (hallazgoId: string) =>

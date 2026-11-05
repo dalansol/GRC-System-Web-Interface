@@ -9,6 +9,7 @@ import { declaracionPendiente } from "../repos/conflictosSql.js";
 
 const router = Router();
 const ROL_SENIOR = "Auditor Senior";
+const ROLES_AUDITADO = ["Jefe Auditado", "Empleado Auditado"];
 const ROLES_CONSULTA_ASIGNACIONES = [ROL_SENIOR, "Auditor", "Jefe de Auditoría", "Supervisor", ROL_ADMINISTRADOR];
 
 function idNumerico(valor: string | string[] | undefined, nombre: string): number {
@@ -82,11 +83,19 @@ router.get("/controles", async (_req, res) => {
          JOIN audit_plans ap ON ap.id = ac.audit_id
          WHERE ac.control_id = c.id AND ap.created_by = $2
        )
+       WHEN $1::text = ANY($4::text[]) THEN
+       EXISTS (
+         SELECT 1
+         FROM audit_controls ac
+         JOIN processes p ON p.id = ac.process_id
+         WHERE ac.control_id = c.id
+           AND p.business_unit_id = $3
+       )
        ELSE FALSE
      END
      GROUP BY c.id
      ORDER BY c.code`,
-    [usuario.rol, usuario.id],
+    [usuario.rol, usuario.id, usuario.business_unit_id, ROLES_AUDITADO],
   );
   res.json(resultado.rows);
 });

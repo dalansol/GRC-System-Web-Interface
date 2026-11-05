@@ -55,7 +55,10 @@ export default function VistaHallazgo({ onSelectFinding, onHallazgoActivo }: Pro
     nextFolio,
     showCreateForm,
     setShowCreateForm,
-  } = useHallazgosViewModel({ consultarPlanes: !esAuditado(usuario?.rol) });
+  } = useHallazgosViewModel({
+    consultarPlanes: !esAuditado(usuario?.rol),
+    consultarPlanesRelacionados: esAuditado(usuario?.rol),
+  });
 
   // State for selected finding IDs via checkboxes
   const [selectedFindingIds, setSelectedFindingIds] = useState<string[]>([]);
@@ -95,8 +98,6 @@ export default function VistaHallazgo({ onSelectFinding, onHallazgoActivo }: Pro
 
   // El auditor define los planes (UF-08): solo él ve las casillas y el botón de crear.
   const puedeCrearPlan = puedeGestionarPlanes(usuario?.rol);
-  const usuarioAuditado = esAuditado(usuario?.rol);
-
   // Filtrado de seguridad: si no es equipo de auditoría, solo ve hallazgos de su unidad o asignados
   const hallazgos = rawHallazgos.filter((item) => {
     if (esEquipoAuditoria) return true;
@@ -325,7 +326,7 @@ export default function VistaHallazgo({ onSelectFinding, onHallazgoActivo }: Pro
                         <td colSpan={puedeCrearPlan ? 6 : 5} className="px-4 pb-4 bg-secondary/20 border-b border-border">
                           <div className="pt-3 space-y-3" onClick={(e) => e.stopPropagation()}>
                             {/* Visualización de Planes de Acción relacionados */}
-                            {!usuarioAuditado && (() => {
+                            {(() => {
                               const planes = planesPorHallazgo[item.id] ?? [];
                               const hoy = new Date().toISOString().slice(0, 10);
                               if (planes.length > 0) {

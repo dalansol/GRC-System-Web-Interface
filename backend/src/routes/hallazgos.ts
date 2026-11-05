@@ -1,6 +1,5 @@
 import { Router, Request, Response } from "express";
 import { poolPromise } from "../db.js";
-import { esAuditado } from "../domain/flujoPlanAccion.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import { ROLES_EDICION } from "./planesAccion.js";
 
@@ -8,11 +7,22 @@ const router = Router();
 
 // El equipo de auditoría trabaja con todos los hallazgos; los demás roles, solo con los propios y los de su unidad.
 const esEquipoAuditoria = (rol: string) => (ROLES_EDICION as readonly string[]).includes(rol);
+const esAuditado = (rol: string) => rol === "Jefe Auditado" || rol === "Empleado Auditado";
 
-const HALLAZGO_VISIBLE_POR_USUARIO = (usuarioParametro: number, unidadParametro: number, equipoParametro: number) => `
+const HALLAZGO_VISIBLE_POR_USUARIO = (
+  usuarioParametro: number,
+  unidadParametro: number,
+  equipoParametro: number,
+  soloUnidadParametro: number,
+) => `
   (
-    $${equipoParametro}::boolean
-    OR f."ownerId" = $${usuarioParametro}
+    (
+      NOT $${soloUnidadParametro}::boolean
+      AND (
+        $${equipoParametro}::boolean
+        OR f."ownerId" = $${usuarioParametro}
+      )
+    )
     OR EXISTS (
       SELECT 1
       FROM audit_controls ac
@@ -60,11 +70,11 @@ router.get("/hallazgos", async (req: Request, res: Response) => {
                LIMIT 1
              ) AS "businessUnitId"
       FROM findings f
-      WHERE ${HALLAZGO_VISIBLE_POR_USUARIO(1, 2, 3)}
+      WHERE ${HALLAZGO_VISIBLE_POR_USUARIO(1, 2, 3, 4)}
       ORDER BY
         CASE WHEN status = 'Cerrado' THEN 1 ELSE 0 END,
         created_at DESC;
-    `, [String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol)]);
+    `, [String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol), esAuditado(usuario.rol)]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: "Error fetching findings from database." });
@@ -190,10 +200,10 @@ router.put("/hallazgos/:id", async (req: Request, res: Response) => {
             status = $4,
             description = $5
         WHERE id = $1
-          AND ${HALLAZGO_VISIBLE_POR_USUARIO(6, 7, 8)}
+          AND ${HALLAZGO_VISIBLE_POR_USUARIO(6, 7, 8, 9)}
         RETURNING *;
       `,
-      [id, title, severity, status, description || null, String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol)],
+      [id, title, severity, status, description || null, String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol), esAuditado(usuario.rol)],
     );
 
     if (result.rows.length === 0) {
@@ -216,8 +226,8 @@ router.delete("/hallazgos/:id", async (req: Request, res: Response) => {
     const usuario = usuarioEnSesion(res);
     const finding = await pool.query(
       `SELECT status FROM findings f
-       WHERE f.id = $1 AND ${HALLAZGO_VISIBLE_POR_USUARIO(2, 3, 4)}`,
-      [id, String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol)],
+       WHERE f.id = $1 AND ${HALLAZGO_VISIBLE_POR_USUARIO(2, 3, 4, 5)}`,
+      [id, String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol), esAuditado(usuario.rol)],
     );
 
     if (finding.rows.length === 0) {
@@ -233,8 +243,8 @@ router.delete("/hallazgos/:id", async (req: Request, res: Response) => {
     const result = await pool.query(
       `DELETE FROM findings f
        WHERE f.id = $1 AND f.status <> 'En Revisión'
-         AND ${HALLAZGO_VISIBLE_POR_USUARIO(2, 3, 4)}`,
-      [id, String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol)],
+         AND ${HALLAZGO_VISIBLE_POR_USUARIO(2, 3, 4, 5)}`,
+      [id, String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol), esAuditado(usuario.rol)],
     );
 
     if (result.rowCount === 0) {
@@ -261,10 +271,10 @@ router.get("/hallazgos/:id", async (req: Request, res: Response) => {
       FROM findings f
       LEFT JOIN users u ON u.id::text = f."ownerId"::text
       WHERE (f.id::text = $1 OR f.folio = $1)
-        AND ${HALLAZGO_VISIBLE_POR_USUARIO(2, 3, 4)}
+        AND ${HALLAZGO_VISIBLE_POR_USUARIO(2, 3, 4, 5)}
       LIMIT 1;
       `,
-      [id, String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol)],
+      [id, String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol), esAuditado(usuario.rol)],
     );
 
     if (result.rows.length === 0) {
@@ -278,59 +288,51 @@ router.get("/hallazgos/:id", async (req: Request, res: Response) => {
 });
 
 router.get("/hallazgos/:id/planes-accion", async (req: Request, res: Response) => {
-  const { id } = req.params;
-
-  // El auditado ve sus planes en su propia vista, sin causa raíz ni detalle de otros pasos (SF-16).
-  if (esAuditado(usuarioEnSesion(res).rol)) {
-    return res.status(403).json({
-      error: { codigo: "ROL_NO_AUTORIZADO", mensaje: "No tienes acceso a esta información." },
-    });
-  }
-
   try {
     const pool = await poolPromise;
     const usuario = usuarioEnSesion(res);
+    const soloValidados = esAuditado(usuario.rol);
     const result = await pool.query(
       `
       SELECT ap.id,
-             NULL::varchar AS public_id,
+             CONCAT('PACC-', EXTRACT(YEAR FROM ap.created_at)::int, '-', LPAD(ap.id::text, 3, '0')) AS public_id,
              relation.finding_id,
              COALESCE(ap.title, ap.root_cause) AS title,
-             ap.root_cause,
+             u.id AS responsible_id,
              u.name AS responsible_name,
-             ap.due_date,
+             ap.due_date::text AS due_date,
              ap.status,
              ap.review_stage,
-             ap.created_at,
-             COALESCE(
-               json_agg(
-                 json_build_object(
-                   'id', step.id,
-                   'action_plan_id', step.action_plan_id,
-                   'assigned_user_id', step.assigned_user_id,
-                   'description', step.description,
-                   'due_date', step.due_date,
-                   'is_completed', step.is_completed,
-                   'created_at', step.created_at
-                 )
-                 ORDER BY step.id
-               ) FILTER (WHERE step.id IS NOT NULL),
-               '[]'::json
-             ) AS steps
+             ap.created_at
       FROM action_plans ap
       JOIN action_plan_findings relation ON relation.action_plan_id = ap.id
       LEFT JOIN users u ON u.id = ap.responsible_id
-      LEFT JOIN action_plan_steps step ON step.action_plan_id = ap.id
       JOIN findings f ON f.id = relation.finding_id
       WHERE relation.finding_id::text = $1
-        AND ${HALLAZGO_VISIBLE_POR_USUARIO(2, 3, 4)}
-      GROUP BY ap.id, relation.finding_id, u.name
+        AND ${HALLAZGO_VISIBLE_POR_USUARIO(2, 3, 4, 5)}
+        AND (NOT $6::boolean OR ap.review_stage = 'cierre')
       ORDER BY ap.due_date ASC;
       `,
-      [id, String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol)],
+      [req.params.id, String(usuario.id), usuario.business_unit_id, esEquipoAuditoria(usuario.rol), soloValidados, soloValidados],
     );
 
-    res.json(result.rows);
+    res.json(result.rows.map((plan) => ({
+      id: plan.id,
+      publicId: plan.public_id,
+      titulo: plan.title,
+      causaRaiz: null,
+      hallazgo: { id: plan.finding_id, folio: null, titulo: "", severidad: null, auditoriaId: null, controlId: null, fechaCierreAuditoria: null },
+      descripcion: plan.title,
+      responsable: { id: plan.responsible_id, nombre: plan.responsible_name },
+      fechaCompromiso: plan.due_date,
+      status: plan.status,
+      estado: plan.status,
+      etapa: plan.review_stage,
+      creadoEn: plan.created_at,
+      creadoPorId: undefined,
+      hallazgosRelacionados: [],
+      pasos: [],
+    })));
   } catch (error) {
     res.json([]);
   }

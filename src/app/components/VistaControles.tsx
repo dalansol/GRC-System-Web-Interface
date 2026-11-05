@@ -38,6 +38,7 @@ import type { ControlRecord } from "./SharedComponents";
 import { actualizarstatusControl, registrarHoras } from "../api/controles";
 import { consultarMiAsignacionControl } from "../api/auditControls";
 import { AvisoDeclaracionesPendientes, useDeclaracionesPendientes } from "./ConflictosPlan";
+import { listarHallazgos, type HallazgoApi } from "../api/hallazgos";
 
 // ─── Sub-componentes de presentación ─────────────────────────────────────────
 
@@ -80,6 +81,7 @@ interface Props {
 export default function VistaControles({ navigate }: Props) {
   const { usuario } = useSesion();
   const [controles, setControles] = useState<ControlRecord[]>([]);
+  const [hallazgos, setHallazgos] = useState<HallazgoApi[]>([]);
   const [asignacionesPropias, setAsignacionesPropias] = useState<Record<string, number | null>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -111,6 +113,20 @@ export default function VistaControles({ navigate }: Props) {
     };
   }, [usuario?.correo]);
 
+  useEffect(() => {
+    let activo = true;
+    listarHallazgos()
+      .then((datos) => {
+        if (activo) setHallazgos(datos);
+      })
+      .catch(() => {
+        if (activo) setHallazgos([]);
+      });
+    return () => {
+      activo = false;
+    };
+  }, [usuario?.correo]);
+
   const {
     controlesFiltrados,
     filtros,
@@ -126,6 +142,7 @@ export default function VistaControles({ navigate }: Props) {
   const [guardando, setGuardando] = useState<string | null>(null);
   const esJefatura = usuario?.rol === "Jefe de Auditoría";
   const esAuditorSenior = usuario?.rol === "Auditor Senior";
+  const esUsuarioAuditado = usuario?.rol === "Jefe Auditado" || usuario?.rol === "Empleado Auditado";
   // Historia #96: sin declaración de conflictos no se evalúan los controles del plan.
   const { pendientes } = useDeclaracionesPendientes();
   const planesPendientes = new Set(pendientes.map((plan) => String(plan.id)));
@@ -307,6 +324,10 @@ export default function VistaControles({ navigate }: Props) {
             <tbody className="divide-y divide-border">
               {controlesFiltrados.map((control) => {
                 const isExpanded = expandedControl === control.id;
+                const hallazgosDelControl = hallazgos.filter((hallazgo) =>
+                  String(hallazgo.controlId) === String(control.id) ||
+                  String(hallazgo.failedControlId) === String(control.id),
+                );
                 return (
                   <Fragment key={control.id}>
                     <tr
@@ -384,6 +405,31 @@ export default function VistaControles({ navigate }: Props) {
                         <td colSpan={7} className="px-4 pb-4 bg-secondary/20 border-b border-border">
                           <div className="pt-3 space-y-3" onClick={(e) => e.stopPropagation()}>
                             <div className="rounded-md border border-border bg-card p-3">
+                              <h4 className="mb-2 text-xs font-semibold text-foreground">
+                                Hallazgos relacionados
+                                <span className="ml-1 text-muted-foreground">({hallazgosDelControl.length})</span>
+                              </h4>
+                              {hallazgosDelControl.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">No hay hallazgos relacionados con este control.</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {hallazgosDelControl.map((hallazgo) => (
+                                    <div key={hallazgo.id} className="rounded border border-border px-3 py-2">
+                                      <div className="flex items-center gap-2 text-xs">
+                                        <span className="font-mono font-semibold text-primary">
+                                          {hallazgo.folio || hallazgo.id}
+                                        </span>
+                                        <span className="font-medium text-foreground">{hallazgo.title}</span>
+                                      </div>
+                                      <div className="mt-1 text-[11px] text-muted-foreground">
+                                        {hallazgo.severity} · {hallazgo.status}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            {!esUsuarioAuditado && <div className="rounded-md border border-border bg-card p-3">
                               <div className="mb-2 flex items-center justify-between">
                                 <h4 className="text-xs font-semibold text-foreground">Seguimiento del control</h4>
                                 <span className="text-xs text-muted-foreground">
@@ -416,19 +462,21 @@ export default function VistaControles({ navigate }: Props) {
                                 <button type="button" onClick={() => cambiarstatus(control, "En Revision")} disabled={guardando === control.id || evaluacionBloqueada(control) || esAuditorSenior} className="mt-3 rounded-md border border-primary disabled:opacity-50 px-3 py-1.5 text-xs font-semibold text-primary">Enviar a revisión</button>
                               )}
                               {control.feedback && <p className="mt-2 text-xs text-amber-700">Feedback: {control.feedback}</p>}
-                            </div>
-                            <EvidenciasSection 
-                              entityId={String(asignacionesPropias[control.id] ?? control.id)} 
-                              entityType="control" 
-                              puedeSubir={
-                                asignacionesPropias[control.id] !== null &&
-                                control.status === "En Progreso" &&
-                                !esJefatura &&
-                              !esAuditorSenior &&
-                              !evaluacionBloqueada(control) &&
-                                guardando !== control.id
-                              }
-                            />
+                            </div>}
+                            {!esUsuarioAuditado && (
+                              <EvidenciasSection
+                                entityId={String(asignacionesPropias[control.id] ?? control.id)}
+                                entityType="control"
+                                puedeSubir={
+                                  asignacionesPropias[control.id] !== null &&
+                                  control.status === "En Progreso" &&
+                                  !esJefatura &&
+                                  !esAuditorSenior &&
+                                  !evaluacionBloqueada(control) &&
+                                  guardando !== control.id
+                                }
+                              />
+                            )}
                           </div>
                         </td>
                       </tr>

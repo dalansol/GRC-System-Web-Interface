@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { AlertCircle, CalendarClock, Loader2, Plus, Trash2, AlertTriangle, FileSearch, Type } from "lucide-react";
+import { AlertCircle, CalendarClock, Loader2, Plus, Trash2, AlertTriangle, FileSearch, Type, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { useSesion } from "../auth/SesionContext";
 import { ErrorApi } from "../api/cliente";
@@ -52,6 +52,9 @@ export default function FormularioPlanAccion({
   const edicion = Boolean(plan);
   // Lo que el Jefe de Auditoría validó no cambia: solo se reasigna el responsable y la fecha se mueve con una prórroga.
   const validado = plan?.etapa === "cierre";
+
+  // Fecha actual en formato YYYY-MM-DD para validaciones de fecha mínima
+  const fechaHoy = new Date().toISOString().split("T")[0];
 
   // Normalizar lista de hallazgos (si viene solo uno por props individuales, agregarlo)
   const listaHallazgos: HallazgoSeleccionado[] =
@@ -122,6 +125,8 @@ export default function FormularioPlanAccion({
       if (fechasValidas.length > 0) {
         const fechaMaxima = fechasValidas.reduce((max, actual) => (actual > max ? actual : max));
         setFechaCompromiso(fechaMaxima);
+      } else {
+        setFechaCompromiso("");
       }
     }
   }, [pasos, validado]);
@@ -156,18 +161,23 @@ export default function FormularioPlanAccion({
 
     if (listaHallazgos.length === 0) return setError("Debe haber al menos un hallazgo asociado.");
     if (!responsableId) return setError("Selecciona al responsable asignado.");
-    // Un plan validado no cambia de contenido: lo demás no se edita, y los planes anteriores pueden no tenerlo.
+
+    // Un plan validado no cambia de contenido
     if (!validado) {
       if (!tituloPlan.trim()) return setError("El título del plan de acción es obligatorio.");
       if (!descripcion.trim()) return setError("El análisis de causa raíz es obligatorio.");
-      if (!fechaCompromiso) return setError("Indica la fecha de compromiso.");
+      if (pasos.length === 0) return setError("Debe agregar al menos un paso o actividad al plan de acción.");
+      if (!fechaCompromiso) return setError("La fecha de compromiso se calcula automáticamente a partir de los pasos del plan.");
       if (fechaAnteriorAlCierre) return setError(MENSAJE_FECHA_ANTERIOR_AL_CIERRE);
 
-      // Validar que cada paso esté completo si se han agregado
+      // Validar que cada paso esté completo y que su fecha no sea anterior a hoy
       for (let i = 0; i < pasos.length; i++) {
         if (!pasos[i].descripcion.trim()) return setError(`El paso #${i + 1} requiere una descripción.`);
         if (!pasos[i].usuarioAsignadoId) return setError(`Selecciona un responsable para el paso #${i + 1}.`);
         if (!pasos[i].fechaCompromiso) return setError(`Indica la fecha de compromiso para el paso #${i + 1}.`);
+        if (pasos[i].fechaCompromiso < fechaHoy) {
+          return setError(`La fecha de compromiso del paso #${i + 1} no puede ser anterior a la fecha actual (${fechaHoy}).`);
+        }
       }
     }
 
@@ -264,7 +274,7 @@ export default function FormularioPlanAccion({
               )}
             </div>
 
-            {/* Nuevo Slot / Campo para el Título del Plan */}
+            {/* Título del Plan */}
             <div>
               <label htmlFor="plan-titulo" className="mb-1 block text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                 <Type size={14} className="text-primary" /> Título del Plan de Acción
@@ -299,46 +309,27 @@ export default function FormularioPlanAccion({
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="plan-responsable" className="mb-1 block text-xs font-semibold text-muted-foreground">
-                  Responsable principal
-                </label>
-                <select
-                  id="plan-responsable"
-                  value={responsableId}
-                  onChange={(e) => setResponsableId(e.target.value)}
-                  required
-                  className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
-                >
-                  <option value="">Selecciona un responsable</option>
-                  {plan && !responsables.some((r) => r.id === plan.responsable.id) && (
-                    <option value={plan.responsable.id}>{plan.responsable.nombre}</option>
-                  )}
-                  {responsables.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="plan-fecha" className="mb-1 block text-xs font-semibold text-muted-foreground">
-                  Fecha de compromiso {pasos.length > 0 && <span className="text-[10px] text-primary font-normal">(Calculada automáticamente por los pasos)</span>}
-                </label>
-                <input
-                  id="plan-fecha"
-                  type="date"
-                  value={fechaCompromiso}
-                  min={fechaCambiada ? fechaCierre ?? undefined : undefined}
-                  onChange={(e) => setFechaCompromiso(e.target.value)}
-                  required
-                  disabled={validado || pasos.length > 0}
-                  className={`w-full rounded-md border bg-white px-3 py-2 text-sm disabled:bg-muted disabled:opacity-80 ${
-                    fechaAnteriorAlCierre ? "border-red-400" : "border-border"
-                  }`}
-                />
-              </div>
+            <div>
+              <label htmlFor="plan-responsable" className="mb-1 block text-xs font-semibold text-muted-foreground">
+                Responsable principal
+              </label>
+              <select
+                id="plan-responsable"
+                value={responsableId}
+                onChange={(e) => setResponsableId(e.target.value)}
+                required
+                className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Selecciona un responsable</option>
+                {plan && !responsables.some((r) => r.id === plan.responsable.id) && (
+                  <option value={plan.responsable.id}>{plan.responsable.nombre}</option>
+                )}
+                {responsables.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.nombre}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {edicion && (
@@ -376,7 +367,7 @@ export default function FormularioPlanAccion({
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="text-sm font-semibold text-foreground">Pasos o Actividades del Plan</h4>
-                  <p className="text-xs text-muted-foreground">Agrega pasos detallados y asigna colaboradores y fechas específicas.</p>
+                  <p className="text-xs text-muted-foreground">Agrega pasos detallados y asigna colaboradores y fechas específicas (no anteriores a hoy).</p>
                 </div>
                 <button
                   type="button"
@@ -424,7 +415,7 @@ export default function FormularioPlanAccion({
                         <input
                           type="date"
                           value={paso.fechaCompromiso}
-                          min={fechaCierre ?? undefined}
+                          min={fechaHoy}
                           onChange={(e) => actualizarPaso(index, "fechaCompromiso", e.target.value)}
                           required
                           className="w-full rounded-md border border-border bg-white px-3 py-1.5 text-xs"
@@ -444,6 +435,28 @@ export default function FormularioPlanAccion({
                 </div>
               )}
             </div>
+            )}
+
+            {/* FECHA DE COMPROMISO DEL PLAN (NO EDITABLE DIRECTAMENTE) */}
+            {!validado && (
+              <div className="border-t border-border pt-4">
+                <label htmlFor="plan-fecha" className="mb-1 block text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Calendar size={14} className="text-primary" /> Fecha de compromiso global del plan
+                </label>
+                <input
+                  id="plan-fecha"
+                  type="date"
+                  value={fechaCompromiso}
+                  readOnly
+                  disabled
+                  className={`w-full rounded-md border px-3 py-2 text-sm bg-muted text-muted-foreground cursor-not-allowed opacity-90 ${
+                    fechaAnteriorAlCierre ? "border-red-400" : "border-border"
+                  }`}
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Esta fecha se calcula automáticamente tomando la fecha más lejana de los pasos registrados arriba.
+                </p>
+              </div>
             )}
 
             {(error || fechaAnteriorAlCierre) && (

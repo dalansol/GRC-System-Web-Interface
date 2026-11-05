@@ -23,7 +23,10 @@ import { obtenerPlanAuditoria, type PlanAuditoria } from "../api/planes";
 
 // Muestra y rotación vienen del backend; si no están definidas se dice en lugar de inventar un valor,
 // porque lo que enseña la pantalla es lo mismo que recibe el asistente de IA (expediente del control).
-const valorODefecto = (valor: string | null | undefined) => (valor && valor.trim() ? valor : "No definido");
+const valorODefecto = (valor: unknown) => {
+  const strVal = typeof valor === "string" ? valor : valor != null ? String(valor) : "";
+  return strVal.trim() ? strVal : "No definido";
+};
 
 export default function VistaControlDetallado({
   id,
@@ -35,6 +38,7 @@ export default function VistaControlDetallado({
   crumbs: React.ReactNode;
 }) {
   const { usuario } = useSesion();
+  const esUsuarioAuditado = usuario?.rol === "Jefe Auditado" || usuario?.rol === "Empleado Auditado";
   const [backendControl, setBackendControl] = useState<ControlRecord | null>(null);
   const [miAsignacionId, setMiAsignacionId] = useState<number | null>(null);
   // El plan en el que se abrió el control (tarjeta "Plan de auditoría" y contexto del asistente de IA).
@@ -139,7 +143,8 @@ export default function VistaControlDetallado({
 
   const actualizarRevision = async (status: "Completado" | "En Progreso") => {
     if (!revision?.plan_id) return;
-    if (status === "En Progreso" && !feedbackRevision.trim()) {
+    const feedbackTrimmed = typeof feedbackRevision === "string" ? feedbackRevision.trim() : String(feedbackRevision || "").trim();
+    if (status === "En Progreso" && !feedbackTrimmed) {
       toast.error("Escribe la retroalimentación del rechazo.");
       return;
     }
@@ -147,9 +152,9 @@ export default function VistaControlDetallado({
     try {
       await actualizarAsignacionStatus(String(revision.plan_id), id, {
         status,
-        feedback: feedbackRevision.trim(),
+        feedback: feedbackTrimmed,
       });
-      setRevision((actual) => actual ? { ...actual, status, feedback: feedbackRevision.trim() } : actual);
+      setRevision((actual) => actual ? { ...actual, status, feedback: feedbackTrimmed } : actual);
       setRechazando(false);
       toast.success(status === "Completado" ? "Control approved." : "Control rechazado y devuelto a En Progreso.");
     } catch (error: unknown) {
@@ -415,13 +420,15 @@ export default function VistaControlDetallado({
           )}
         </Card>
       )}
-      <EvidenciasSection
-        entityId={String(miAsignacionId ?? ctrl.id)}
-        entityType="control"
-        auditId={auditId}
-        puedeSubir={Boolean(miAsignacionId) && puedeEnviarARevision}
-      />
-      {planEvaluacion && (
+      {!esUsuarioAuditado && (
+        <EvidenciasSection
+          entityId={String(miAsignacionId ?? ctrl.id)}
+          entityType="control"
+          auditId={auditId}
+          puedeSubir={Boolean(miAsignacionId) && puedeEnviarARevision}
+        />
+      )}
+      {!esUsuarioAuditado && planEvaluacion && (
         <EvaluacionControl
           key={planEvaluacion}
           planId={planEvaluacion}
@@ -432,32 +439,36 @@ export default function VistaControlDetallado({
           }}
         />
       )}
-      {puedeSubirEvidencia && (
+      {(puedeSubirEvidencia || esUsuarioAuditado) && (
         <Card className="mb-5 p-5">
-          {evaluacionBloqueada && (
-            <div className="mb-4">
-              <AvisoDeclaracionesPendientes pendientes={pendientesDelControl} />
-            </div>
+          {puedeSubirEvidencia && (
+            <>
+              {evaluacionBloqueada && (
+              <div className="mb-4">
+                <AvisoDeclaracionesPendientes pendientes={pendientesDelControl} />
+              </div>
+              )}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Avance del control</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Envía el control a revisión cuando hayas terminado su evaluación.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={enviarARevision}
+                  disabled={enviandoRevision || evaluacionBloqueada || !auditId || miAsignacionStatus !== "En Progreso"}
+                  className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-white disabled:bg-gray-400 disabled:opacity-100"
+                >
+                  {enviandoRevision ? "Enviando..." : "Enviar a revisión"}
+                </button>
+              </div>
+            </>
           )}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-foreground">Avance del control</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Envía el control a revisión cuando hayas terminado su evaluación.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={enviarARevision}
-              disabled={enviandoRevision || evaluacionBloqueada || !auditId || miAsignacionStatus !== "En Progreso"}
-              className="rounded-md bg-primary px-4 py-2 text-xs font-semibold text-white disabled:bg-gray-400 disabled:opacity-100"
-            >
-              {enviandoRevision ? "Enviando..." : "Enviar a revisión"}
-            </button>
-          </div>
 
           {/* ── Hallazgos registrados ── */}
-          <div className="mt-5 border-t border-border pt-5">
+            <div className="mt-5 border-t border-border pt-5">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
@@ -471,28 +482,30 @@ export default function VistaControlDetallado({
                   Listado de hallazgos registrados para este control. Haz clic en un hallazgo para ver su detalle.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setHallazgoPorDeficiencia(false);
-                  setShowHallazgoForm(true);
-                }}
-                className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
-              >
-                + Nuevo hallazgo
-              </button>
-            </div>
+              {puedeSubirEvidencia && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHallazgoPorDeficiencia(false);
+                    setShowHallazgoForm(true);
+                  }}
+                  className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                >
+                  + Nuevo hallazgo
+                </button>
+              )}
+          </div>
 
-            {loadingHallazgos ? (
+          {loadingHallazgos ? (
               <div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
                 <Loader2 className="mr-2 animate-spin" size={14} />
                 Cargando hallazgos...
               </div>
-            ) : hallazgos.length === 0 ? (
+          ) : hallazgos.length === 0 ? (
               <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
                 No hay hallazgos registrados para este control.
               </div>
-            ) : (
+          ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-muted/50 text-muted-foreground border-b border-border">
@@ -526,41 +539,41 @@ export default function VistaControlDetallado({
                                 ? "bg-amber-100 text-amber-800"
                                 : "bg-blue-100 text-blue-800"
                             }`}
-                          >
-                            {hallazgo.severity}
-                          </span>
-                        </td>
-                        <td className="p-2 text-muted-foreground">{hallazgo.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                        >
+                          {hallazgo.severity}
+                        </span>
+                      </td>
+                      <td className="p-2 text-muted-foreground">{hallazgo.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+            </table>
           </div>
-        </Card>
-      )}
-      <AISummaryCard entityId={ctrl.id} entityType="Control" planId={auditId} />
+        )}
+      </div>
+      </Card>
+    )}
+    <AISummaryCard entityId={ctrl.id} entityType="Control" planId={auditId} />
 
-      {/* ── Modal: Formulario de hallazgo ── */}
-      {showHallazgoForm && (
-        <FormularioHallazgo
-          controls={
-            hallazgoPorDeficiencia
-              ? controlesConDeficiencia(controlParaHallazgo, { id: ctrl.id, nombre: ctrl.controlProcedureName })
-              : controlParaHallazgo
-          }
-          fixedControlId={ctrl.id}
-          ownerId={usuario ? String(usuario.id) : undefined}
-          nextFolio={`HAL-${Date.now()}`}
-          auditId={planEvaluacion ?? undefined}
-          onCreated={() => {
-            setShowHallazgoForm(false);
-            cargarHallazgos();
-          }}
-          onClose={() => setShowHallazgoForm(false)}
-        />
-      )}
-    </div>
+    {/* ── Modal: Formulario de hallazgo ── */}
+    {showHallazgoForm && (
+      <FormularioHallazgo
+        controls={
+          hallazgoPorDeficiencia
+            ? controlesConDeficiencia(controlParaHallazgo, { id: ctrl.id, nombre: ctrl.controlProcedureName })
+            : controlParaHallazgo
+        }
+        fixedControlId={ctrl.id}
+        ownerId={usuario ? String(usuario.id) : undefined}
+        nextFolio={`HAL-${Date.now()}`}
+        auditId={planEvaluacion ?? undefined}
+        onCreated={() => {
+          setShowHallazgoForm(false);
+          cargarHallazgos();
+        }}
+        onClose={() => setShowHallazgoForm(false)}
+      />
+    )}
+  </div>
   );
 }
