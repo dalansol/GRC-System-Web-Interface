@@ -155,7 +155,7 @@ export default function VistaPlanesAccion() {
   const buIdDisplay = (usuario as any)?.business_unit_id ?? usuario?.businessUnitId ?? 10;
 
   return (
-    <div className="flex-1 w-full max-w-full overflow-x-hidden p-6 space-y-6 box-border" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <div className="flex-1 w-full max-w-full overflow-x-hidden p-6 pb-24 space-y-6 box-border" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       <Breadcrumbs items={["Inicio", "Auditoría", "Planes de Acción"]} />
 
       {/* Header */}
