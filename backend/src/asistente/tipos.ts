@@ -1,8 +1,9 @@
 // Contrato común de los proveedores de IA (Copilot API Gateway, SF-19).
 // Las rutas solo conocen esta interfaz; cambiar de proveedor es cambiar IA_PROVEEDOR.
 
+// "asistente" son respuestas previas del modelo; permiten conversaciones de varios turnos.
 export interface MensajeIA {
-  rol: "sistema" | "usuario";
+  rol: "sistema" | "usuario" | "asistente";
   contenido: string;
 }
 

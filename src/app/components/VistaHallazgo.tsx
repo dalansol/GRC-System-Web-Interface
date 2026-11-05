@@ -1,4 +1,4 @@
-import React, { Fragment, useState } from "react";
+import React, { Fragment, useEffect, useState } from "react";
 import {
   RefreshCw,
   AlertCircle,
@@ -23,11 +23,18 @@ import { useHallazgosViewModel, HallazgoViewModel } from "../domain/hallazgos/us
 
 export type Hallazgo = HallazgoViewModel;
 
-interface Props {
-  onSelectFinding?: (finding: HallazgoViewModel) => void;
+export interface HallazgoActivo {
+  id: string;
+  folio: string | null;
 }
 
-export default function VistaHallazgo({ onSelectFinding }: Props) {
+interface Props {
+  onSelectFinding?: (finding: HallazgoViewModel) => void;
+  /** Avisa qué hallazgo está expandido, para que el asistente Copilot use su expediente. */
+  onHallazgoActivo?: (hallazgo: HallazgoActivo | null) => void;
+}
+
+export default function VistaHallazgo({ onSelectFinding, onHallazgoActivo }: Props = {}) {
   const { usuario } = useSesion();
   const {
     hallazgos: rawHallazgos,
@@ -102,6 +109,15 @@ export default function VistaHallazgo({ onSelectFinding }: Props) {
 
     return esDeSuUnidad || esCreadorOImpactado;
   });
+
+  // El hallazgo expandido es el que el asistente Copilot usa como expediente.
+  const activo = hallazgos.find((h) => h.id === expandedFinding);
+  const activoId = activo?.id ?? null;
+  const activoFolio = activo?.folio ?? null;
+  useEffect(() => {
+    onHallazgoActivo?.(activoId ? { id: activoId, folio: activoFolio } : null);
+  }, [onHallazgoActivo, activoId, activoFolio]);
+  useEffect(() => () => onHallazgoActivo?.(null), [onHallazgoActivo]);
 
   const toggleSelectAll = () => {
     if (selectedFindingIds.length === hallazgos.length) {

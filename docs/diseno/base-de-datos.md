@@ -116,6 +116,8 @@ las filas de `processes` solo existen en Supabase.
 | `046_seed_auditados.sql` | Usuarios `j.ejemplo` y `c.ejemplo` de "Usar un rol de prueba". Solo con `--datos-prueba` |
 | `047_evaluacion_controles.sql` | Criterios, evaluaciones y respuestas de controles (historia #98, SF-07). Los 8 criterios son datos de prueba. Aplicado a Supabase (2026-11-05) |
 | `048_versiones_evidencia.sql` | `evidence.version`, `evidence_versions` y el formato `.xlsm` (UF-17, SF-08). Aplicado a Supabase (2026-11-05) |
+| `049_asistente_conversaciones.sql` | Memoria del asistente de IA (SF-19, UF-16): `ai_conversations` (una por usuario y hallazgo) y `ai_messages` (preguntas y respuestas; se borran en cascada con la conversación) |
+| `050_asistente_evidencias_controles.sql` | `ai_conversations.entity_type` admite `evidencia` (una conversación por usuario y archivo) y `control` (`entity_id = "<planId>:<controlId>"`) |
 
 034 y 035 son dos scripts cada uno porque se crearon en ramas distintas; no se renombran para que
 no vuelvan a aplicarse. `migrar.ts` los lista en orden alfabético, el mismo que usa `--datos-prueba`.
@@ -563,6 +565,8 @@ erDiagram
 | `action_plan_event_evidence` | Inmutable, igual que los eventos. Copia el nombre y el hash del archivo, sin llave a `evidence`, porque el archivo se puede reemplazar |
 | `action_plan_extension_requests` | Una solicitud abierta por plan (índice único parcial). Rechazarla exige motivo. La fecha del plan solo cambia al aprobarla |
 | `evidence` | `entity_type` es `control`, `hallazgo` o `action_plan_step`; formato `pdf`, `xlsx`, `eml`, `msg`, `zip` o `7z`. Quién la consulta lo decide el backend (ver "Decisiones tomadas" en `CLAUDE.md`) |
+| `ai_conversations` | Una conversación por usuario y entidad (`entity_type`: `hallazgo`, `evidencia` o `control`); es privada de su usuario |
+| `ai_messages` | `role` es `usuario` o `asistente`; `estado` solo en respuestas (`respondida`, `fuera_de_tema`, `sin_informacion`) |
 
 ## Pendiente
 

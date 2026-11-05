@@ -61,11 +61,13 @@ const SCRIPTS = [
   "045_etapas_planes_accion.sql",
   "047_evaluacion_controles.sql",
   "048_versiones_evidencia.sql",
+  "049_asistente_conversaciones.sql",
+  "050_asistente_evidencias_controles.sql",
 ];
 
 // Las tablas del modelo entidad-relación de docs/diseno/base-de-datos.md.
 const TABLAS = [
-  "action_plan_approval_events", "action_plan_event_evidence", "action_plan_extension_requests", "action_plan_findings", "action_plan_public_id_counters", "action_plan_steps", "action_plans", "area", "audit_controls", "audit_engagement", "audit_engagement_team", "audit_entity",
+  "action_plan_approval_events", "action_plan_event_evidence", "action_plan_extension_requests", "action_plan_findings", "action_plan_public_id_counters", "action_plan_steps", "action_plans", "ai_conversations", "ai_messages", "area", "audit_controls", "audit_engagement", "audit_engagement_team", "audit_entity",
   "audit_plans", "audit_procedure_type", "audit_procedures", "audit_status", "audits", "business",
   "business_units", "catalog_department", "catalog_domain", "catalogs", "conflict_declarations",
   "control_evaluation_answers", "control_evaluations", "control_horas",

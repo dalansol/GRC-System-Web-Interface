@@ -1,11 +1,23 @@
 import {
+  type ConsultaControl,
+  type ConsultaEvidencia,
+  type ConsultaHallazgo,
   type ConsultaVista,
   type DocumentoParaIA,
   MENSAJE_FUERA_DE_TEMA,
+  MENSAJE_FUERA_DE_TEMA_CONTROL,
+  MENSAJE_FUERA_DE_TEMA_EVIDENCIA,
+  MENSAJE_FUERA_DE_TEMA_HALLAZGO,
   MENSAJE_FUERA_DE_TEMA_VISTA,
   MENSAJE_SIN_INFORMACION,
+  MENSAJE_SIN_INFORMACION_CONTROL,
+  MENSAJE_SIN_INFORMACION_EVIDENCIA,
+  MENSAJE_SIN_INFORMACION_HALLAZGO,
   MENSAJE_SIN_INFORMACION_VISTA,
   mensajesConsultaVista,
+  mensajesControl,
+  mensajesEvidencia,
+  mensajesHallazgo,
   mensajesPregunta,
   mensajesResumen,
 } from "./instrucciones.js";
@@ -30,6 +42,15 @@ interface MensajesFijos {
 
 const MENSAJES_DOCUMENTO: MensajesFijos = { fueraDeTema: MENSAJE_FUERA_DE_TEMA, sinInformacion: MENSAJE_SIN_INFORMACION };
 const MENSAJES_VISTA: MensajesFijos = { fueraDeTema: MENSAJE_FUERA_DE_TEMA_VISTA, sinInformacion: MENSAJE_SIN_INFORMACION_VISTA };
+const MENSAJES_HALLAZGO: MensajesFijos = {
+  fueraDeTema: MENSAJE_FUERA_DE_TEMA_HALLAZGO,
+  sinInformacion: MENSAJE_SIN_INFORMACION_HALLAZGO,
+};
+const MENSAJES_CONTROL: MensajesFijos = { fueraDeTema: MENSAJE_FUERA_DE_TEMA_CONTROL, sinInformacion: MENSAJE_SIN_INFORMACION_CONTROL };
+const MENSAJES_EVIDENCIA: MensajesFijos = {
+  fueraDeTema: MENSAJE_FUERA_DE_TEMA_EVIDENCIA,
+  sinInformacion: MENSAJE_SIN_INFORMACION_EVIDENCIA,
+};
 
 // Solo se muestra el texto del modelo si dice "respondida"; en los demás casos se usa un mensaje fijo.
 export function interpretarRespuesta(crudo: string, mensajes: MensajesFijos = MENSAJES_DOCUMENTO): ResultadoAsistente {
@@ -56,5 +77,8 @@ export function crearAsistente(proveedor: ProveedorIA) {
     resumir: (documento: DocumentoParaIA) => consultar(mensajesResumen(documento)),
     preguntar: (documento: DocumentoParaIA, pregunta: string) => consultar(mensajesPregunta(documento, pregunta)),
     consultarVista: (consulta: ConsultaVista) => consultar(mensajesConsultaVista(consulta), MENSAJES_VISTA),
+    consultarHallazgo: (consulta: ConsultaHallazgo) => consultar(mensajesHallazgo(consulta), MENSAJES_HALLAZGO),
+    consultarControl: (consulta: ConsultaControl) => consultar(mensajesControl(consulta), MENSAJES_CONTROL),
+    consultarEvidencia: (consulta: ConsultaEvidencia) => consultar(mensajesEvidencia(consulta), MENSAJES_EVIDENCIA),
   };
 }

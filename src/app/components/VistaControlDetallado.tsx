@@ -7,7 +7,6 @@ import {
   Breadcrumbs,
   Card,
   DetailField,
-  ValidityBadge,
 } from "./SharedComponents";
 import type { ControlRecord } from "./SharedComponents";
 import EvaluacionControl from "./EvaluacionControl";
@@ -15,11 +14,16 @@ import EvidenciasSection from "./EvidenciasSection";
 import { listarControles, actualizarstatusControl } from "../api/controles";
 import { AvisoDeclaracionesPendientes, useDeclaracionesPendientes } from "./ConflictosPlan";
 import { actualizarAsignacionStatus, consultarMiAsignacionControl, consultarRevisionControl, type RevisionControl } from "../api/auditControls";
-import { CONTROLS, PROCEDURE_TRACKING } from "../data/mock_data";
+import { PROCEDURE_TRACKING } from "../data/mock_data";
 import FormularioHallazgo, { controlesConDeficiencia, type FindingControlOption } from "./FormularioHallazgo";
 import { useSesion } from "../auth/SesionContext";
 import { listarHallazgos, type HallazgoApi } from "../api/hallazgos";
 import VistaHallazgoDetallado from "./VistaHallazgoDetallado";
+import { obtenerPlanAuditoria, type PlanAuditoria } from "../api/planes";
+
+// Muestra y rotación vienen del backend; si no están definidas se dice en lugar de inventar un valor,
+// porque lo que enseña la pantalla es lo mismo que recibe el asistente de IA (expediente del control).
+const valorODefecto = (valor: string | null | undefined) => (valor && valor.trim() ? valor : "No definido");
 
 export default function VistaControlDetallado({
   id,
@@ -33,6 +37,8 @@ export default function VistaControlDetallado({
   const { usuario } = useSesion();
   const [backendControl, setBackendControl] = useState<ControlRecord | null>(null);
   const [miAsignacionId, setMiAsignacionId] = useState<number | null>(null);
+  // El plan en el que se abrió el control (tarjeta "Plan de auditoría" y contexto del asistente de IA).
+  const [plan, setPlan] = useState<PlanAuditoria | null>(null);
   const { pendientes: planesPendientes } = useDeclaracionesPendientes();
   const [puedeSubirEvidencia, setPuedeSubirEvidencia] = useState(false);
   const [miAsignacionStatus, setMiAsignacionStatus] = useState<string | null>(null);
@@ -97,6 +103,22 @@ export default function VistaControlDetallado({
       active = false;
     };
   }, [id]);
+
+  // El plan en el que se abrió el control; si no se puede leer, la tarjeta no se muestra.
+  useEffect(() => {
+    if (!auditId) return;
+    let active = true;
+    obtenerPlanAuditoria(auditId)
+      .then((datos) => {
+        if (active) setPlan(datos);
+      })
+      .catch(() => {
+        if (active) setPlan(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [auditId]);
 
   useEffect(() => {
     let active = true;
@@ -193,7 +215,7 @@ export default function VistaControlDetallado({
     };
   }, [id, auditId]);
 
-  const ctrl = backendControl ?? CONTROLS.find((control) => control.id === id);
+  const ctrl = backendControl;
   const pendientesDelControl = planesPendientes.filter((plan) =>
     (ctrl?.auditIds ?? []).some((planId) => String(planId) === String(plan.id)),
   );
@@ -323,7 +345,6 @@ export default function VistaControlDetallado({
               <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground bg-muted px-2 py-0.5 rounded">
                 Procedimiento de Control
               </span>
-              <ValidityBadge status={ctrl.validityStatus} />
             </div>
             <h1 className="text-xl font-bold text-foreground leading-tight">
               {ctrl.controlProcedureName}
@@ -361,8 +382,8 @@ export default function VistaControlDetallado({
           {[
             { label: "Tipo de Control", value: ctrl.controlType },
             { label: "Frecuencia de Operación", value: ctrl.frequency },
-            { label: "Tamaño de Muestra", value: ctrl.sampleSize },
-            { label: "Rotación", value: ctrl.rotation },
+            { label: "Tamaño de Muestra", value: valorODefecto(ctrl.sampleSize) },
+            { label: "Rotación", value: valorODefecto(ctrl.rotation) },
             { label: "Estatus", value: ctrl.controlStatus },
           ].map((field) => (
             <div key={field.label} className="bg-muted/40 rounded-lg p-3">
@@ -377,6 +398,23 @@ export default function VistaControlDetallado({
         </div>
       </Card>
 
+      {plan && (
+        <Card className="mb-5 p-5">
+          <div className="text-sm font-bold text-foreground mb-3">Plan de auditoría</div>
+          <div className="grid grid-cols-4 gap-4">
+            <DetailField label="Código" value={plan.codigo} />
+            <DetailField label="Nombre" value={plan.nombre} />
+            <DetailField label="Periodo" value={`${plan.fechaInicio} a ${plan.fechaFin}${plan.periodo ? ` (${plan.periodo})` : ""}`} />
+            <DetailField label="Responsable" value={plan.responsable.nombre} />
+          </div>
+          {plan.alcance && (
+            <div className="pt-3 mt-3 border-t border-border">
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Alcance</div>
+              <p className="text-sm text-foreground leading-relaxed">{plan.alcance}</p>
+            </div>
+          )}
+        </Card>
+      )}
       <EvidenciasSection
         entityId={String(miAsignacionId ?? ctrl.id)}
         entityType="control"
@@ -502,7 +540,7 @@ export default function VistaControlDetallado({
           </div>
         </Card>
       )}
-      <AISummaryCard entityId={ctrl.id} entityType="Control" />
+      <AISummaryCard entityId={ctrl.id} entityType="Control" planId={auditId} />
 
       {/* ── Modal: Formulario de hallazgo ── */}
       {showHallazgoForm && (
