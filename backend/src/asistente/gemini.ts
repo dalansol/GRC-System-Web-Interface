@@ -13,8 +13,21 @@ interface RespuestaGemini {
 }
 
 // Google Gemini (API de AI Studio). La clave va en un encabezado, nunca en la URL.
+// Los modelos con razonamiento "piensan" antes de responder: eso consume el tiempo de espera y
+// los tokens de salida (con expedientes largos devolvían vacío o se agotaban). El asistente solo
+// lee documentos y responde en JSON, así que se pide el mínimo que cada familia permite. Mandar
+// un ajuste que el modelo no admite (presupuesto 0 en Gemini 3 o en 2.5 Pro, thinkingConfig en
+// 2.0 o anteriores) provoca un 400 "invalid argument".
+export function configuracionRazonamiento(modelo: string): Record<string, unknown> | undefined {
+  const nombre = modelo.toLowerCase();
+  if (/^gemini-2\.5-flash/.test(nombre)) return { thinkingBudget: 0 };
+  if (/^gemini-(3|[4-9])/.test(nombre)) return { thinkingLevel: "low" };
+  return undefined;
+}
+
 export function crearProveedorGemini({ apiKey, modelo, tiempoEsperaMs, fetch }: OpcionesGemini): ProveedorIA {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`;
+  const razonamiento = configuracionRazonamiento(modelo);
 
   return {
     nombre: "gemini",
@@ -24,10 +37,7 @@ export function crearProveedorGemini({ apiKey, modelo, tiempoEsperaMs, fetch }: 
         ...(temperatura !== undefined ? { temperature: temperatura } : {}),
         ...(maxTokens !== undefined ? { maxOutputTokens: maxTokens } : {}),
         ...(json ? { responseMimeType: "application/json" } : {}),
-        // Los modelos 2.5 "piensan" antes de responder: ese razonamiento consume el tiempo de
-        // espera y los tokens de salida (con expedientes largos devolvía vacío o se agotaba).
-        // El asistente solo lee documentos y responde en JSON; no necesita razonamiento extendido.
-        thinkingConfig: { thinkingBudget: 0 },
+        ...(razonamiento ? { thinkingConfig: razonamiento } : {}),
       };
       const cuerpo = {
         ...(instrucciones.length > 0 ? { systemInstruction: { parts: instrucciones } } : {}),
