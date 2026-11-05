@@ -88,7 +88,22 @@ describe("EvaluacionControl", () => {
     expect(await screen.findByRole("heading", { name: "Diseño" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Efectividad operativa" })).toBeTruthy();
     const grupo = screen.getByRole("group", { name: "Evidencia suficiente" });
-    expect(within(grupo).getAllByRole("radio").map((r) => r.getAttribute("value"))).toEqual(["1", "2", "3", "4", "5"]);
+    expect(
+      within(grupo)
+        .getAllByRole("radio")
+        .map((r) => r.getAttribute("value")),
+    ).toEqual(["1", "2", "3", "4", "5"]);
+  });
+
+  it("ancla el radio oculto a su etiqueta para que enfocarlo no desplace la página", async () => {
+    // El radio lleva `sr-only` (position: absolute). Sin un ancestro posicionado, el navegador lo coloca
+    // fuera de la pantalla y, al enfocarlo con un clic, desplaza toda la ventana hacia abajo.
+    mostrar();
+
+    const grupo = await screen.findByRole("group", { name: "Evidencia suficiente" });
+    for (const radio of within(grupo).getAllByRole("radio")) {
+      expect(radio.parentElement?.classList.contains("relative")).toBe(true);
+    }
   });
 
   it("muestra las respuestas y el resultado ya guardados", async () => {
@@ -123,7 +138,11 @@ describe("EvaluacionControl", () => {
 
     it("muestra el mensaje del backend si no se pudo guardar", async () => {
       vi.mocked(api.guardarEvaluacion).mockRejectedValue(
-        new ErrorApi(409, "EVALUACION_CERRADA", "La evaluación solo se puede editar con el control En Progreso."),
+        new ErrorApi(
+          409,
+          "EVALUACION_CERRADA",
+          "La evaluación solo se puede editar con el control En Progreso.",
+        ),
       );
       vi.mocked(api.consultarEvaluacion).mockResolvedValue(estado({ evaluacion: EVALUACION }));
       mostrar();
@@ -131,7 +150,9 @@ describe("EvaluacionControl", () => {
       await userEvent.click(await screen.findByRole("button", { name: "Guardar evaluación" }));
 
       await waitFor(() =>
-        expect(toast.error).toHaveBeenCalledWith("La evaluación solo se puede editar con el control En Progreso."),
+        expect(toast.error).toHaveBeenCalledWith(
+          "La evaluación solo se puede editar con el control En Progreso.",
+        ),
       );
     });
   });
@@ -198,7 +219,9 @@ describe("EvaluacionControl", () => {
     });
 
     it("no muestra nada si el usuario no puede consultar la evaluación", async () => {
-      vi.mocked(api.consultarEvaluacion).mockRejectedValue(new ErrorApi(403, "ROL_NO_AUTORIZADO", "No."));
+      vi.mocked(api.consultarEvaluacion).mockRejectedValue(
+        new ErrorApi(403, "ROL_NO_AUTORIZADO", "No."),
+      );
 
       const { container } = mostrar();
 

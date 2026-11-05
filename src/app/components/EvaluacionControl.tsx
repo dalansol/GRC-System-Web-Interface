@@ -45,8 +45,10 @@ function FilaCriterio({
           {criterio.nombre}
         </span>
         <div className="flex shrink-0 gap-1">
+          {/* `relative` ancla el radio oculto (sr-only, absoluto) a su etiqueta: sin ello queda fuera de la
+              pantalla y, al enfocarlo con un clic, el navegador desplaza toda la ventana hacia abajo. */}
           {ESCALA.map((numero) => (
-            <label key={numero}>
+            <label key={numero} className="relative">
               <input
                 type="radio"
                 name={idNombre}
@@ -98,16 +100,22 @@ function ResultadoEvaluacion({
         <Dato etiqueta="Promedio de efectividad" valor={evaluacion.promedioEfectividad} />
         <div>
           <div className="text-xs text-muted-foreground">Estatus</div>
-          <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${COLOR_RESULTADO[evaluacion.resultado]}`}>
+          <span
+            className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${COLOR_RESULTADO[evaluacion.resultado]}`}
+          >
             {evaluacion.resultado}
           </span>
         </div>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        Evaluado por {evaluacion.evaluadoPor.nombre} el {new Date(evaluacion.evaluadoEn).toLocaleDateString("es-MX")}.
+        Evaluado por {evaluacion.evaluadoPor.nombre} el{" "}
+        {new Date(evaluacion.evaluadoEn).toLocaleDateString("es-MX")}.
       </p>
       {evaluacion.deficiencia && (
-        <div role="alert" className="mt-3 flex flex-col gap-3 rounded-md border border-red-200 bg-red-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          role="alert"
+          className="mt-3 flex flex-col gap-3 rounded-md border border-red-200 bg-red-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+        >
           <div className="flex items-start gap-2 text-sm text-red-800">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
             <span>Control con deficiencia: su nivel de madurez es bajo.</span>
@@ -152,7 +160,9 @@ export default function EvaluacionControl({
         if (!activo) return;
         setEstado(resultado);
         setRespuestas(
-          Object.fromEntries((resultado.evaluacion?.respuestas ?? []).map((r) => [r.criterioId, r.valor])),
+          Object.fromEntries(
+            (resultado.evaluacion?.respuestas ?? []).map((r) => [r.criterioId, r.valor]),
+          ),
         );
       })
       .catch((error: unknown) => {
@@ -224,7 +234,9 @@ export default function EvaluacionControl({
       )}
       {GRUPOS.map(({ tipo, titulo }) => (
         <section key={tipo} className="mt-4">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</h3>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {titulo}
+          </h3>
           <div className="space-y-2">
             {criterios
               .filter((c) => c.tipo === tipo)
@@ -251,7 +263,9 @@ export default function EvaluacionControl({
           {guardando ? "Guardando..." : "Guardar evaluación"}
         </button>
       )}
-      {evaluacion && <ResultadoEvaluacion evaluacion={evaluacion} onGenerarHallazgo={onGenerarHallazgo} />}
+      {evaluacion && (
+        <ResultadoEvaluacion evaluacion={evaluacion} onGenerarHallazgo={onGenerarHallazgo} />
+      )}
     </Card>
   );
 }
