@@ -8,7 +8,7 @@ interface ControlApi {
   description?: string | null;
   type?: string | null;
   frequency?: string | null;
-  size?: string | null;
+  size?: string | number | null;
   rotation?: string | null;
   status?: "En Progreso" | "En Revision" | "Completado";
   hours_spent?: string | number;
@@ -29,8 +29,9 @@ function convertirControl(control: ControlApi): ControlRecord {
     currentVulnerability: "Baja",
     controlType: control.type ?? "Preventivo",
     frequency: control.frequency ?? "No definida",
-    sampleSize: control.size ?? "",
-    rotation: control.rotation ?? "",
+    // En la base `size` puede venir como número; la pantalla y el asistente los tratan como texto.
+    sampleSize: control.size == null ? "" : String(control.size),
+    rotation: control.rotation == null ? "" : String(control.rotation),
     controlStatus: "Activo",
     status: control.status ?? "En Progreso",
     horasInvertidas: Number(control.hours_spent ?? 0),
