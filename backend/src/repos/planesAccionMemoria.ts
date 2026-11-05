@@ -1,4 +1,4 @@
-import { ESTADOS_BANDEJA, type EventoFlujoPlan } from "../domain/flujoPlanAccion.js";
+import { ESTADOS_BANDEJA, ESTADOS_BLOQUEADOS, type EventoFlujoPlan } from "../domain/flujoPlanAccion.js";
 import type {
   DatosEdicionPlanAccion,
   DatosPlanAccion,
@@ -158,7 +158,7 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
   async actualizar(id: number, datos: DatosEdicionPlanAccion) {
     await this.listo;
     const fila = this.filas.find((f) => f.id === id);
-    if (!fila) return null;
+    if (!fila || ESTADOS_BLOQUEADOS.includes(fila.estado)) return null;
     Object.assign(fila, datos);
     return this.aPlan(fila);
   }
@@ -211,8 +211,9 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
 
   async actualizarPaso(planId: number, pasoId: number, completado: boolean) {
     await this.listo;
-    const paso = this.filas.find((f) => f.id === planId)?.pasos.find((item) => item.id === pasoId);
-    if (!paso) return null;
+    const fila = this.filas.find((f) => f.id === planId);
+    const paso = fila?.pasos.find((item) => item.id === pasoId);
+    if (!fila || !paso || ESTADOS_BLOQUEADOS.includes(fila.estado)) return null;
     paso.completado = completado;
     return this.aPaso(paso);
   }

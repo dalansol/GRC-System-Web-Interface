@@ -68,6 +68,14 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     }
   }
 
+  /** La escritura no se aplicó: distingue un plan que acaba de bloquearse de uno que no existe. */
+  async function errorEscrituraRechazada(id: number, noEncontrado: string): Promise<ErrorApi> {
+    const reciente = await repo.buscarPorId(id);
+    return reciente && ESTADOS_BLOQUEADOS.includes(reciente.estado)
+      ? new ErrorApi(409, "PLAN_BLOQUEADO", MENSAJE_BLOQUEADO)
+      : new ErrorApi(404, "NO_ENCONTRADO", noEncontrado);
+  }
+
   const conflictoConcurrente = () =>
     new ErrorApi(409, "ESTADO_INVALIDO", "Otro usuario ya actuó sobre este plan. Actualiza la lista.");
 
@@ -214,7 +222,7 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     }
 
     const plan = await repo.actualizar(id, datos);
-    if (!plan) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de acción no existe.");
+    if (!plan) throw await errorEscrituraRechazada(id, "El plan de acción no existe.");
 
     registrarEvento({
       accion: "plan_accion.edicion",
@@ -375,7 +383,7 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     }
 
     const actualizado = await repo.actualizarPaso(planId, pasoId, completado);
-    if (!actualizado) throw new ErrorApi(404, "NO_ENCONTRADO", "El paso de acción no existe.");
+    if (!actualizado) throw await errorEscrituraRechazada(planId, "El paso de acción no existe.");
     res.json(actualizado);
   });
 

@@ -1,5 +1,5 @@
 import type pg from "pg";
-import { ESTADOS_BANDEJA, type AccionFlujoPlan, type EventoFlujoPlan } from "../domain/flujoPlanAccion.js";
+import { ESTADOS_BANDEJA, ESTADOS_BLOQUEADOS, type AccionFlujoPlan, type EventoFlujoPlan } from "../domain/flujoPlanAccion.js";
 import type {
   DatosEdicionPlanAccion,
   DatosPlanAccion,
@@ -217,8 +217,8 @@ export class RepositorioPlanesAccionSql implements RepositorioPlanesAccion {
       `
       UPDATE action_plans
       SET title = $1, root_cause = $2, responsible_id = $3, due_date = $4, status = $5
-      WHERE id = $6`,
-      [datos.titulo ?? datos.descripcion, datos.descripcion, datos.responsableId, datos.fechaCompromiso, datos.estado, id],
+      WHERE id = $6 AND status <> ALL($7::varchar[])`,
+      [datos.titulo ?? datos.descripcion, datos.descripcion, datos.responsableId, datos.fechaCompromiso, datos.estado, id, [...ESTADOS_BLOQUEADOS]],
     );
     return resultado.rowCount === 1 ? this.buscarPorId(id) : null;
   }
@@ -325,8 +325,9 @@ export class RepositorioPlanesAccionSql implements RepositorioPlanesAccion {
       `UPDATE action_plan_steps
        SET is_completed = $1
        WHERE id = $2 AND action_plan_id = $3
+         AND NOT EXISTS (SELECT 1 FROM action_plans plan WHERE plan.id = $3 AND plan.status = ANY($4::varchar[]))
        RETURNING id, action_plan_id, assigned_user_id, description, due_date::text AS due_date, is_completed, created_at`,
-      [completado, pasoId, planId],
+      [completado, pasoId, planId, [...ESTADOS_BLOQUEADOS]],
     );
     const fila = resultado.rows[0];
     if (!fila) return null;

@@ -37,7 +37,7 @@ export interface RepositorioPlanesAccion extends RepositorioNotificaciones {
   /** Crea un plan en estado "Asignado" y deja al hallazgo en ese mismo estado. */
   crear(datos: DatosPlanAccion, creadoPorId: number): Promise<PlanAccion>;
   buscarPorId(id: number): Promise<PlanAccion | null>;
-  /** Reemplaza los campos editables del plan. Null si el plan no existe. */
+  /** Reemplaza los campos editables del plan. Null si el plan no existe o está bloqueado por el flujo. */
   actualizar(id: number, datos: DatosEdicionPlanAccion): Promise<PlanAccion | null>;
   /**
    * Cambia el estado y escribe el evento y las notificaciones en una sola transacción.
@@ -50,5 +50,6 @@ export interface RepositorioPlanesAccion extends RepositorioNotificaciones {
   listarFlujo(id: number): Promise<EventoFlujoPlan[]>;
   /** Hashes de la evidencia del plan por id de paso. */
   hashesEvidenciaPlan(id: number): Promise<Record<number, string[]>>;
+  /** Null si el paso no existe o el plan está bloqueado por el flujo. */
   actualizarPaso(planId: number, pasoId: number, completado: boolean): Promise<PasoPlanAccion | null>;
 }

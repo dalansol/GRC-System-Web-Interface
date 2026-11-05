@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
 import request from "supertest";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { crearApp } from "../src/app.js";
 import { crearVerificadorDev } from "../src/auth/verificador.js";
 import type { EventoBitacora } from "../src/bitacora.js";
@@ -298,8 +298,8 @@ describe("criterio 2: aprobar", () => {
   it("firmaIntegra es falso si el contenido cambia después de la firma", async () => {
     const plan = await planEnRevision();
     await como(JEFA).post(ruta(plan.id, "aprobar"));
-    // Cambio directo en el repositorio: simula una modificación que no pasó por las rutas.
-    await planes.actualizarPaso(plan.id, plan.pasos[0]!.id, false);
+    // Simula una evidencia cambiada directamente, sin pasar por las rutas.
+    vi.spyOn(planes, "hashesEvidenciaPlan").mockResolvedValue({ [plan.pasos[0]!.id]: ["alterado"] });
 
     expect((await flujoDe(plan.id)).firmaIntegra).toBe(false);
   });
@@ -505,6 +505,40 @@ describe("el flujo no se puede saltar", () => {
     const plan = await planNuevo();
     const res = await como(JEFA).patch(`/api/planes-accion/${plan.id}`).send({ estado: "En Progreso" });
     expect(res.status).toBe(200);
+  });
+
+  describe("si el plan se aprueba mientras llega una edición", () => {
+    // La petición leyó el plan antes de la aprobación: buscarPorId entrega por una vez el plan anterior.
+    async function planAprobadoConLecturaAnterior() {
+      const plan = await planEnRevision();
+      const anterior = (await planes.buscarPorId(plan.id))!;
+      const editable = { ...anterior, estado: "Asignado" as const, status: "Asignado" as const };
+      await como(JEFA).post(ruta(plan.id, "aprobar"));
+      vi.spyOn(planes, "buscarPorId").mockResolvedValueOnce(editable);
+      return plan;
+    }
+
+    it("la edición del plan responde 409 y no cambia el estado", async () => {
+      const plan = await planAprobadoConLecturaAnterior();
+
+      const res = await como(JEFA).patch(`/api/planes-accion/${plan.id}`).send({ titulo: "Título tardío" });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.codigo).toBe("PLAN_BLOQUEADO");
+      const actual = await planes.buscarPorId(plan.id);
+      expect(actual).toMatchObject({ estado: "Aprobado", titulo: "Actualizar calendario" });
+    });
+
+    it("el cambio del paso responde 409 y no lo modifica", async () => {
+      const plan = await planAprobadoConLecturaAnterior();
+      const paso = plan.pasos[0]!;
+
+      const res = await como(RESPONSABLE).patch(`/api/planes-accion/${plan.id}/pasos/${paso.id}`).send({ completado: false });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.codigo).toBe("PLAN_BLOQUEADO");
+      expect((await planes.buscarPorId(plan.id))!.pasos[0]!.completado).toBe(true);
+    });
   });
 
   describe.each([

@@ -32,8 +32,8 @@ npm test
 
 | Suite | Pruebas | Resultado |
 |---|---|---|
-| Backend con base de datos | 492 | 482 aprobadas, 10 fallidas |
-| Backend sin base de datos | 492 | 372 aprobadas, 10 fallidas, 110 omitidas |
+| Backend con base de datos | 495 | 485 aprobadas, 10 fallidas |
+| Backend sin base de datos | 495 | 374 aprobadas, 10 fallidas, 111 omitidas |
 | Frontend | 200 | 200 aprobadas |
 | Revisión de tipos del backend (`corepack pnpm typecheck`) | n/a | Sin errores |
 | Compilación del frontend (`npm run build`) | n/a | Correcta |
@@ -85,6 +85,7 @@ Antes de este trabajo, el backend tenía 380 aprobadas y las mismas 10 fallidas,
 | Alguien que no es el responsable envía el plan | 403 `NO_RESPONSABLE` | `planesAccionFlujo.test.ts` | Correcto |
 | `PATCH` a un estado del flujo | 409 `ESTADO_CONTROLADO_POR_FLUJO` | `planesAccionFlujo.test.ts` | Correcto |
 | Editar, cambiar un paso o tocar evidencia de un plan bloqueado | 409 `PLAN_BLOQUEADO`, sin guardar el archivo | `planesAccionFlujo.test.ts`, `evidencias.integracion.test.ts`, punta a punta | Correcto |
+| Una edición que llega justo después de la aprobación | 409 `PLAN_BLOQUEADO`, y el plan no cambia | `planesAccionFlujo.test.ts`, `sql.integracion.test.ts` | Correcto |
 | Modificar o borrar un evento en la base | La base lo impide | `sql.integracion.test.ts` | Correcto |
 | Falla una notificación | Se revierten el estado y el evento | `sql.integracion.test.ts` | Correcto |
 | El script 044 sobre planes `En Revisión` | Los que no tienen eventos pasan a `Pendiente`; los demás no cambian | `sql.integracion.test.ts` | Correcto |

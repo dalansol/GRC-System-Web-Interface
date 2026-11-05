@@ -418,6 +418,23 @@ describe.skipIf(!conexion.servidor)("repositorio sobre PostgreSQL", () => {
       expect(await contarEventos(planId)).toBe(1);
     });
 
+    it("no escribe sobre un plan bloqueado aunque la petición lo haya leído antes", async () => {
+      const paso = (await planes.buscarPorId(planId))!.pasos[0]!;
+      await pool.query("UPDATE action_plans SET status = 'Aprobado' WHERE id = $1", [planId]);
+
+      const edicion = await planes.actualizar(planId, {
+        descripcion: "Texto tardío",
+        responsableId: ana.id,
+        fechaCompromiso: "2026-12-31",
+        estado: "En Progreso",
+      });
+
+      expect(edicion).toBeNull();
+      expect(await estadoEnBase(planId)).toBe("Aprobado");
+      expect(await planes.actualizarPaso(planId, paso.id, true)).toBeNull();
+      expect((await planes.buscarPorId(planId))!.pasos[0]!.completado).toBe(false);
+    });
+
     it("la base exige el motivo del rechazo y la firma de la aprobación", async () => {
       await expect(
         planes.transicionar(planId, transicion({ hacia: "Rechazado", accion: "rechazo", motivo: "   " })),
