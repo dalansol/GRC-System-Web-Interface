@@ -60,6 +60,7 @@ const SCRIPTS = [
   "044_flujo_aprobacion_planes.sql",
   "045_etapas_planes_accion.sql",
   "047_evaluacion_controles.sql",
+  "048_versiones_evidencia.sql",
 ];
 
 // Las tablas del modelo entidad-relación de docs/diseno/base-de-datos.md.
@@ -68,7 +69,7 @@ const TABLAS = [
   "audit_plans", "audit_procedure_type", "audit_procedures", "audit_status", "audits", "business",
   "business_units", "catalog_department", "catalog_domain", "catalogs", "conflict_declarations",
   "control_evaluation_answers", "control_evaluations", "control_horas",
-  "control_procedure", "controls", "division", "evaluation_criteria", "evidence", "findings", "fiscal_periods", "notifications", "permissions",
+  "control_procedure", "controls", "division", "evaluation_criteria", "evidence", "evidence_versions", "findings", "fiscal_periods", "notifications", "permissions",
   "processes", "risk_library", "risk_register", "role_permissions", "roles", "structure_code_counters", "structure_options", "users",
 ];
 

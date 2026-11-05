@@ -759,10 +759,7 @@ function AuditFilterCard({ audit }: { audit: AuditRecord }) {
       {xlsxEditorDoc && (
         <SpreadsheetEditor
           filename={xlsxEditorDoc.name}
-          fileVersion={3}
-          entityId={audit.id}
           onClose={() => setXlsxEditorDoc(null)}
-          onHashUpdate={() => { setXlsxEditorDoc(null); }}
         />
       )}
     </div>

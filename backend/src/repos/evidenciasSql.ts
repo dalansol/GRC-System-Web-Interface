@@ -17,9 +17,11 @@ export class RepositorioEvidenciasSql implements RepositorioEvidencias {
       [id, lector.rol, String(lector.id)],
     );
     const fila = resultado.rows[0];
-    if (!fila || (fila.mime_type !== "pdf" && fila.mime_type !== "xlsx")) return null;
+    if (!fila || !["pdf", "xlsx", "xlsm"].includes(fila.mime_type)) return null;
 
     const contenido = await this.almacenamiento.leer(fila.storage_path);
-    return contenido ? { id, nombre: fila.file_name, tipo: fila.mime_type, contenido } : null;
+    // Un libro con macros se lee igual que un .xlsx (las macros se ignoran).
+    const tipo = fila.mime_type === "pdf" ? "pdf" : "xlsx";
+    return contenido ? { id, nombre: fila.file_name, tipo, contenido } : null;
   }
 }

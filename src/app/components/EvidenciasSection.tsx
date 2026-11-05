@@ -21,8 +21,9 @@ import { ErrorApi, pedir, pedirFormData } from "../api/cliente";
 
 // ─── Evidencias Section ───────────────────────────────────────────────────────
 const BLOCKED_EXTENSIONS = [".exe", ".bat", ".js", ".msi", ".sh", ".cmd", ".vbs", ".ps1"];
-const ALLOWED_EXTENSIONS = [".pdf", ".xlsx", ".eml", ".msg", ".zip", ".7z"];
-const ALLOWED_FORMATS_LABEL = ".pdf, .xlsx, .eml, .msg, .zip y .7z";
+const ALLOWED_EXTENSIONS = [".pdf", ".xlsx", ".xlsm", ".eml", ".msg", ".zip", ".7z"];
+const LIBROS_EXCEL = ["xlsx", "xlsm"];
+const ALLOWED_FORMATS_LABEL = ".pdf, .xlsx, .xlsm, .eml, .msg, .zip y .7z";
 const MAX_FILE_SIZE_MB = 100;
 
 interface EvidenceFile {
@@ -64,7 +65,7 @@ function mapApiRow(row: any): EvidenceFile {
     uploadDate: row.created_at ? new Date(row.created_at).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
     uploadedBy: row.uploaded_by || "Auditor",
     entityId: row.entity_id,
-    version: 1,
+    version: row.version ? Number(row.version) : 1,
   };
 }
 
@@ -190,21 +191,17 @@ export default function EvidenciasSection({
     }
   };
 
-  const handleHashUpdate = (fileId: string, newHash: string, newVersion: number) => {
-    setFiles(prev => prev.map(f => f.id === fileId ? { ...f, hash: newHash, version: newVersion } : f));
-  };
-
-  const iconClass = (t: string) => t === "pdf" ? "text-red-500" : t === "xlsx" ? "text-emerald-600" : "text-blue-500";
+  const iconClass = (t: string) => t === "pdf" ? "text-red-500" : LIBROS_EXCEL.includes(t) ? "text-emerald-600" : "text-blue-500";
 
   return (
     <>
       {xlsxTarget && (
         <SpreadsheetEditor
           filename={xlsxTarget.name}
-          fileVersion={xlsxTarget.version ?? 3}
-          entityId={entityId}
+          evidenciaId={String(xlsxTarget.id)}
+          soloLectura={!puedeSubirEvidencia}
           onClose={() => setXlsxTarget(null)}
-          onHashUpdate={(hash, ver) => { handleHashUpdate(xlsxTarget.id, hash, ver); setXlsxTarget(null); }}
+          onGuardado={() => { void fetchEvidences(); }}
         />
       )}
       {iaTarget && (
@@ -267,12 +264,12 @@ export default function EvidenciasSection({
                     <Sparkles size={10} /> Analizar con IA
                   </button>
                 )}
-                {f.mimeType === "xlsx" && (
+                {LIBROS_EXCEL.includes(f.mimeType) && (
                   <button
                     onClick={() => setXlsxTarget(f)}
                     className="flex-shrink-0 flex items-center gap-1 text-[10px] px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md hover:bg-emerald-100 font-semibold transition-colors whitespace-nowrap"
                   >
-                    <FileSpreadsheet size={10} /> Editar en Expedite
+                    <FileSpreadsheet size={10} /> {puedeSubirEvidencia ? "Editar en Expedite" : "Ver en Expedite"}
                   </button>
                 )}
                 {puedeSubirEvidencia && (
@@ -285,7 +282,7 @@ export default function EvidenciasSection({
           </div>
         )}
         <div className="mt-3 pt-3 border-t border-border text-[10px] text-muted-foreground">
-          Formatos aceptados: PDF, XLSX, EML, MSG, ZIP, 7Z · Máx. {MAX_FILE_SIZE_MB} MB · Hash SHA-256 · Los archivos .xlsx se pueden editar directamente en Expedite
+          Formatos aceptados: PDF, XLSX, XLSM, EML, MSG, ZIP, 7Z · Máx. {MAX_FILE_SIZE_MB} MB · Hash SHA-256 · Los libros de Excel se pueden editar directamente en Expedite (las macros no son compatibles)
         </div>
       </Card>
     </>
