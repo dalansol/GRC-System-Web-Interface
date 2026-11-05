@@ -26,6 +26,7 @@ interface FilaPlan extends FilaHallazgo {
   root_cause: string | null;
   responsible_id: number;
   responsible_name: string;
+  created_by: number;
   due_date: string;
   status: EstadoPlanAccion;
   created_at: Date;
@@ -41,7 +42,7 @@ const SELECT_HALLAZGO = `
 
 const SELECT_PLAN = `
   SELECT p.id AS plan_id, NULL::varchar AS public_id, p.title AS plan_title, p.root_cause, p.responsible_id,
-         u.name AS responsible_name, p.due_date::text AS due_date, p.status, p.created_at,
+         u.name AS responsible_name, p.due_date::text AS due_date, p.status, p.created_at, p.created_by,
          COALESCE((
            SELECT json_agg(json_build_object(
              'id', finding.id,
@@ -108,6 +109,7 @@ function aPlan(fila: FilaPlan): PlanAccion {
     status: fila.status,
     estado: fila.status,
     creadoEn,
+    creadoPorId: fila.created_by,
     hallazgosRelacionados: fila.related_findings ?? (fila.id ? [aHallazgo(fila)] : []),
     pasos: fila.steps ?? [],
   };

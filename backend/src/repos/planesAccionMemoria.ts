@@ -7,6 +7,7 @@ interface Fila extends DatosPlanAccion {
   id: number;
   estado: PlanAccion["estado"];
   creadoEn: string;
+  creadoPorId: number;
 }
 
 // Repositorio en memoria para pruebas y desarrollo sin base de datos.
@@ -33,6 +34,7 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
           id: this.siguienteId++,
           estado: "Asignado",
           creadoEn: "2025-07-12T10:00:00.000Z",
+          creadoPorId: usuario.id,
         });
       }
     }
@@ -84,9 +86,9 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
     return fila ? this.aPlan(fila) : null;
   }
 
-  async crear(datos: DatosPlanAccion) {
+  async crear(datos: DatosPlanAccion, creadoPorId: number) {
     await this.listo;
-    const fila: Fila = { ...datos, id: this.siguienteId++, estado: "Asignado", creadoEn: new Date().toISOString() };
+    const fila: Fila = { ...datos, id: this.siguienteId++, estado: "Asignado", creadoEn: new Date().toISOString(), creadoPorId };
     this.filas.push(fila);
     return this.aPlan(fila);
   }
