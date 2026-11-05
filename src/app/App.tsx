@@ -7,7 +7,6 @@ import {
   ClipboardList,
   GitBranch,
   Settings,
-  Bell,
   ChevronRight,
   ChevronDown,
   Search,
@@ -134,6 +133,7 @@ import VistaHallazgo from "./components/VistaHallazgo";
 import VistaControles from "./components/VistaControles";
 import EvidenciasSection from "./components/EvidenciasSection";
 import VistaPlanesAccion from "./components/VistaPlanesAccion";
+import CampanaNotificaciones from "./components/CampanaNotificaciones";
 import CopilotPanel from "./components/CopilotPanel";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
 import UsuariosRolesView from "./components/UsuariosRolesView";
@@ -351,10 +351,7 @@ function TopBar({ viewLabel }: { viewLabel: string }) {
       </div>
       <div className="flex-1" />
       <div className="flex items-center gap-3">
-        <button className="relative p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-secondary transition-colors">
-          <Bell size={16} />
-          <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full" />
-        </button>
+        <CampanaNotificaciones />
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <CalendarDays size={14} />
           <span className="font-mono text-xs">
