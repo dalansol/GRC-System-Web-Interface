@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ErrorApi } from "../api/cliente";
 import * as api from "../api/asistente";
-import { AISummaryCard } from "./SharedComponents";
+import { AISummaryCard } from "./ComponentesCompartidos";
 
 vi.mock("../api/asistente", async (original) => ({
   ...(await original<typeof api>()),

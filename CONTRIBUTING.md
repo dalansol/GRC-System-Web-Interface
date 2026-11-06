@@ -18,7 +18,8 @@ src/
     api/                llamadas al backend, un archivo por módulo
     auth/               inicio de sesión
     components/         pantallas, formularios y modales
-      catalogo/         si un módulo tiene 3 archivos o más, va en su propia carpeta
+      hallazgos/        si un módulo tiene 3 archivos o más, va en su propia carpeta
+      controles/        (también catalogo/, planes-auditoria/, planes-accion/, asistente/, hoja/)
       ui/               componentes de shadcn, no se tocan
     domain/             lógica y ViewModels, sin nada de interfaz
     data/               datos de prueba mientras un módulo no se conecte al backend
@@ -69,8 +70,9 @@ Todo va en español, menos la base de datos, que ya estaba en inglés y la dejam
 | Variables y funciones | camelCase | `obtenerHallazgos` |
 | Tipos | PascalCase | `PlanAccion` |
 
-Hay algunos archivos que no siguen esto (`mock_data`, `HierarchyView`, `SharedComponents`). Los
-vamos a renombrar en la tarea #159, cuando ya se hayan juntado las ramas que los usan.
+En la tarea #159 se renombraron los archivos que no seguían esto: `mock_data` ahora es
+`datosPrueba`, `HierarchyView` es `VistaCatalogo`, `SharedComponents` es `ComponentesCompartidos`
+y `UsuariosRolesView` es `VistaUsuariosRoles`.
 
 ## Ramas
 

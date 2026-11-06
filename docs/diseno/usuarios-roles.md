@@ -162,7 +162,7 @@ src/app/api/usuarios.ts              llamadas a los endpoints
 src/app/auth/SesionContext.tsx       usuario en sesión, rol y permisos
 src/app/auth/PuertaSesion.tsx        pantallas de inicio de sesión y acceso denegado
 src/app/auth/proveedores.ts          identidad con MSAL (Entra ID) o modo de desarrollo
-src/app/components/UsuariosRolesView.tsx   vista (sale de App.tsx)
+src/app/components/VistaUsuariosRoles.tsx  vista (sale de App.tsx)
 ```
 
 - Tabla con nombre completo, correo, rol y estado.

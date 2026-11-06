@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { INITIAL_FINDINGS } from "../../data/mock_data";
+import { INITIAL_FINDINGS } from "../../data/datosPrueba";
 import { listarPlanesAccion, listarPlanesAccionDeHallazgo, type PlanAccion } from "../../api/planesAccion";
 import {
   actualizarHallazgo,
@@ -117,7 +117,7 @@ export function useHallazgosViewModel({
           await fetchPlanesRelacionados(data.map((hallazgo) => hallazgo.id));
         }
       } else {
-        // Fallback a mock_data.tsx
+        // Fallback a datosPrueba.tsx
         setHallazgos(orderFindings(INITIAL_FINDINGS as unknown as HallazgoViewModel[]));
       }
     } catch (error: any) {

@@ -8,7 +8,7 @@
  * Requisitos cubiertos: SF-06 (evaluación diseño/efectividad), SF-07 (asignación dinámica)
  */
 
-import type { ControlRecord, Finding } from "../../components/SharedComponents";
+import type { ControlRecord, Finding } from "../../components/ComponentesCompartidos";
 
 // ─── Tipos de dominio ─────────────────────────────────────────────────────────
 

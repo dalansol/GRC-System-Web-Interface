@@ -40,12 +40,12 @@ import {
   PrimaryBtn,
   GhostBtn,
   PDFPreviewModal,
-} from "../components/SharedComponents";
+} from "./ComponentesCompartidos";
 
 import type {
   StatusKey,
   NavView,
-} from "../components/SharedComponents";
+} from "./ComponentesCompartidos";
 
 import {
   INITIAL_USERS,
@@ -56,7 +56,7 @@ import {
   QUARTERLY_DATA,
   VERTICAL_DATA,
   CHART_COLORS,
-} from "../data/mock_data";
+} from "../data/datosPrueba";
 import { pedir } from "../api/cliente";
 import { listarHallazgos, type HallazgoApi } from "../api/hallazgos";
 import { listarControles } from "../api/controles";

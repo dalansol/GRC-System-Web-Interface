@@ -9,8 +9,8 @@ Historia #98, SF-07. Corridas el 2 de noviembre de 2026 en la rama `Andre`, sobr
 | Reglas | `backend/test/evaluacionesDominio.test.ts` | 20 | Funciones puras | Aprobadas |
 | API | `backend/test/evaluaciones.test.ts` | 28 | Repositorio en memoria | Aprobadas |
 | Base de datos | `backend/test/evaluaciones.integracion.test.ts` | 9 | PostgreSQL local (`expedite_test`) | Aprobadas |
-| Vista | `src/app/components/EvaluacionControl.test.tsx` | 11 | API simulada | Aprobadas |
-| Formulario de hallazgos | `src/app/components/FormularioHallazgo.test.tsx` | 5 | Componente | Aprobadas |
+| Vista | `src/app/components/controles/EvaluacionControl.test.tsx` | 11 | API simulada | Aprobadas |
+| Formulario de hallazgos | `src/app/components/hallazgos/FormularioHallazgo.test.tsx` | 5 | Componente | Aprobadas |
 | Lista de controles | `src/app/api/controles.test.ts` | 1 | API simulada | Aprobada |
 | Punta a punta | Manual con Playwright | 1 recorrido | Navegador, backend y PostgreSQL local | Aprobado |
 

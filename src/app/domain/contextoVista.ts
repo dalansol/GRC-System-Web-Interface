@@ -11,7 +11,7 @@ import {
   QUARTERLY_DATA,
   SPECIFIC_RISKS,
   TASKS,
-} from "../data/mock_data";
+} from "../data/datosPrueba";
 
 // Datos que el asistente Copilot recibe según la vista abierta. Son los mismos que la pantalla
 // muestra (hoy, datos de prueba); cuando una vista lea del backend, este módulo debe seguirla.

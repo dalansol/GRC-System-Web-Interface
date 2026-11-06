@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AlertCircle, Building2, Calendar, Landmark, Loader2, User, X } from "lucide-react";
 import type { AltaUnidadInput, DepartamentoAuditoria, PeriodoFiscal, Responsable, UnidadNegocio } from "../../api/estructura";
-import { Card } from "../SharedComponents";
+import { Card } from "../ComponentesCompartidos";
 import { CampoCodigo } from "./piezasCatalogo";
 
 interface ModalRegistrarUnidadProps {

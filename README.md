@@ -170,6 +170,7 @@ tener la URL del frontend como URI de redirección de tipo aplicación de págin
 
 ## Documentación
 
+- `CONTRIBUTING.md`: cómo trabajamos en el proyecto (carpetas, nombres, ramas, commits y pull requests).
 - `docs/diseno/base-de-datos.md`: modelo entidad-relación, conexión a la base compartida y migraciones.
 - `docs/diseno/usuarios-roles.md`: diseño de la gestión de usuarios y roles.
 - `docs/pruebas/usuarios-roles.md`: casos de prueba, resultados y defectos.

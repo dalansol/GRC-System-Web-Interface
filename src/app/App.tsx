@@ -92,7 +92,7 @@ import {
   AISummaryCard,
   exportToCSV,
   NavItem
-} from "./components/SharedComponents";
+} from "./components/ComponentesCompartidos";
 
 import type {
   // Types
@@ -106,7 +106,7 @@ import type {
   Finding,
   UserRecord,
   BilacoraEntry,
-} from "./components/SharedComponents";
+} from "./components/ComponentesCompartidos";
 
 import {
   INITIAL_FINDINGS,
@@ -127,24 +127,24 @@ import {
   BITACORA_DATA,
   DEFAULT_PERMISSIONS,
   ROLES
-} from "./data/mock_data";
+} from "./data/datosPrueba";
 
-import VistaHallazgo, { type HallazgoActivo } from "./components/VistaHallazgo";
-import VistaControles from "./components/VistaControles";
+import VistaHallazgo, { type HallazgoActivo } from "./components/hallazgos/VistaHallazgo";
+import VistaControles from "./components/controles/VistaControles";
 import EvidenciasSection from "./components/EvidenciasSection";
-import VistaPlanesAccion from "./components/VistaPlanesAccion";
+import VistaPlanesAccion from "./components/planes-accion/VistaPlanesAccion";
 import CampanaNotificaciones from "./components/CampanaNotificaciones";
 import { destinoDeNotificacion, type Notificacion } from "./api/notificaciones";
-import CopilotPanel from "./components/CopilotPanel";
+import CopilotPanel from "./components/asistente/CopilotPanel";
 import { conversacionControl, conversacionHallazgo } from "./domain/conversacionesAsistente";
 import SpreadsheetEditor from "./components/SpreadsheetEditor";
-import UsuariosRolesView from "./components/UsuariosRolesView";
-import AuditPlansView from "./components/VistaPlanesAudito";
-import VistaControlDetallado from "./components/VistaControlDetallado";
-import VistaHallazgoDetallado from "./components/VistaHallazgoDetallado";
-import { HierarchyView } from "./components/catalogo/HierarchyView";
+import VistaUsuariosRoles from "./components/VistaUsuariosRoles";
+import AuditPlansView from "./components/planes-auditoria/VistaPlanesAudito";
+import VistaControlDetallado from "./components/controles/VistaControlDetallado";
+import VistaHallazgoDetallado from "./components/hallazgos/VistaHallazgoDetallado";
+import { VistaCatalogo } from "./components/catalogo/VistaCatalogo";
 import { useSesion } from "./auth/SesionContext";
-import { CatalogosEstructuraSection } from "./components/CatalogosEstructuraSection";
+import { CatalogosEstructuraSection } from "./components/catalogo/CatalogosEstructuraSection";
 import { listarMisPlanesAccion, type PlanAccion, type SolicitudDestinoPlan } from "./api/planesAccion";
 import VistaDashboard from "./components/VistaDashboard";
 
@@ -2669,7 +2669,7 @@ export default function App() {
       case "editor":
         return <EditorView />;
       case "hierarchy":
-        return <HierarchyView />;
+        return <VistaCatalogo />;
       case "settings":
         return (
           <SettingsView
@@ -2677,7 +2677,7 @@ export default function App() {
           />
         );
       case "users":
-        return <UsuariosRolesView />;
+        return <VistaUsuariosRoles />;
       case "bitacora":
         return <BitacoraView />;
       case "plans":

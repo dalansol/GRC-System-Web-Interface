@@ -103,7 +103,7 @@ Errores: `400 DATOS_INVALIDOS` (incluye gerente que no es Jefe de Auditoría act
   - `sugerencias.ts`: áreas del catálogo que aún no tiene la subdivisión, `opcionDeCatalogo` (grafía del catálogo o null) y el filtro sin acentos (el próximo código lo da el backend).
   - `nombres.ts`: `nombreVisible` (nombre o, si no hay, código).
 - `components/catalogo/`:
-  - `HierarchyView.tsx`: página "Catálogo Organizacional". Búsqueda (código, nombre, área o riesgo), filtro por nivel de riesgo exacto (Crítico, Alto, Medio o Bajo: deja solo las subdivisiones con riesgos de ese nivel y solo esos riesgos) y una tarjeta por unidad con su **árbol**. Sustituyó al "Explorador de Riesgos Corporativos" de datos fijos.
+  - `VistaCatalogo.tsx`: página "Catálogo Organizacional". Búsqueda (código, nombre, área o riesgo), filtro por nivel de riesgo exacto (Crítico, Alto, Medio o Bajo: deja solo las subdivisiones con riesgos de ese nivel y solo esos riesgos) y una tarjeta por unidad con su **árbol**. Sustituyó al "Explorador de Riesgos Corporativos" de datos fijos.
   - `ArbolCatalogo.tsx`: **árbol de navegación** (panel izquierdo, desde `lg`): solo unidad › división › subdivisión, contraído por defecto; al navegar se abren los ancestros y con filtro se expande todo.
   - `DetalleCatalogo.tsx`: **panel de detalle**: sin selección, resumen de unidades (indicadores y barra de riesgos por nivel); en unidad y división, encabezado con indicadores y lista de hijos; en la subdivisión, pestañas de riesgos (ordenados del peor nivel) y áreas. Migas para volver.
   - `piezasCatalogo.tsx`: piezas compartidas (resumen de riesgos, chips, `NombreConCodigo`, `Sugerencias`).
@@ -111,7 +111,7 @@ Errores: `400 DATOS_INVALIDOS` (incluye gerente que no es Jefe de Auditoría act
   - `ModalPeriodos`: selector de año con un botón por trimestre (T1–T4) y otro por el año fiscal; los ya registrados (por fechas) aparecen como "Registrado" y deshabilitados. Casilla "Activar el periodo al agregarlo". Debajo, los registrados por año (trimestres y al final el año fiscal) con su botón Activar. Lógica en `domain/estructura/periodos.ts`. Se abre desde la insignia del periodo activo del encabezado (con un lápiz para indicar que se edita) (o "Configurar periodo" si no hay activo), solo para gestión.
   - Tras dar de alta una unidad se abre su detalle (con "Agregar la primera división") para seguir la jerarquía hasta el área (AC1). El diálogo de eliminación avisa de antemano si el elemento tiene dependientes y no deja confirmar; las auditorías activas las sigue validando el servidor. Si la carga falla, la vista muestra el error con "Reintentar".
 - Las acciones de escritura solo se muestran a Administrador y Jefe de Auditoría.
-- `components/CatalogosEstructuraSection.tsx`: tarjeta "Catálogos de la estructura" al final de Ajustes (`SettingsView` en `App.tsx`), solo para Administrador. Pestañas Áreas / Países o regiones con su total, buscador, alta, renombre en línea (avisa cuántos registros actualizó) y eliminación con confirmación, deshabilitada en las opciones en uso ("En uso por N").
+- `components/catalogo/CatalogosEstructuraSection.tsx`: tarjeta "Catálogos de la estructura" al final de Ajustes (`SettingsView` en `App.tsx`), solo para Administrador. Pestañas Áreas / Países o regiones con su total, buscador, alta, renombre en línea (avisa cuántos registros actualizó) y eliminación con confirmación, deshabilitada en las opciones en uso ("En uso por N").
 
 ## Fuera de alcance
 
