@@ -9,7 +9,7 @@ import {
   type UnidadNegocio,
 } from "../../api/estructura";
 import type { NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
-import { Card } from "../SharedComponents";
+import { Card } from "../ComponentesCompartidos";
 import { opcionDeCatalogo } from "../../domain/estructura/sugerencias";
 import { AyudaCatalogo, CampoCodigo, CampoSugerido } from "./piezasCatalogo";
 

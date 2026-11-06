@@ -36,7 +36,7 @@
 
 ### Tecnologías
 
-- **Frontend** exportado desde Figma Make ("Expedite GRC"). Parte de los datos sigue siendo mocks en memoria (`src/app/data/mock_data.tsx`); **usuarios y roles, planes de auditoría, planes de acción, hallazgos, controles, evidencias, la estructura organizacional (Catálogo) y el asistente de IA ya salen del backend**.
+- **Frontend** exportado desde Figma Make ("Expedite GRC"). Parte de los datos sigue siendo mocks en memoria (`src/app/data/datosPrueba.tsx`); **usuarios y roles, planes de auditoría, planes de acción, hallazgos, controles, evidencias, la estructura organizacional (Catálogo) y el asistente de IA ya salen del backend**.
 - React 18 + TypeScript + **Vite 6**, Tailwind CSS v4 (`@tailwindcss/vite`), componentes **shadcn/ui** (Radix) en `src/app/components/ui/`, iconos `lucide-react`, gráficas `recharts`, toasts `sonner`, también MUI instalado.
 - **Backend** en `backend/`: Node + Express 5 + TypeScript (módulos ES), `pg` para PostgreSQL en Supabase, `jose` para validar tokens de Entra ID, `unpdf` y `exceljs` para leer evidencias en el asistente de IA. Usa **pnpm** (`corepack pnpm ...`); la raíz usa **npm**.
 - Comandos frontend: `npm i`, `npm run dev`, `npm run build`, `npm test` (Vitest + Testing Library). Comandos backend: `corepack pnpm dev`, `test`, `typecheck`, `build`, `db:migrar`, `ia:probar` (conexión con la IA) e `ia:evaluar` (reglas de contención contra la IA real). `npm run lint` (ESLint para frontend y backend, lo corre la revisión de cada pull request) y `npm run format` (Prettier en los archivos cambiados; `format:check` solo revisa); ver `CONTRIBUTING.md`. No hay revisión de tipos en el frontend.
@@ -56,15 +56,21 @@ src/
   app/App.tsx              ← la mayoría de las vistas (en proceso de refactorización para reducir su tamaño)
   app/api/                 ← cliente HTTP y llamadas a la API
   app/auth/                ← sesión, inicio de sesión (MSAL / modo dev)
-  app/components/          ← SharedComponents (tipos y componentes base), UsuariosRolesView, VistaDashboard, VistaPlanesAudito, FormularioPlanAudito, VistaHallazgo, VistaHallazgoDetallado, FormularioHallazgo, VistaPlanesAccion, PortalPlanesAuditado, BandejaRevisionPlanes, BandejaProrrogas, HistorialFlujoPlan, InsigniaEstadoPlan, FormularioPlanAccion, VistaControles, VistaControlDetallado, FormularioAsignarControl, EvaluacionControl, EvidenciasSection, SpreadsheetEditor, PanelAsistenteEvidencia, CopilotPanel, ConflictosPlan, CampanaNotificaciones, CatalogosEstructuraSection
-  app/components/catalogo/ ← Catálogo Organizacional: HierarchyView (explorador), ArbolCatalogo (árbol de navegación), DetalleCatalogo (panel de detalle), modales y piezasCatalogo
+  app/components/          ← ComponentesCompartidos (tipos y componentes base), VistaUsuariosRoles, VistaDashboard, EvidenciasSection, SpreadsheetEditor, CampanaNotificaciones
+  app/components/hallazgos/        ← VistaHallazgo, VistaHallazgoDetallado, FormularioHallazgo
+  app/components/controles/        ← VistaControles, VistaControlDetallado, FormularioAsignarControl, EvaluacionControl
+  app/components/planes-auditoria/ ← VistaPlanesAudito, FormularioPlanAudito, ConflictosPlan
+  app/components/planes-accion/    ← VistaPlanesAccion, FormularioPlanAccion, PortalPlanesAuditado, BandejaRevisionPlanes, BandejaProrrogas, HistorialFlujoPlan, InsigniaEstadoPlan
+  app/components/asistente/        ← CopilotPanel, PanelAsistenteEvidencia
+  app/components/catalogo/ ← Catálogo Organizacional: VistaCatalogo (explorador), ArbolCatalogo (árbol de navegación), DetalleCatalogo (panel de detalle), modales, piezasCatalogo y CatalogosEstructuraSection
   app/components/hoja/     ← vista del editor de Excel: cuadrícula virtualizada, cinta, barra de fórmulas, pestañas, barra de estado, menú contextual
   app/components/ui/       ← shadcn/ui (no editar salvo necesidad)
   app/components/figma/    ← ImageWithFallback
   app/domain/              ← lógica de estado/ViewModels (hallazgos, controles, planes-auditoria) y contextoVista (datos que recibe el asistente Copilot)
   app/domain/estructura/   ← useEstructuraViewModel y lógica pura: riesgos, navegacion, sugerencias, nombres, periodos
   app/domain/hoja/         ← editor de Excel: modelo del libro, fórmulas (es/en), formato, portapapeles, operaciones, xlsx (exceljs) y estadoHoja/useHojaCalculo
-  app/data/mock_data.tsx   ← constantes y datos de prueba
+  app/data/datosPrueba.tsx ← constantes y datos de prueba
+  app/data/datosPortalAuditado.ts ← datos de prueba del portal del auditado
   imports/logo.svg         ← logo Expedite
   styles/theme.css         ← tokens de diseño (colores, radios, sidebar, charts)
 backend/
@@ -85,15 +91,15 @@ Nota: La aplicación está en proceso de refactorización hacia un enfoque MVVM 
 
 ### Mapa del frontend (buscar por nombre, las líneas cambian)
 
-- **Tipos (`components/SharedComponents.tsx`):** `NavView` (`dashboard | filter | editor | hierarchy | settings | users | plans | findings | controles | auditado | bitacora`), `DetailType`, `StatusKey`, `AuditEntity`, `GeneralRisk`, `SpecificRisk`, `ControlRecord`, `AuditPlan`, `Finding`, `ActionPlan`, `BilacoraEntry`, `UserRecord`, `Xlsx*`. `EvidenceFile` está en `EvidenciasSection.tsx`.
-- **Mocks/constantes (`data/mock_data.tsx`):** `STATUS_CONFIG`, `TASKS`, `GENERAL_RISKS`, `AUDIT_ENTITIES`, `SPECIFIC_RISKS`, `CONTROLS`, `PROCEDURE_TRACKING`, `ROLES`, `DEFAULT_PERMISSIONS`, `INITIAL_USERS`, `AUDIT_RECORDS`, `AUDIT_PLANS_DATA`, `INITIAL_FINDINGS`, `INITIAL_EVIDENCES`, `BITACORA_DATA`. `NAV_ITEMS` está en `App.tsx`.
-- **Componentes base (`components/SharedComponents.tsx`):** `StatusBadge`, `Breadcrumbs`, `PageHeader`, `Card`, `PrimaryBtn`, `GhostBtn`, `PDFPreviewModal`, `exportToCSV`. `Sidebar` y `TopBar` están en `App.tsx`.
-- **Vistas en `App.tsx`:** `FilterView`, `EditorView`, `SettingsView`, `BitacoraView` (usuarios y roles vive en `components/UsuariosRolesView.tsx`, solo para Administrador), vistas de detalle (`GeneralRiskDetailView`, `SpecificRiskDetailView`, `AuditEntityDetailView`). Ya viven en `components/`: `VistaDashboard`, `VistaPlanesAudito`, `VistaHallazgo`, `VistaHallazgoDetallado`, `VistaControles`, `VistaControlDetallado` y `VistaPlanesAccion` (sustituye al antiguo portal del auditado). El Catálogo (`HierarchyView`) ya no está en `App.tsx`: vive en `components/catalogo/` (se borró la copia antigua de datos fijos y el "Explorador de Riesgos Corporativos").
-- **IA / extras:** `GuidedTour`, `SpreadsheetEditor` (envoltura de `components/hoja/EditorHojaCalculo`: editor tipo Excel que abre y guarda el `.xlsx` real). `CopilotPanel` ya vive en `components/CopilotPanel.tsx` y `AISummaryCard` en `SharedComponents.tsx`; ambos usan la IA real (sin respuestas fijas).
+- **Tipos (`components/ComponentesCompartidos.tsx`):** `NavView` (`dashboard | filter | editor | hierarchy | settings | users | plans | findings | controles | auditado | bitacora`), `DetailType`, `StatusKey`, `AuditEntity`, `GeneralRisk`, `SpecificRisk`, `ControlRecord`, `AuditPlan`, `Finding`, `ActionPlan`, `BilacoraEntry`, `UserRecord`, `Xlsx*`. `EvidenceFile` está en `EvidenciasSection.tsx`.
+- **Mocks/constantes (`data/datosPrueba.tsx`):** `STATUS_CONFIG`, `TASKS`, `GENERAL_RISKS`, `AUDIT_ENTITIES`, `SPECIFIC_RISKS`, `CONTROLS`, `PROCEDURE_TRACKING`, `ROLES`, `DEFAULT_PERMISSIONS`, `INITIAL_USERS`, `AUDIT_RECORDS`, `AUDIT_PLANS_DATA`, `INITIAL_FINDINGS`, `INITIAL_EVIDENCES`, `BITACORA_DATA`. `NAV_ITEMS` está en `App.tsx`.
+- **Componentes base (`components/ComponentesCompartidos.tsx`):** `StatusBadge`, `Breadcrumbs`, `PageHeader`, `Card`, `PrimaryBtn`, `GhostBtn`, `PDFPreviewModal`, `exportToCSV`. `Sidebar` y `TopBar` están en `App.tsx`.
+- **Vistas en `App.tsx`:** `FilterView`, `EditorView`, `SettingsView`, `BitacoraView` (usuarios y roles vive en `components/VistaUsuariosRoles.tsx`, solo para Administrador), vistas de detalle (`GeneralRiskDetailView`, `SpecificRiskDetailView`, `AuditEntityDetailView`). Ya viven en `components/`: `VistaDashboard`, `VistaPlanesAudito`, `VistaHallazgo`, `VistaHallazgoDetallado`, `VistaControles`, `VistaControlDetallado` y `VistaPlanesAccion` (sustituye al antiguo portal del auditado). El Catálogo (`VistaCatalogo`) ya no está en `App.tsx`: vive en `components/catalogo/` (se borró la copia antigua de datos fijos y el "Explorador de Riesgos Corporativos").
+- **IA / extras:** `GuidedTour`, `SpreadsheetEditor` (envoltura de `components/hoja/EditorHojaCalculo`: editor tipo Excel que abre y guarda el `.xlsx` real). `CopilotPanel` ya vive en `components/asistente/CopilotPanel.tsx` y `AISummaryCard` en `ComponentesCompartidos.tsx`; ambos usan la IA real (sin respuestas fijas).
 
 ### Convenciones de código
 
-- Reutiliza los componentes base de `SharedComponents.tsx` (`Card`, `PageHeader`, `PrimaryBtn`, `StatusBadge`…) antes de crear nuevos.
+- Reutiliza los componentes base de `ComponentesCompartidos.tsx` (`Card`, `PageHeader`, `PrimaryBtn`, `StatusBadge`…) antes de crear nuevos.
 - Colores vía tokens de `src/styles/theme.css` (`--primary #0F4FFF`, `--sidebar #0F1B2D`, `--chart-1..5`, etc.); no hardcodear paletas nuevas.
 - Si agregas mucho código nuevo, está bien extraerlo a archivos bajo `src/app/` (`App.tsx` todavía es muy grande), pero sigue el estilo existente.
 

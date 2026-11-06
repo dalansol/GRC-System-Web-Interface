@@ -1,5 +1,5 @@
 import { pedir } from "./cliente";
-import type { ControlRecord } from "../components/SharedComponents";
+import type { ControlRecord } from "../components/ComponentesCompartidos";
 
 interface ControlApi {
   id: string;

@@ -11,7 +11,7 @@ import {
 import { conteosRama, resumenHijos, type RutaCatalogo, type RutaResuelta } from "../../domain/estructura/navegacion";
 import { ORDEN_NIVEL, riesgosDeNodo } from "../../domain/estructura/riesgos";
 import type { NodoSeleccionado } from "../../domain/estructura/useEstructuraViewModel";
-import { Card } from "../SharedComponents";
+import { Card } from "../ComponentesCompartidos";
 import { nombreVisible, type ConNombre } from "../../domain/estructura/nombres";
 import {
   BarraRiesgos,

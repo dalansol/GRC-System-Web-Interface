@@ -38,7 +38,7 @@ npm test
 | Backend: `test/estructura.test.ts` | 39 | 39 aprobadas |
 | Backend: `test/catalogos.test.ts` | 10 | 10 aprobadas |
 | Base de datos: `test/estructura.integracion.test.ts` | 16 | Omitidas (sin conexión) |
-| Frontend: `HierarchyView.test.tsx` | 29 | 29 aprobadas |
+| Frontend: `VistaCatalogo.test.tsx` | 29 | 29 aprobadas |
 | Frontend: `CatalogosEstructuraSection.test.tsx` | 6 | 6 aprobadas |
 | Frontend: `domain/estructura/nombres.test.ts` | 2 | 2 aprobadas |
 | Frontend: `domain/estructura/riesgos.test.ts` | 7 | 7 aprobadas |

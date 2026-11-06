@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
-import { AUDIT_PLANS_DATA } from "../../data/mock_data";
+import { AUDIT_PLANS_DATA } from "../../data/datosPrueba";
 import { pedir } from "../../api/cliente";
 import { useSesion } from "../../auth/SesionContext";
 
@@ -88,7 +88,7 @@ export function useAuditPlansViewModel() {
         const data = await pedir<PlanApi[]>("/planes");
         setPlans(orderPlans(data.map(convertirPlan)));
       } else {
-        // Fallback a mock_data.ts
+        // Fallback a datosPrueba.tsx
         const plans = (AUDIT_PLANS_DATA as unknown as AuditPlanViewModel[]).map((plan) => ({
           ...plan,
           responsible: plan.responsible,

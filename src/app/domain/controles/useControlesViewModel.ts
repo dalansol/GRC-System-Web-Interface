@@ -1,7 +1,7 @@
 /**
  * useControlesViewModel.ts — Capa de Aplicación / Use Cases
  *
- * Orquesta los datos (mock_data) y las reglas de dominio (controles.domain).
+ * Orquesta los datos (datosPrueba) y las reglas de dominio (controles.domain).
  * Es el único lugar que combina ambos. No sabe nada de HTML ni de CSS.
  *
  * El componente de presentación (VistaControles) solo llama a este hook
@@ -9,7 +9,7 @@
  */
 
 import { useMemo, useState } from "react";
-import type { ControlRecord, Finding } from "../../components/SharedComponents";
+import type { ControlRecord, Finding } from "../../components/ComponentesCompartidos";
 import {
   nivelRiesgoControl,
   calcularKPIsControles,

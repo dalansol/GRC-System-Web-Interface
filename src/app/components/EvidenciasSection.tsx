@@ -14,8 +14,8 @@ import { toast } from "sonner";
 
 import { ROLES_ASISTENTE } from "../api/asistente";
 import { useSesion } from "../auth/SesionContext";
-import PanelAsistenteEvidencia from "./PanelAsistenteEvidencia";
-import { Card } from "./SharedComponents";
+import PanelAsistenteEvidencia from "./asistente/PanelAsistenteEvidencia";
+import { Card } from "./ComponentesCompartidos";
 import SpreadsheetEditor from "./SpreadsheetEditor.tsx";
 import { ErrorApi, pedir, pedirFormData } from "../api/cliente";
 

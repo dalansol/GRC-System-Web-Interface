@@ -2,7 +2,7 @@ import { useState } from "react";
 import { AlertCircle, GitBranch, Loader2, X } from "lucide-react";
 import { ETIQUETA_NIVEL, type DatosNodo } from "../../api/estructura";
 import type { AltaNodoContexto } from "../../domain/estructura/useEstructuraViewModel";
-import { Card } from "../SharedComponents";
+import { Card } from "../ComponentesCompartidos";
 import { opcionDeCatalogo } from "../../domain/estructura/sugerencias";
 import { AyudaCatalogo, CampoCodigo, CampoSugerido } from "./piezasCatalogo";
 
