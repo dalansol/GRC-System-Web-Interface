@@ -12,6 +12,10 @@ import type { AlmacenamientoArchivos } from "../almacenamiento.js";
 export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router {
   const router = Router();
 
+  // Respuesta 403 común a todas las rutas: la regla de quién puede subir, eliminar o versionar (SF-08, SF-16).
+  const prohibido = (res: Response, mensaje: string) =>
+    res.status(403).json({ error: { codigo: "ROL_NO_AUTORIZADO", mensaje } });
+
   // ─── GET: Fetch evidences for an entity ──────────────────────────────────────
   router.get("/evidencias", async (req: Request, res: Response) => {
     const { entityId, entityType, auditId } = req.query;
@@ -143,12 +147,7 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
             [controlId || entityId, String(auditId ?? ""), usuario.id],
           );
           if (asignacion.rowCount !== 1) {
-            return res.status(403).json({
-              error: {
-                codigo: "ROL_NO_AUTORIZADO",
-                mensaje: "Solo el Auditor asignado puede enviar evidencia para este control.",
-              },
-            });
+            return prohibido(res, "Solo el Auditor asignado puede enviar evidencia para este control.");
           }
         }
 
@@ -233,21 +232,11 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
       if (evidence.entity_type === "hallazgo") {
         // Hallazgo: quien la subió, igual que en la consulta (quién puede subir sigue TBD).
         if (evidence.uploaded_by !== String(usuario.id)) {
-          return res.status(403).json({
-            error: {
-              codigo: "ROL_NO_AUTORIZADO",
-              mensaje: "Solo quien subió la evidencia puede eliminarla.",
-            },
-          });
+          return prohibido(res, "Solo quien subió la evidencia puede eliminarla.");
         }
       } else {
         if (evidence.control_id === null) {
-          return res.status(403).json({
-            error: {
-              codigo: "ROL_NO_AUTORIZADO",
-              mensaje: "Solo el auditor asignado puede eliminar evidencia de un control.",
-            },
-          });
+          return prohibido(res, "Solo el auditor asignado puede eliminar evidencia de un control.");
         }
 
         const asignacion = await pool.query(
@@ -259,12 +248,7 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
           [evidence.control_id, usuario.id],
         );
         if (asignacion.rowCount !== 1) {
-          return res.status(403).json({
-            error: {
-              codigo: "ROL_NO_AUTORIZADO",
-              mensaje: "Solo el auditor asignado puede eliminar evidencia de este control.",
-            },
-          });
+          return prohibido(res, "Solo el auditor asignado puede eliminar evidencia de este control.");
         }
       }
 
@@ -440,7 +424,7 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
         if (!evidencia) return sinEvidencia(res);
         if (!LIBROS.includes(evidencia.mime_type)) return noEsLibro(res);
         if (!(await puedeModificar(evidencia, usuario))) {
-          return res.status(403).json({ error: { codigo: "ROL_NO_AUTORIZADO", mensaje: "No puedes guardar cambios en esta evidencia." } });
+          return prohibido(res, "No puedes guardar cambios en esta evidencia.");
         }
 
         const hash = crypto.createHash("sha256").update(file.buffer).digest("hex");
