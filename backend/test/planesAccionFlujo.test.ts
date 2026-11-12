@@ -142,7 +142,7 @@ describe("alta de un plan", () => {
     expect(eventos.map((e) => e.accion)).toContain("plan_accion.alta");
   });
 
-  it.each([RESPONSABLE, ASIGNADO, JEFA, ADMIN, AJENO])("%s no puede crear planes", async (correo) => {
+  it.each([ASIGNADO, JEFA, ADMIN, AJENO])("%s no puede crear planes", async (correo) => {
     const res = await como(correo).post("/api/planes-accion").send(await datosPlan());
 
     expect(res.status).toBe(403);
@@ -294,7 +294,7 @@ describe("edición según la etapa", () => {
     expect(res.status).toBe(400);
   });
 
-  it.each([JEFA, ADMIN, RESPONSABLE, AJENO])("%s no edita planes", async (correo) => {
+  it.each([JEFA, ADMIN, ASIGNADO, AJENO])("%s no edita planes", async (correo) => {
     const plan = await planBorrador();
 
     const res = await como(correo).patch(`/api/planes-accion/${plan.id}`).send({ titulo: "Otro" });
@@ -885,7 +885,8 @@ describe("consulta del flujo", () => {
     expect((await como(correo).get(ruta(plan.id, "flujo"))).status).toBe(200);
   });
 
-  it.each([RESPONSABLE, ASIGNADO, AJENO])("%s no lo consulta, aunque participe en el plan", async (correo) => {
+  // El Jefe Auditado sí consulta el de los planes que gestiona (ver "Jefe Auditado").
+  it.each([ASIGNADO, AJENO])("%s no lo consulta, aunque participe en el plan", async (correo) => {
     const plan = await planPendienteDeCierre();
     expect((await como(correo).get(ruta(plan.id, "flujo"))).status).toBe(403);
   });
@@ -962,7 +963,8 @@ describe("portal del auditado", () => {
     ["GET", "/api/planes-accion/responsables"],
     ["GET", "/api/planes-accion/hallazgos/HAL-2025-003"],
   ])("no puede consultar %s %s", async (_metodo, direccion) => {
-    for (const correo of [RESPONSABLE, ASIGNADO]) {
+    // El Jefe Auditado sí las consulta: crea y edita planes de su unidad (ver "Jefe Auditado").
+    for (const correo of [ASIGNADO]) {
       const res = await como(correo).get(direccion);
       expect(res.status).toBe(403);
       expect(res.body.error.codigo).toBe("ROL_NO_AUTORIZADO");
@@ -1274,5 +1276,100 @@ describe("el flujo no se puede saltar", () => {
       expect(res.status).toBe(409);
       expect(res.body.error.codigo).toBe("PLAN_BLOQUEADO");
     });
+  });
+});
+
+// El Jefe Auditado crea y edita planes que creó o de hallazgos de su unidad, pero no los envía a revisión.
+// En memoria, HAL-2025-003 es de su unidad y HAL-2025-001 (el del plan sembrado) no.
+describe("Jefe Auditado", () => {
+  const JEFE_AUDITADO = RESPONSABLE;
+
+  it("crea un plan en Borrador para un hallazgo de su unidad, aunque sea su responsable", async () => {
+    const res = await como(JEFE_AUDITADO).post("/api/planes-accion").send(await datosPlan());
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ estado: "Borrador", etapa: "definicion", creadoPorId: await idDe(JEFE_AUDITADO) });
+    expect(eventos).toContainEqual(expect.objectContaining({ accion: "plan_accion.alta", actor: JEFE_AUDITADO }));
+  });
+
+  it("no crea planes para hallazgos de otra unidad", async () => {
+    const res = await como(JEFE_AUDITADO).post("/api/planes-accion").send(await datosPlan({ hallazgoId: "HAL-2025-001" }));
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.codigo).toBe("FUERA_DE_UNIDAD");
+  });
+
+  it("no crea un plan si uno de sus hallazgos es de otra unidad", async () => {
+    const res = await como(JEFE_AUDITADO)
+      .post("/api/planes-accion")
+      .send(await datosPlan({ hallazgoIds: ["HAL-2025-003", "HAL-2025-001"] }));
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.codigo).toBe("FUERA_DE_UNIDAD");
+  });
+
+  it("ve los planes de su unidad y los que creó, pero no los demás", async () => {
+    const deSuUnidad = await planBorrador();
+
+    const res = await como(JEFE_AUDITADO).get("/api/planes-accion");
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((plan: { id: number }) => plan.id)).toEqual([deSuUnidad.id]);
+    expect(res.body[0]).toHaveProperty("causaRaiz");
+  });
+
+  it("consulta los responsables y los hallazgos de su unidad para el formulario", async () => {
+    expect((await como(JEFE_AUDITADO).get("/api/planes-accion/responsables")).status).toBe(200);
+    expect((await como(JEFE_AUDITADO).get("/api/planes-accion/hallazgos/HAL-2025-003")).status).toBe(200);
+    const ajeno = await como(JEFE_AUDITADO).get("/api/planes-accion/hallazgos/HAL-2025-001");
+    expect(ajeno.status).toBe(403);
+    expect(ajeno.body.error.codigo).toBe("FUERA_DE_UNIDAD");
+  });
+
+  it("edita un plan de su unidad aunque sea su responsable", async () => {
+    const plan = await planBorrador();
+
+    const res = await como(JEFE_AUDITADO).patch(`/api/planes-accion/${plan.id}`).send({ titulo: "Calendario corregido" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.titulo).toBe("Calendario corregido");
+    expect(eventos).toContainEqual(expect.objectContaining({ accion: "plan_accion.edicion", actor: JEFE_AUDITADO }));
+  });
+
+  it("no edita un plan de otra unidad que no creó", async () => {
+    const ajeno = await planBorrador({ hallazgoId: "HAL-2025-001" });
+
+    const res = await como(JEFE_AUDITADO).patch(`/api/planes-accion/${ajeno.id}`).send({ titulo: "Otro" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.codigo).toBe("FUERA_DE_UNIDAD");
+  });
+
+  it("no edita un plan en revisión", async () => {
+    const plan = await enRevisionDeDefinicion();
+
+    const res = await como(JEFE_AUDITADO).patch(`/api/planes-accion/${plan.id}`).send({ titulo: "Otro" });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.codigo).toBe("PLAN_BLOQUEADO");
+  });
+
+  it("no envía planes a revisión: eso sigue siendo del auditor", async () => {
+    const creado = (await como(JEFE_AUDITADO).post("/api/planes-accion").send(await datosPlan())).body as PlanCreado;
+
+    const res = await como(JEFE_AUDITADO).post(ruta(creado.id, "enviar-revision"));
+
+    expect(res.status).toBe(403);
+    expect(await estadoDe(creado.id)).toBe("Borrador");
+    expect((await como(AUDITORA).post(ruta(creado.id, "enviar-revision"))).status).toBe(200);
+  });
+
+  it("consulta el historial del flujo de los planes que gestiona, no el de otros", async () => {
+    const propio = await planBorrador();
+    const ajeno = await planBorrador({ hallazgoId: "HAL-2025-001" });
+
+    expect((await como(JEFE_AUDITADO).get(ruta(propio.id, "flujo"))).status).toBe(200);
+    expect((await como(JEFE_AUDITADO).get(ruta(ajeno.id, "flujo"))).status).toBe(403);
+    expect((await como(ASIGNADO).get(ruta(propio.id, "flujo"))).status).toBe(403);
   });
 });

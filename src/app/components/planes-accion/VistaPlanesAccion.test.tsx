@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "../../api/planesAccion";
 import type { PlanAccion } from "../../api/planesAccion";
+import { suscribirCambiosPlanes } from "../../api/cambiosPlanes";
 import VistaPlanesAccion from "./VistaPlanesAccion";
 
 vi.mock("../../api/planesAccion", async (original) => ({
@@ -28,7 +29,15 @@ vi.mock("./BandejaProrrogas", () => ({
   default: ({ destino }: { destino?: { planId: number } }) => <div data-testid="prorrogas" data-plan={destino?.planId} />,
 }));
 vi.mock("./PortalPlanesAuditado", () => ({
-  default: ({ destino }: { destino?: { planId: number } }) => <div data-testid="portal" data-plan={destino?.planId} />,
+  default: ({ destino, onPlanNoEncontrado }: { destino?: { planId: number }; onPlanNoEncontrado?: () => void }) => (
+    <div data-testid="portal" data-plan={destino?.planId}>
+      {onPlanNoEncontrado && (
+        <button type="button" onClick={onPlanNoEncontrado}>
+          Plan no encontrado
+        </button>
+      )}
+    </div>
+  ),
 }));
 vi.mock("./FormularioPlanAccion", () => ({
   default: ({ plan, onGuardado }: { plan: PlanAccion; onGuardado: (plan: PlanAccion) => void }) => (
@@ -95,14 +104,32 @@ async function abrirDetalle(datos: PlanAccion) {
 }
 
 describe("qué ve cada rol", () => {
-  it.each(["Jefe Auditado", "Empleado Auditado"])("%s ve solo su portal y nunca la lista completa", async (rol) => {
-    sesion.usuario = { id: 6, rol };
+  it("el Empleado Auditado ve solo su portal y nunca la lista completa", async () => {
+    sesion.usuario = { id: 6, rol: "Empleado Auditado" };
 
     render(<VistaPlanesAccion />);
 
     expect(await screen.findByTestId("portal")).toBeInTheDocument();
     expect(api.listarPlanesAccion).not.toHaveBeenCalled();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+  });
+
+  it("el Jefe Auditado empieza en su portal y edita los planes de su unidad, sin enviarlos a validación", async () => {
+    sesion.usuario = { id: 6, rol: "Jefe Auditado" };
+    vi.mocked(api.listarPlanesAccion).mockResolvedValue([conEstado("Borrador", { etapa: "definicion" })]);
+    render(<VistaPlanesAccion />);
+    const usuario = userEvent.setup();
+
+    expect(await screen.findByTestId("portal")).toBeInTheDocument();
+    expect(api.listarPlanesAccion).not.toHaveBeenCalled();
+
+    await usuario.click(screen.getByRole("tab", { name: "Planes de mi unidad" }));
+    await usuario.click(await screen.findByRole("button", { name: /Ver detalles/ }));
+
+    // Es el responsable del plan (id 6) y aun así lo edita.
+    expect(screen.getByRole("button", { name: "Editar plan" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Enviar a validación/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Bandeja de revisión" })).not.toBeInTheDocument();
   });
 
   it("el Jefe de Auditoría ve la bandeja y las prórrogas", async () => {
@@ -223,18 +250,52 @@ describe("plan rechazado", () => {
     evidenciasObservadas: [{ evidenciaId: "EV-1", pasoId: 11, nombre: "conciliacion.pdf" }],
   };
 
-  it("muestra el motivo y los archivos señalados, y permite reenviar", async () => {
+  it("muestra el motivo y los archivos señalados mientras el paso siga sin corregirse", async () => {
+    vi.mocked(api.obtenerFlujoPlan).mockResolvedValue({ eventos: [evento], firmaIntegra: null });
+
+    await abrirDetalle(conEstado("Rechazado", { pasos: [paso(false)] }));
+
+    expect(await screen.findByText(/Falta evidencia del paso 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Archivos señalados: conciliacion\.pdf/)).toBeInTheDocument();
+  });
+
+  it("con los pasos señalados ya corregidos quita el aviso y permite reenviar", async () => {
     vi.mocked(api.obtenerFlujoPlan).mockResolvedValue({ eventos: [evento], firmaIntegra: null });
     vi.mocked(api.enviarPlanARevision).mockResolvedValue(conEstado("Pendiente"));
 
     const usuario = await abrirDetalle(conEstado("Rechazado"));
 
-    expect(await screen.findByText(/Falta evidencia del paso 2/)).toBeInTheDocument();
-    expect(screen.getByText(/conciliacion\.pdf/)).toBeInTheDocument();
+    await waitFor(() => expect(api.obtenerFlujoPlan).toHaveBeenCalled());
+    expect(screen.queryByText(/Falta evidencia del paso 2/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/corrígelo y reenvíalo/)).not.toBeInTheDocument();
 
     await usuario.click(screen.getByRole("button", { name: "Reenviar a revisión" }));
 
     await waitFor(() => expect(api.enviarPlanARevision).toHaveBeenCalledWith(7));
+  });
+
+  it("el aviso desaparece al volver a marcar el paso señalado", async () => {
+    sesion.usuario = { id: 6, rol: "Jefe Auditado" };
+    vi.mocked(api.obtenerFlujoPlan).mockResolvedValue({ eventos: [evento], firmaIntegra: null });
+    vi.mocked(api.actualizarPasoPlanAccion).mockResolvedValue(paso(true));
+    vi.mocked(api.listarPlanesAccion).mockResolvedValue([conEstado("Rechazado", { pasos: [paso(false)] })]);
+    render(<VistaPlanesAccion />);
+    const usuario = userEvent.setup();
+    await usuario.click(screen.getByRole("tab", { name: "Planes de mi unidad" }));
+    await usuario.click(await screen.findByRole("button", { name: /Ver detalles/ }));
+    expect(await screen.findByText(/Falta evidencia del paso 2/)).toBeInTheDocument();
+
+    await usuario.click(screen.getByTitle("Marcar como completado"));
+
+    await waitFor(() => expect(screen.queryByText(/Falta evidencia del paso 2/)).not.toBeInTheDocument());
+  });
+
+  it("un rechazo sin archivos señalados mantiene el aviso hasta reenviar", async () => {
+    vi.mocked(api.obtenerFlujoPlan).mockResolvedValue({ eventos: [{ ...evento, evidenciasObservadas: [] }], firmaIntegra: null });
+
+    await abrirDetalle(conEstado("Rechazado"));
+
+    expect(await screen.findByText(/Falta evidencia del paso 2/)).toBeInTheDocument();
   });
 
   it("si no se puede leer el motivo, sigue permitiendo reenviar", async () => {
@@ -365,5 +426,67 @@ describe("llegar desde una notificación", () => {
     render(<VistaPlanesAccion destino={destino("seguimiento")} />);
 
     expect(await screen.findByTestId("portal")).toHaveAttribute("data-plan", "7");
+  });
+
+  it("si el plan no está entre los asignados del Jefe Auditado, lo abre entre los de su unidad", async () => {
+    sesion.usuario = { id: 6, rol: "Jefe Auditado" };
+    vi.mocked(api.listarPlanesAccion).mockResolvedValue([plan()]);
+    render(<VistaPlanesAccion destino={destino("seguimiento")} />);
+
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Plan no encontrado" }));
+
+    expect(await screen.findByRole("button", { name: /Ocultar detalles/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Planes de mi unidad" })).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+describe("recarga en vivo", () => {
+  /** Captura al oyente que la vista registra para los avisos de cambios. */
+  function capturarAviso() {
+    let oyente: (() => void) | null = null;
+    vi.mocked(suscribirCambiosPlanes).mockImplementation((nuevo) => {
+      oyente = nuevo;
+      return () => {};
+    });
+    return () => oyente!();
+  }
+
+  it("al cambiar un plan recarga la lista sin indicador de carga y conserva el plan abierto", async () => {
+    const avisar = capturarAviso();
+    await abrirDetalle(conEstado("Borrador", { etapa: "definicion" }));
+    vi.mocked(api.listarPlanesAccion).mockResolvedValue([conEstado("Pendiente", { etapa: "definicion" })]);
+
+    avisar();
+
+    await waitFor(() => expect(api.listarPlanesAccion).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/Cargando planes de acción/)).not.toBeInTheDocument();
+    expect(await screen.findAllByText("Pendiente")).not.toHaveLength(0);
+    expect(screen.getByRole("button", { name: /Ocultar detalles/ })).toBeInTheDocument();
+  });
+
+  it("varios avisos seguidos producen una sola recarga", async () => {
+    const avisar = capturarAviso();
+    render(<VistaPlanesAccion />);
+    await screen.findByText(/No hay planes de acción/);
+
+    avisar();
+    avisar();
+    avisar();
+
+    await waitFor(() => expect(api.listarPlanesAccion).toHaveBeenCalledTimes(2));
+    await new Promise((listo) => setTimeout(listo, 400));
+    expect(api.listarPlanesAccion).toHaveBeenCalledTimes(2);
+  });
+
+  it("si la recarga en vivo falla no muestra un error", async () => {
+    const avisar = capturarAviso();
+    render(<VistaPlanesAccion />);
+    await screen.findByText(/No hay planes de acción/);
+    vi.mocked(api.listarPlanesAccion).mockRejectedValue(new Error("Sin conexión"));
+
+    avisar();
+
+    await waitFor(() => expect(api.listarPlanesAccion).toHaveBeenCalledTimes(2));
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });

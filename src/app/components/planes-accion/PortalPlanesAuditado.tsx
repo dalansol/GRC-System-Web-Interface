@@ -5,12 +5,15 @@ import { toast } from "sonner";
 import { Card } from "../ComponentesCompartidos";
 import EvidenciasSection from "../EvidenciasSection";
 import InsigniaEstadoPlan from "./InsigniaEstadoPlan";
+import { useCambiosPlanes } from "./useCambiosPlanes";
 import { desplazarAElemento } from "../desplazarAElemento";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import {
   actualizarPasoPlanAccion,
   listarPlanesAuditado,
+  observacionesPendientes,
   planBloqueado,
+  rechazoVigente,
   solicitarProrroga,
   type PasoAuditado,
   type PlanAuditado,
@@ -20,7 +23,14 @@ import {
 const mensajeDe = (error: unknown, respaldo: string) => (error instanceof Error ? error.message : respaldo);
 
 /** Vista simplificada del auditado (UF-13, SF-16): solo lo que tiene asignado, su evidencia y el avance. */
-export default function PortalPlanesAuditado({ destino }: { destino?: SolicitudDestinoPlan | null }) {
+export default function PortalPlanesAuditado({
+  destino,
+  onPlanNoEncontrado,
+}: {
+  destino?: SolicitudDestinoPlan | null;
+  /** Si se indica, se llama en lugar de avisar cuando el plan del destino no está entre los asignados. */
+  onPlanNoEncontrado?: () => void;
+}) {
   const [planes, setPlanes] = useState<PlanAuditado[]>([]);
   const [cargando, setCargando] = useState(true);
   const [pasoAbierto, setPasoAbierto] = useState<number | null>(null);
@@ -29,19 +39,26 @@ export default function PortalPlanesAuditado({ destino }: { destino?: SolicitudD
   // Pasos con un cambio en curso: un doble clic no debe mandar otro.
   const pasosEnCurso = useRef(new Set<number>());
 
-  const cargar = async () => {
-    setCargando(true);
+  // Solo se usa la respuesta de la última petición: una recarga en vivo no debe pisar otra más reciente.
+  const ultimaPeticion = useRef(0);
+  // `silencioso`: recarga en vivo, sin indicador de carga ni avisos de error.
+  const cargar = async ({ silencioso = false } = {}) => {
+    const peticion = ++ultimaPeticion.current;
+    if (!silencioso) setCargando(true);
     try {
       const lista = await listarPlanesAuditado();
+      if (peticion !== ultimaPeticion.current) return null;
       setPlanes(lista);
       return lista;
     } catch (error) {
-      toast.error(mensajeDe(error, "No se pudieron cargar tus planes de acción."));
+      if (!silencioso && peticion === ultimaPeticion.current) toast.error(mensajeDe(error, "No se pudieron cargar tus planes de acción."));
       return null;
     } finally {
-      setCargando(false);
+      if (peticion === ultimaPeticion.current) setCargando(false);
     }
   };
+
+  useCambiosPlanes(() => void cargar({ silencioso: true }));
 
   useEffect(() => {
     void cargar().then((lista) => {
@@ -49,6 +66,8 @@ export default function PortalPlanesAuditado({ destino }: { destino?: SolicitudD
       if (lista.some((plan) => plan.id === destino.planId)) {
         setDestacadoId(destino.planId);
         desplazarAElemento(`plan-auditado-${destino.planId}`);
+      } else if (onPlanNoEncontrado) {
+        onPlanNoEncontrado();
       } else {
         toast.error("Ese plan ya no está entre tus planes.");
       }
@@ -135,6 +154,9 @@ export default function PortalPlanesAuditado({ destino }: { destino?: SolicitudD
         planes.map((plan) => {
           const abierto = !planBloqueado(plan);
           const prorrogaAbierta = plan.prorroga?.estado === "Pendiente";
+          // Los avisos del rechazo se van conforme se corrige cada paso señalado (se vuelve a marcar como completado).
+          const pendientes = plan.rechazo ? observacionesPendientes(plan.rechazo.evidenciasObservadas, plan.pasos) : [];
+          const mostrarRechazo = Boolean(plan.rechazo && rechazoVigente(plan.rechazo.evidenciasObservadas, plan.pasos));
           return (
             <div
               key={plan.id}
@@ -159,7 +181,7 @@ export default function PortalPlanesAuditado({ destino }: { destino?: SolicitudD
                   <InsigniaEstadoPlan estado={plan.estado} />
                 </div>
 
-                {plan.rechazo && (
+                {plan.rechazo && mostrarRechazo && (
                   <div className="rounded-lg border border-red-200 bg-red-50 p-3.5 text-xs text-red-700">
                     <div className="mb-1 flex items-center gap-1.5 font-bold">
                       <AlertTriangle size={14} />
@@ -171,7 +193,7 @@ export default function PortalPlanesAuditado({ destino }: { destino?: SolicitudD
 
                 <ul className="space-y-2.5">
                   {plan.pasos.map((paso) => {
-                    const observados = plan.rechazo?.evidenciasObservadas.filter((evidencia) => evidencia.pasoId === paso.id) ?? [];
+                    const observados = pendientes.filter((evidencia) => evidencia.pasoId === paso.id);
                     const expandido = pasoAbierto === paso.id;
                     const editable = paso.esMio && abierto;
                     const etiquetaMarca = editable

@@ -1,15 +1,19 @@
 import { Router, type RequestHandler } from "express";
 import type { RegistrarEvento } from "../bitacora.js";
+import { publicarCambioPlanes, suscribirCambiosPlanes } from "../cambiosPlanes.js";
 import {
   abiertoParaAuditado,
   destinatariosCambio,
   esAuditado,
+  esJefeAuditado,
   ESTADOS_BLOQUEADOS,
   ESTADOS_EDICION_MANUAL,
   estadosEnviables,
   huellaContenidoPlan,
   impedimentoEnvio,
   impedimentoRevision,
+  ROL_JEFE_AUDITADO,
+  ROLES_EDICION_PLAN,
   ROLES_GESTION_PLAN,
   ROLES_REVISION,
   validarMotivoRechazo,
@@ -57,6 +61,19 @@ const sinAuditados: RequestHandler = (_req, res, next) => {
   }
   next();
 };
+
+/** Como `sinAuditados`, pero deja pasar al Jefe Auditado, que crea y edita planes de su unidad. */
+const sinAuditadosSalvoJefe: RequestHandler = (_req, res, next) => {
+  const { rol } = usuarioEnSesion(res);
+  if (esAuditado(rol) && !esJefeAuditado(rol)) {
+    throw new ErrorApi(403, "ROL_NO_AUTORIZADO", "No tienes acceso a esta información.");
+  }
+  next();
+};
+
+const LATIDO_EVENTOS_MS = 25_000;
+
+const MENSAJE_FUERA_DE_UNIDAD = "Solo puedes gestionar planes de acción que creaste o de hallazgos de tu unidad de negocio.";
 
 function resumenPasos(pasos: readonly { descripcion: string; usuarioAsignadoId: number; fechaCompromiso: string | null }[]) {
   return JSON.stringify(pasos.map(({ descripcion, usuarioAsignadoId, fechaCompromiso }) => ({ descripcion, usuarioAsignadoId, fechaCompromiso })));
@@ -108,6 +125,15 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     }
   }
 
+  /** El Jefe Auditado solo gestiona los planes que creó y los que tienen un hallazgo de su unidad. */
+  async function exigirAlcanceJefeAuditado(plan: PlanAccion, usuario: { id: number; rol: string; business_unit_id: number }) {
+    if (!esJefeAuditado(usuario.rol) || plan.creadoPorId === usuario.id) return;
+    const ids = plan.hallazgosRelacionados.map((hallazgo) => hallazgo.id);
+    if ((await repo.hallazgosDeUnidad(ids, usuario.business_unit_id)).length === 0) {
+      throw new ErrorApi(403, "FUERA_DE_UNIDAD", MENSAJE_FUERA_DE_UNIDAD);
+    }
+  }
+
   async function revisoresDe(plan: PlanAccion): Promise<number[]> {
     const activos = (await usuarios.listarUsuarios()).filter(
       (candidato) => candidato.estado === "active" && impedimentoRevision(plan, candidato) === null,
@@ -145,8 +171,44 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
   const conflictoConcurrente = () =>
     new ErrorApi(409, "ESTADO_INVALIDO", "Otro usuario ya actuó sobre este plan. Actualiza la lista.");
 
-  rutas.get("/planes-accion", sinAuditados, async (_req, res) => {
-    res.json(await repo.listar());
+  // Cualquier escritura que termina bien en /planes-accion avisa a las pantallas abiertas para que se recarguen.
+  rutas.use("/planes-accion", (req, res, next) => {
+    if (req.method !== "GET") {
+      res.on("finish", () => {
+        if (res.statusCode < 400) publicarCambioPlanes();
+      });
+    }
+    next();
+  });
+
+  // Avisos en vivo (Server-Sent Events): la conexión queda abierta y recibe "planes" cuando algo cambió.
+  // No lleva datos, así que basta con tener sesión. El latido evita que un proxy la cierre por inactividad.
+  rutas.get("/planes-accion/eventos", (_req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.write(": conectado\n\n");
+    const cancelar = suscribirCambiosPlanes(() => {
+      res.write("event: planes\ndata: {}\n\n");
+    });
+    const latido = setInterval(() => res.write(": latido\n\n"), LATIDO_EVENTOS_MS);
+    res.on("close", () => {
+      clearInterval(latido);
+      cancelar();
+    });
+  });
+
+  // El Jefe Auditado recibe los planes que creó y los de su unidad de negocio; el equipo de auditoría, todos.
+  rutas.get("/planes-accion", sinAuditadosSalvoJefe, async (_req, res) => {
+    const usuario = usuarioEnSesion(res);
+    res.json(
+      esJefeAuditado(usuario.rol)
+        ? await repo.listarPorCreadorOUnidad(usuario.id, usuario.business_unit_id)
+        : await repo.listar(),
+    );
   });
 
   // Planes del usuario en sesión. Un auditado solo recibe la vista reducida de los planes ya validados (SF-16).
@@ -171,9 +233,11 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     res.json(await repo.listarRevision());
   });
 
-  // Historial del flujo: solo para el equipo de auditoría. El auditado recibe el motivo de rechazo en su vista.
-  rutas.get("/planes-accion/:id/flujo", autorizar(...ROLES_EDICION), async (req, res) => {
+  // Historial del flujo: para el equipo de auditoría y el Jefe Auditado en los planes que gestiona.
+  // Los demás auditados reciben el motivo de rechazo en su vista.
+  rutas.get("/planes-accion/:id/flujo", autorizar(...ROLES_EDICION, ROL_JEFE_AUDITADO), async (req, res) => {
     const plan = await planDeRuta(req.params.id);
+    await exigirAlcanceJefeAuditado(plan, usuarioEnSesion(res));
     const eventos = await repo.listarFlujo(plan.id);
     // Se compara la firma contra el contenido actual para detectar cambios posteriores a la aprobación.
     const firma = plan.estado === "Aprobado" ? [...eventos].reverse().find((evento) => evento.accion === "aprobacion") : undefined;
@@ -190,20 +254,24 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
   });
 
   // Auditados activos que pueden ser responsables de un plan. Solo los datos necesarios para elegirlos.
-  rutas.get("/planes-accion/responsables", sinAuditados, async (_req, res) => {
+  rutas.get("/planes-accion/responsables", sinAuditadosSalvoJefe, async (_req, res) => {
     const activos = (await usuarios.listarUsuarios()).filter((u) => u.estado === "active" && esAuditado(u.rol));
     res.json(activos.map(({ id, nombre, correo }) => ({ id, nombre, correo })));
   });
 
   // Datos del hallazgo que el formulario necesita (fecha de cierre de la auditoría).
-  rutas.get("/planes-accion/hallazgos/:id", sinAuditados, async (req, res) => {
+  rutas.get("/planes-accion/hallazgos/:id", sinAuditadosSalvoJefe, async (req, res) => {
     const hallazgo = await repo.buscarHallazgo(String(req.params.id));
     if (!hallazgo) throw new ErrorApi(404, "NO_ENCONTRADO", "El hallazgo no existe.");
+    const usuario = usuarioEnSesion(res);
+    if (esJefeAuditado(usuario.rol) && (await repo.hallazgosDeUnidad([hallazgo.id], usuario.business_unit_id)).length === 0) {
+      throw new ErrorApi(403, "FUERA_DE_UNIDAD", MENSAJE_FUERA_DE_UNIDAD);
+    }
     res.json(hallazgo);
   });
 
-  // El auditor define el plan y asigna a sus responsables (UF-08, SF-10). Empieza como borrador por validar.
-  rutas.post("/planes-accion", autorizar(...ROLES_GESTION_PLAN), async (req, res) => {
+  // El auditor o el Jefe Auditado define el plan y asigna a sus responsables (UF-08, SF-10). Empieza como borrador por validar.
+  rutas.post("/planes-accion", autorizar(...ROLES_EDICION_PLAN), async (req, res) => {
     const datos = campos(req.body);
     const error = validarPlanAccion(datos);
     if (error) throw new ErrorApi(400, "DATOS_INVALIDOS", error);
@@ -213,6 +281,15 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     const hallazgos = await Promise.all(hallazgoIds.map((id) => repo.buscarHallazgo(id)));
     if (hallazgos.some((item) => !item)) throw new ErrorApi(404, "NO_ENCONTRADO", "Uno de los hallazgos no existe.");
     const hallazgo = hallazgos[0]!;
+
+    // El Jefe Auditado solo crea planes para hallazgos de su unidad de negocio.
+    const usuario = usuarioEnSesion(res);
+    if (esJefeAuditado(usuario.rol)) {
+      const deUnidad = await repo.hallazgosDeUnidad(hallazgoIds, usuario.business_unit_id);
+      if (new Set(deUnidad).size !== new Set(hallazgoIds).size) {
+        throw new ErrorApi(403, "FUERA_DE_UNIDAD", "Solo puedes crear planes de acción para hallazgos de tu unidad de negocio.");
+      }
+    }
 
     const errorFecha = validarFechaCompromiso(plan.fechaCompromiso, hallazgo.fechaCierreAuditoria);
     if (errorFecha) throw new ErrorApi(400, "DATOS_INVALIDOS", errorFecha);
@@ -238,16 +315,18 @@ export function rutasPlanesAccion({ repo, usuarios, registrarEvento }: Dependenc
     res.status(201).json(creado);
   });
 
-  // Edición por el auditor. En la definición se edita todo; ya validado, solo el responsable y el estado manual.
-  rutas.patch("/planes-accion/:id", autorizar(...ROLES_GESTION_PLAN), async (req, res) => {
+  // Edición por el auditor o el Jefe Auditado. En la definición se edita todo; ya validado, solo el responsable y el estado manual.
+  rutas.patch("/planes-accion/:id", autorizar(...ROLES_EDICION_PLAN), async (req, res) => {
     const id = Number(req.params.id);
     const actual = Number.isInteger(id) && id > 0 ? await repo.buscarPorId(id) : null;
     if (!actual) throw new ErrorApi(404, "NO_ENCONTRADO", "El plan de acción no existe.");
+    const editor = usuarioEnSesion(res);
+    await exigirAlcanceJefeAuditado(actual, editor);
     if (ESTADOS_BLOQUEADOS.includes(actual.estado)) {
       throw new ErrorApi(409, "PLAN_BLOQUEADO", MENSAJE_BLOQUEADO);
     }
-    // El auditado no modifica su plan, aunque su rol pertenezca al equipo de auditoría.
-    if (actual.responsable.id === usuarioEnSesion(res).id) {
+    // El responsable no modifica su plan, salvo el Jefe Auditado, que sí puede editar los planes de los que es responsable.
+    if (!esJefeAuditado(editor.rol) && actual.responsable.id === editor.id) {
       throw new ErrorApi(403, "RESPONSABLE_NO_EDITA", "El responsable auditado no puede modificar su propio plan de acción.");
     }
 

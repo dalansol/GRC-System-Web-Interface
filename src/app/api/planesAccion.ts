@@ -116,11 +116,18 @@ export interface CambiosPlanAccion {
 export const ROLES_EDICION_PLAN_ACCION = ["Administrador", "Jefe de Auditoría", "Auditor Senior", "Auditor"];
 // Roles que crean planes, los editan y los envían a revisión (los mismos que valida el backend).
 export const ROLES_GESTION_PLAN_ACCION = ["Auditor", "Auditor Senior"];
+// El Jefe Auditado crea y edita los planes que creó y los de su unidad, pero no los envía a revisión.
+export const ROL_JEFE_AUDITADO = "Jefe Auditado";
+export const ROLES_EDICION_PLAN = [...ROLES_GESTION_PLAN_ACCION, ROL_JEFE_AUDITADO];
 // Roles de las áreas auditadas: solo trabajan con lo que tienen asignado.
-export const ROLES_AUDITADO = ["Jefe Auditado", "Empleado Auditado"];
+export const ROLES_AUDITADO = [ROL_JEFE_AUDITADO, "Empleado Auditado"];
 
 export const esAuditado = (rol: string | null | undefined) => ROLES_AUDITADO.includes(rol ?? "");
+export const esJefeAuditado = (rol: string | null | undefined) => rol === ROL_JEFE_AUDITADO;
+/** Puede enviar planes a revisión (y crearlos y editarlos). */
 export const puedeGestionarPlanes = (rol: string | null | undefined) => ROLES_GESTION_PLAN_ACCION.includes(rol ?? "");
+/** Puede crear y editar planes. El backend limita al Jefe Auditado a los de su unidad. */
+export const puedeCrearPlanes = (rol: string | null | undefined) => ROLES_EDICION_PLAN.includes(rol ?? "");
 
 export type PestanaPlanes = "seguimiento" | "revision" | "prorrogas";
 
@@ -225,11 +232,38 @@ export const puedeEnviarPlan = (
   );
 };
 
-/** El auditor puede editarlo: no está en revisión ni aprobado, y no es responsable de un plan anterior. */
+/**
+ * Puede editarlo: no está en revisión ni aprobado, y el auditor no es su responsable.
+ * El Jefe Auditado sí edita los planes de los que es responsable; solo recibe los que creó o de su unidad.
+ */
 export const puedeEditarPlan = (
   plan: Pick<PlanAccion, "responsable"> & PlanConEstado,
   usuario: { id: number; rol: string } | null | undefined,
-) => Boolean(usuario && puedeGestionarPlanes(usuario.rol) && plan.responsable?.id !== usuario.id && !planBloqueado(plan));
+) =>
+  Boolean(
+    usuario &&
+      puedeCrearPlanes(usuario.rol) &&
+      (esJefeAuditado(usuario.rol) || plan.responsable?.id !== usuario.id) &&
+      !planBloqueado(plan),
+  );
+
+/**
+ * Archivos señalados en el último rechazo cuyo paso sigue sin corregirse. El rechazo reabre el paso de cada
+ * archivo señalado, y volver a marcarlo como completado cuenta como corregido (se guarda en el paso).
+ */
+export const observacionesPendientes = <T extends { pasoId: number }>(
+  observadas: readonly T[],
+  pasos: readonly { id: number; completado: boolean }[],
+) => observadas.filter((observada) => !pasos.find((paso) => paso.id === observada.pasoId)?.completado);
+
+/**
+ * El aviso de rechazo se muestra mientras quede algún paso señalado por corregir. Un rechazo sin archivos
+ * señalados no tiene pasos que corregir, así que su aviso sigue hasta que el plan se reenvía.
+ */
+export const rechazoVigente = (
+  observadas: readonly { pasoId: number }[],
+  pasos: readonly { id: number; completado: boolean }[],
+) => observadas.length === 0 || observacionesPendientes(observadas, pasos).length > 0;
 
 export const listarBandejaRevision = () => pedir<PlanAccion[]>("/planes-accion/revision");
 

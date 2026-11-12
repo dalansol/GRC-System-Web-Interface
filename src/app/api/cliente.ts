@@ -12,6 +12,11 @@ export function configurarCredenciales(credenciales: Credenciales): void {
   obtenerCredenciales = credenciales;
 }
 
+/** Encabezados de la sesión actual, para conexiones que no pasan por `pedir` (avisos en vivo). */
+export function credencialesActuales(): Promise<Record<string, string>> {
+  return obtenerCredenciales();
+}
+
 export class ErrorApi extends Error {
   constructor(
     readonly status: number,

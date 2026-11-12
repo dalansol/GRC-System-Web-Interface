@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { listarControlesParaHallazgo } from "../../api/controles";
 import FormularioHallazgo, { type FindingControlOption } from "./FormularioHallazgo";
 import FormularioPlanAccion from "../planes-accion/FormularioPlanAccion";
-import { esAuditado, puedeGestionarPlanes } from "../../api/planesAccion";
+import { esAuditado, puedeCrearPlanes } from "../../api/planesAccion";
 import { useSesion } from "../../auth/SesionContext";
 import { useHallazgosViewModel, HallazgoViewModel } from "../../domain/hallazgos/useHallazgosViewModel";
 
@@ -96,8 +96,9 @@ export default function VistaHallazgo({ onSelectFinding, onHallazgoActivo }: Pro
     usuario?.rol && ["Administrador", "Jefe de Auditoría", "Auditor Senior", "Auditor"].includes(usuario.rol)
   );
 
-  // El auditor define los planes (UF-08): solo él ve las casillas y el botón de crear.
-  const puedeCrearPlan = puedeGestionarPlanes(usuario?.rol);
+  // El auditor y el Jefe Auditado definen los planes (UF-08): solo ellos ven las casillas y el botón de crear.
+  // El Jefe Auditado solo ve aquí los hallazgos de su unidad, que son los únicos para los que el backend le deja crear.
+  const puedeCrearPlan = puedeCrearPlanes(usuario?.rol);
   // Filtrado de seguridad: si no es equipo de auditoría, solo ve hallazgos de su unidad o asignados
   const hallazgos = rawHallazgos.filter((item) => {
     if (esEquipoAuditoria) return true;

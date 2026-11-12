@@ -68,6 +68,10 @@ export interface RepositorioPlanesAccion extends RepositorioNotificaciones {
   listar(): Promise<PlanAccion[]>;
   /** Planes donde el usuario es responsable o tiene un paso. `soloValidados` omite los que siguen en definición. */
   listarPorResponsable(usuarioId: number, opciones?: { soloValidados?: boolean }): Promise<PlanAccion[]>;
+  /** Planes que creó el usuario o que tienen un hallazgo de la unidad de negocio indicada (vista del Jefe Auditado). */
+  listarPorCreadorOUnidad(usuarioId: number, unidadId: number): Promise<PlanAccion[]>;
+  /** De los hallazgos indicados, los que son de la unidad de negocio (por el proceso de su control en la auditoría). */
+  hallazgosDeUnidad(hallazgoIds: readonly string[], unidadId: number): Promise<string[]>;
   buscarPorHallazgo(hallazgoId: string): Promise<PlanAccion | null>;
   /** Crea un plan en "Borrador", en la etapa de definición. Sus hallazgos no cambian hasta que se valide. */
   crear(datos: DatosPlanAccion, creadoPorId: number): Promise<PlanAccion>;

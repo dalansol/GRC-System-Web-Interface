@@ -13,11 +13,22 @@ import {
 export const ROLES_REVISION = ["Jefe de Auditoría"];
 /** Roles que crean planes, los editan y los envían a revisión (UF-08, SF-10). */
 export const ROLES_GESTION_PLAN = ["Auditor", "Auditor Senior"];
+/**
+ * El Jefe Auditado crea y edita los planes que creó y los de su unidad de negocio, aunque sea su responsable,
+ * pero no los envía a revisión: eso sigue siendo del Auditor o Auditor Senior (decisión del 2026-11-11).
+ */
+export const ROL_JEFE_AUDITADO = "Jefe Auditado";
+/** Roles que crean y editan planes. */
+export const ROLES_EDICION_PLAN = [...ROLES_GESTION_PLAN, ROL_JEFE_AUDITADO];
 /** Roles de las áreas auditadas: solo trabajan con lo que tienen asignado (UF-13, SF-16). */
-export const ROLES_AUDITADO = ["Jefe Auditado", "Empleado Auditado"];
+export const ROLES_AUDITADO = [ROL_JEFE_AUDITADO, "Empleado Auditado"];
 
 export function esAuditado(rol: string): boolean {
   return ROLES_AUDITADO.includes(rol);
+}
+
+export function esJefeAuditado(rol: string): boolean {
+  return rol === ROL_JEFE_AUDITADO;
 }
 
 /** Estados que el equipo de auditoría puede fijar a mano. Los demás solo los cambia el flujo. */

@@ -28,15 +28,19 @@ import FormularioPlanAccion from "./FormularioPlanAccion";
 import HistorialFlujoPlan from "./HistorialFlujoPlan";
 import InsigniaEstadoPlan from "./InsigniaEstadoPlan";
 import PortalPlanesAuditado from "./PortalPlanesAuditado";
+import { useCambiosPlanes } from "./useCambiosPlanes";
 import { useSesion } from "../../auth/SesionContext";
 import {
   actualizarPasoPlanAccion,
   enviarPlanARevision,
   esAuditado,
+  esJefeAuditado,
   ETIQUETA_ETAPA,
   listarPlanesAccion,
   obtenerFlujoPlan,
+  observacionesPendientes,
   planBloqueado,
+  rechazoVigente,
   puedeEditarPlan,
   puedeEnviarPlan,
   ROLES_REVISION_PLAN_ACCION,
@@ -52,10 +56,15 @@ interface PlanAccionConDetalles extends Omit<PlanAccion, "estado" | "status"> {
   status?: string;
 }
 
-/** Motivo del último rechazo y sus archivos señalados, para saber qué corregir antes de reenviar. */
-function AvisoRechazoPlan({ planId }: { planId: number }) {
+/**
+ * Motivo del último rechazo y sus archivos señalados, para saber qué corregir antes de reenviar.
+ * Desaparece cuando todos los pasos señalados se vuelven a marcar como completados.
+ */
+function AvisoRechazoPlan({ planId, pasos }: { planId: number; pasos: PlanAccion["pasos"] }) {
   const [motivo, setMotivo] = useState<string | null>(null);
   const [observadas, setObservadas] = useState<EvidenciaObservada[]>([]);
+  // Mientras no se lee el rechazo no se sabe si ya se corrigió: no se muestra para que no parpadee.
+  const [cargado, setCargado] = useState(false);
 
   useEffect(() => {
     let vigente = true;
@@ -69,11 +78,17 @@ function AvisoRechazoPlan({ planId }: { planId: number }) {
       })
       .catch(() => {
         if (vigente) setMotivo(null);
+      })
+      .finally(() => {
+        if (vigente) setCargado(true);
       });
     return () => {
       vigente = false;
     };
   }, [planId]);
+
+  if (!cargado || !rechazoVigente(observadas, pasos)) return null;
+  const pendientes = observacionesPendientes(observadas, pasos);
 
   return (
     <div className="rounded-lg border border-red-200 bg-red-50 p-3.5 text-xs text-red-700">
@@ -82,8 +97,8 @@ function AvisoRechazoPlan({ planId }: { planId: number }) {
         Plan rechazado: corrígelo y reenvíalo a revisión
       </div>
       {motivo && <p className="break-words">Motivo: {motivo}</p>}
-      {observadas.length > 0 && (
-        <p className="break-words">Archivos señalados: {observadas.map((evidencia) => evidencia.nombre).join(", ")}</p>
+      {pendientes.length > 0 && (
+        <p className="break-words">Archivos señalados: {pendientes.map((evidencia) => evidencia.nombre).join(", ")}</p>
       )}
     </div>
   );
@@ -91,6 +106,7 @@ function AvisoRechazoPlan({ planId }: { planId: number }) {
 
 export default function VistaPlanesAccion({ destino }: { destino?: SolicitudDestinoPlan | null }) {
   const { usuario } = useSesion();
+  if (esJefeAuditado(usuario?.rol)) return <PlanesJefeAuditado destino={destino} />;
   // Los auditados solo ven lo que tienen asignado, en su propia vista (SF-16).
   if (esAuditado(usuario?.rol)) {
     return (
@@ -104,8 +120,72 @@ export default function VistaPlanesAccion({ destino }: { destino?: SolicitudDest
   return <SeguimientoPlanes destino={destino} />;
 }
 
-/** Seguimiento del equipo de auditoría: todos los planes, su envío a revisión y la bandeja del Jefe de Auditoría. */
-function SeguimientoPlanes({ destino }: { destino?: SolicitudDestinoPlan | null }) {
+type VistaJefeAuditado = "asignados" | "unidad";
+
+/**
+ * Jefe Auditado: su portal con lo que tiene asignado y, aparte, los planes que creó o de su unidad de negocio,
+ * que puede editar pero no enviar a revisión.
+ */
+function PlanesJefeAuditado({ destino }: { destino?: SolicitudDestinoPlan | null }) {
+  const [vista, setVista] = useState<VistaJefeAuditado>("asignados");
+  // Cambiar de pestaña a mano termina el viaje de la notificación: volver no debe reabrir su plan.
+  const [destinoAtendido, setDestinoAtendido] = useState<number | null>(null);
+  // Plan de una notificación que no está entre los asignados: se busca entre los de su unidad.
+  const [destinoUnidad, setDestinoUnidad] = useState<SolicitudDestinoPlan | null>(null);
+  const destinoVigente = destino && destino.solicitud !== destinoAtendido ? destino : null;
+
+  useEffect(() => {
+    if (destino) setVista("asignados");
+  }, [destino?.solicitud]);
+
+  const cambiarVista = (nueva: VistaJefeAuditado) => {
+    setVista(nueva);
+    setDestinoAtendido(destino?.solicitud ?? null);
+    setDestinoUnidad(null);
+  };
+
+  return (
+    <div className="flex-1 w-full max-w-full overflow-x-hidden p-6 pb-24 space-y-6 box-border" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <Breadcrumbs items={["Inicio", "Auditoría", "Planes de Acción"]} />
+      <PageHeader title="Planes de acción" subtitle="Trabaja en tus planes asignados y gestiona los de tu unidad de negocio." />
+      <div role="tablist" aria-label="Vista de planes de acción" className="flex gap-1 border-b border-border">
+        {([["asignados", "Mis planes asignados"], ["unidad", "Planes de mi unidad"]] as const).map(([id, etiqueta]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={vista === id}
+            onClick={() => cambiarVista(id)}
+            className={`-mb-px border-b-2 px-3 py-2 text-xs font-semibold transition-colors ${
+              vista === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
+      {vista === "asignados" ? (
+        <PortalPlanesAuditado
+          destino={destinoVigente}
+          onPlanNoEncontrado={() => {
+            if (!destinoVigente) return;
+            setDestinoAtendido(destinoVigente.solicitud);
+            setDestinoUnidad(destinoVigente);
+            setVista("unidad");
+          }}
+        />
+      ) : (
+        <SeguimientoPlanes destino={destinoUnidad} incrustado />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Seguimiento del equipo de auditoría: todos los planes, su envío a revisión y la bandeja del Jefe de Auditoría.
+ * `incrustado`: dentro de la vista del Jefe Auditado, sin su propio encabezado de página.
+ */
+function SeguimientoPlanes({ destino, incrustado = false }: { destino?: SolicitudDestinoPlan | null; incrustado?: boolean }) {
   const { usuario } = useSesion();
   const esRevisor = Boolean(usuario && ROLES_REVISION_PLAN_ACCION.includes(usuario.rol));
   const [pestana, setPestana] = useState<"seguimiento" | "revision" | "prorrogas">(destino?.pestana ?? "seguimiento");
@@ -131,19 +211,31 @@ function SeguimientoPlanes({ destino }: { destino?: SolicitudDestinoPlan | null 
 
   const currentUserId = usuario?.id;
 
-  const cargarPlanes = async () => {
-    setLoading(true);
+  // Solo se usa la respuesta de la última petición: una recarga en vivo no debe pisar otra más reciente.
+  const ultimaPeticion = useRef(0);
+  // `silencioso`: recarga en vivo, sin indicador de carga ni avisos de error (se reintenta con el siguiente cambio).
+  const cargarPlanes = async ({ silencioso = false } = {}) => {
+    const peticion = ++ultimaPeticion.current;
+    if (!silencioso) setLoading(true);
     try {
       const planesRemotos = await listarPlanesAccion();
+      if (peticion !== ultimaPeticion.current) return null;
       setPlanes(planesRemotos);
       return planesRemotos;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudieron cargar los planes de acción.");
+      if (!silencioso && peticion === ultimaPeticion.current) {
+        toast.error(error instanceof Error ? error.message : "No se pudieron cargar los planes de acción.");
+      }
       return null;
     } finally {
-      setLoading(false);
+      if (peticion === ultimaPeticion.current) setLoading(false);
     }
   };
+
+  useCambiosPlanes(() => {
+    void cargarPlanes({ silencioso: true });
+    setRecargaFlujo((valor) => valor + 1);
+  });
 
   useEffect(() => {
     if (destino?.pestana === "seguimiento") return;
@@ -222,20 +314,29 @@ function SeguimientoPlanes({ destino }: { destino?: SolicitudDestinoPlan | null 
   };
 
   return (
-    <div className="flex-1 w-full max-w-full overflow-x-hidden p-6 pb-24 space-y-6 box-border" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      <Breadcrumbs items={["Inicio", "Auditoría", "Planes de Acción"]} />
+    <div
+      className={incrustado ? "space-y-6" : "flex-1 w-full max-w-full overflow-x-hidden p-6 pb-24 space-y-6 box-border"}
+      style={incrustado ? undefined : { fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+    >
+      {!incrustado && <Breadcrumbs items={["Inicio", "Auditoría", "Planes de Acción"]} />}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <PageHeader
-          title="Gestión de Planes de Acción"
-          subtitle={`${planes.length} planes registrados`}
-        />
+        {incrustado ? (
+          <p className="text-xs text-muted-foreground">
+            {planes.length} planes que creaste o de tu unidad de negocio. Un auditor los envía a validación.
+          </p>
+        ) : (
+          <PageHeader
+            title="Gestión de Planes de Acción"
+            subtitle={`${planes.length} planes registrados`}
+          />
+        )}
 
         {pestana === "seguimiento" && (
         <button
           type="button"
-          onClick={cargarPlanes}
+          onClick={() => void cargarPlanes()}
           disabled={loading}
           className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-50 self-start sm:self-auto"
         >
@@ -341,7 +442,7 @@ function SeguimientoPlanes({ destino }: { destino?: SolicitudDestinoPlan | null 
                         <tr key={`${plan.id}-details`} className="border-b border-border bg-muted/10">
                           <td colSpan={6} className="px-6 py-5 max-w-full overflow-hidden">
                             <div className="space-y-4 max-w-full">
-                              {rechazado && <AvisoRechazoPlan planId={plan.id} />}
+                              {rechazado && <AvisoRechazoPlan planId={plan.id} pasos={plan.pasos ?? []} />}
 
                               
                               {/* Metadata Grid (Responsable y Fecha Límite a la izquierda) */}

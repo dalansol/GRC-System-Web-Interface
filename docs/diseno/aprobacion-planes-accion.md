@@ -33,12 +33,13 @@ envía a revisión: esas dos respuestas son decisiones del equipo.
 |---|---|
 | Revisiones | Dos: la definición del plan antes de empezar y su evidencia al cierre |
 | Quién aprueba | Solo el Jefe de Auditoría. El Administrador es soporte técnico. El flujo multinivel sigue pendiente (TBD) |
-| Quién crea y edita | Auditor y Auditor Senior |
+| Quién crea y edita | Auditor y Auditor Senior. También el Jefe Auditado (2026-11-11), solo en los planes que creó o con un hallazgo de su unidad de negocio, y aunque sea su responsable; no los envía a revisión. Además de su portal, ve esos planes completos (con causa raíz e historial) en la pestaña "Planes de mi unidad" |
 | Quién envía a revisión | Cualquier Auditor o Auditor Senior que no participe en el plan |
 | Qué se decide | Una sola decisión y una firma por revisión. Un rechazo del cierre puede señalar archivos |
 | Qué ve el auditado | Folio y título del plan, folio y título del hallazgo, fecha, estado, pasos, evidencia, motivo de rechazo y archivos señalados. No ve causa raíz, severidad, historial ni firma |
 | Qué pasos ve | El responsable, todos (los ajenos, en solo lectura); un asignado, solo los suyos. El rol de auditado no cambia esto |
 | A quién se asigna | Solo a auditados en planes nuevos y reasignaciones. Los planes existentes conservan a sus participantes |
+| Aviso de rechazo | El aviso de un paso señalado desaparece al volver a marcar ese paso como completado; el del plan, cuando ya no queda ningún paso señalado por corregir (portal del auditado y vista del auditor). Un rechazo sin archivos señalados conserva su aviso hasta que el plan se reenvía. El historial del flujo no cambia (2026-11-11) |
 | Prórrogas | Las pide el responsable, sobre la fecha del plan; una abierta por plan; decide el Jefe de Auditoría |
 | Planes existentes | Se tratan como ya validados y conservan su estado |
 | Firma digital | Registro electrónico: firmante, rol, fecha y huella SHA-256 del contenido. No es una firma electrónica avanzada |

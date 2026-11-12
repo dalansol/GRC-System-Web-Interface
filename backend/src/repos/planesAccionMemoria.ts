@@ -45,6 +45,12 @@ interface Fila extends Omit<DatosPlanAccion, "pasos"> {
   pasos: FilaPaso[];
 }
 
+/**
+ * Unidad de negocio de los hallazgos de prueba. En memoria no hay procesos y todos los usuarios son de la
+ * unidad 10, así que solo estos hallazgos son "de su unidad" para el Jefe Auditado; los demás no tienen unidad.
+ */
+const UNIDAD_HALLAZGO_DEMO: Record<string, number> = { "HAL-2025-003": 10, "HAL-2025-004": 10 };
+
 // Repositorio en memoria para pruebas y desarrollo sin base de datos.
 // Los hallazgos y auditorías son los de prueba; el nombre del responsable se lee del repositorio de usuarios.
 export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
@@ -136,6 +142,17 @@ export class RepositorioPlanesAccionMemoria implements RepositorioPlanesAccion {
         )
         .map((f) => this.aPlan(f)),
     );
+  }
+
+  async listarPorCreadorOUnidad(usuarioId: number, unidadId: number) {
+    await this.listo;
+    const deLaUnidad = (f: Fila) =>
+      (f.hallazgoIds?.length ? f.hallazgoIds : [f.hallazgoId]).some((id) => UNIDAD_HALLAZGO_DEMO[id] === unidadId);
+    return Promise.all(this.filas.filter((f) => f.creadoPorId === usuarioId || deLaUnidad(f)).map((f) => this.aPlan(f)));
+  }
+
+  async hallazgosDeUnidad(hallazgoIds: readonly string[], unidadId: number) {
+    return hallazgoIds.filter((id) => UNIDAD_HALLAZGO_DEMO[id] === unidadId);
   }
 
   async buscarPorHallazgo(hallazgoId: string) {

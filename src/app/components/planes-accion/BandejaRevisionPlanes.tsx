@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCheck, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -6,6 +6,7 @@ import { Card } from "../ComponentesCompartidos";
 import EvidenciasSection from "../EvidenciasSection";
 import HistorialFlujoPlan from "./HistorialFlujoPlan";
 import InsigniaEstadoPlan from "./InsigniaEstadoPlan";
+import { useCambiosPlanes } from "./useCambiosPlanes";
 import { desplazarAElemento } from "../desplazarAElemento";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { useSesion } from "../../auth/SesionContext";
@@ -44,19 +45,29 @@ export default function BandejaRevisionPlanes({ destino }: { destino?: Solicitud
   const [evidenciasPlan, setEvidenciasPlan] = useState<EvidenciaPlan[]>([]);
   const [observadas, setObservadas] = useState<string[]>([]);
 
-  const cargar = async () => {
-    setCargando(true);
+  // Solo se usa la respuesta de la última petición: una recarga en vivo no debe pisar otra más reciente.
+  const ultimaPeticion = useRef(0);
+  // `silencioso`: recarga en vivo, sin indicador de carga ni avisos de error.
+  const cargar = async ({ silencioso = false } = {}) => {
+    const peticion = ++ultimaPeticion.current;
+    if (!silencioso) setCargando(true);
     try {
       const lista = await listarBandejaRevision();
+      if (peticion !== ultimaPeticion.current) return null;
       setPlanes(lista);
       return lista;
     } catch (error) {
-      toast.error(mensajeDe(error, "No se pudo cargar la bandeja de revisión."));
+      if (!silencioso && peticion === ultimaPeticion.current) toast.error(mensajeDe(error, "No se pudo cargar la bandeja de revisión."));
       return null;
     } finally {
-      setCargando(false);
+      if (peticion === ultimaPeticion.current) setCargando(false);
     }
   };
+
+  useCambiosPlanes(() => {
+    void cargar({ silencioso: true });
+    setRecargaFlujo((valor) => valor + 1);
+  });
 
   // Desde una notificación se llega al plan. Uno pendiente solo se resalta: abrirlo lo pasa a En Revisión,
   // y eso le toca decidirlo al Jefe de Auditoría.

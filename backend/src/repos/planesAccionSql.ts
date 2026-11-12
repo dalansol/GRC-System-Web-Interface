@@ -94,6 +94,19 @@ const SELECT_PLAN = `
   JOIN users u ON u.id = p.responsible_id
   LEFT JOIN audits a ON a.id = f."auditId"`;
 
+/**
+ * El hallazgo es de la unidad si el control de su auditoría está ligado a un proceso de esa unidad.
+ * Es la misma regla de unidad que usa `HALLAZGO_VISIBLE_POR_USUARIO` en routes/hallazgos.ts.
+ */
+const HALLAZGO_DE_UNIDAD = (hallazgo: string, unidad: string) => `EXISTS (
+  SELECT 1
+  FROM audit_controls unit_control
+  JOIN processes unit_process ON unit_process.id = unit_control.process_id
+  WHERE unit_control.audit_id::text = ${hallazgo}."auditId"::text
+    AND (unit_control.control_id::text = ${hallazgo}."controlId"::text OR unit_control.id::text = ${hallazgo}."controlId"::text)
+    AND unit_process.business_unit_id = ${unidad}
+)`;
+
 function aHallazgo(fila: FilaHallazgo): HallazgoResumen {
   return {
     id: fila.id,
@@ -170,6 +183,35 @@ export class RepositorioPlanesAccionSql implements RepositorioPlanesAccion {
       [usuarioId, opciones.soloValidados ?? false],
     );
     return this.agregarPasos(resultado.rows);
+  }
+
+  async listarPorCreadorOUnidad(usuarioId: number, unidadId: number) {
+    const resultado = await this.pool.query<FilaPlan>(
+      `${SELECT_PLAN}
+       WHERE p.created_by = $1
+          OR EXISTS (
+            SELECT 1
+            FROM action_plan_findings unit_relation
+            JOIN findings unit_finding ON unit_finding.id = unit_relation.finding_id
+            WHERE unit_relation.action_plan_id = p.id
+              AND ${HALLAZGO_DE_UNIDAD("unit_finding", "$2")}
+          )
+       ORDER BY p.due_date ASC`,
+      [usuarioId, unidadId],
+    );
+    return this.agregarPasos(resultado.rows);
+  }
+
+  async hallazgosDeUnidad(hallazgoIds: readonly string[], unidadId: number) {
+    if (hallazgoIds.length === 0) return [];
+    const resultado = await this.pool.query<{ id: string }>(
+      `SELECT unit_finding.id
+       FROM findings unit_finding
+       WHERE unit_finding.id = ANY($1::varchar[])
+         AND ${HALLAZGO_DE_UNIDAD("unit_finding", "$2")}`,
+      [[...hallazgoIds], unidadId],
+    );
+    return resultado.rows.map((fila) => fila.id);
   }
 
   async buscarPorHallazgo(hallazgoId: string) {

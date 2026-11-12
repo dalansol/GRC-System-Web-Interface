@@ -7,6 +7,7 @@ import { poolPromise } from "../db.js";
 import { upload } from "../middleware/upload.js";
 import { usuarioEnSesion } from "../middleware/autenticar.js";
 import type { AlmacenamientoArchivos } from "../almacenamiento.js";
+import { publicarCambioPlanes } from "../cambiosPlanes.js";
 import { condicionEvidenciaVisible } from "../repos/evidenciasAcceso.js";
 import { ROLES_EDICION } from "./planesAccion.js";
 
@@ -257,6 +258,8 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
         });
 
         res.status(201).json(result.rows[0]);
+        // El conteo de evidencia de un paso cambia lo que muestran las listas de planes abiertas.
+        if (entityType === "action_plan_step") publicarCambioPlanes();
       } catch (error) {
         console.error("Error uploading evidence:", error);
         res.status(500).json({
@@ -353,6 +356,7 @@ export function rutasEvidencias(almacenamiento: AlmacenamientoArchivos): Router 
       }
 
       res.json({ message: "Evidence deleted successfully." });
+      if (evidence.entity_type === "action_plan_step") publicarCambioPlanes();
     } catch (error) {
       console.error("Error deleting evidence:", error);
       res.status(500).json({ error: "Error deleting evidence." });

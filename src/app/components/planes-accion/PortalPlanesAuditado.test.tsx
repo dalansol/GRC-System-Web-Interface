@@ -247,6 +247,43 @@ describe("plan rechazado", () => {
     await abrir([rechazado]);
     expect(await screen.findByRole("button", { name: "Marcar como completado" })).toBeInTheDocument();
   });
+
+  it("al volver a marcar el paso señalado desaparecen sus avisos", async () => {
+    vi.mocked(api.actualizarPasoPlanAccion).mockResolvedValue(undefined as never);
+    const usuario = await abrir([rechazado]);
+    await screen.findByTestId("observados-11");
+
+    await usuario.click(screen.getByRole("button", { name: "Marcar como completado" }));
+
+    await waitFor(() => expect(screen.queryByTestId("observados-11")).not.toBeInTheDocument());
+    expect(screen.queryByText(/Falta el soporte de marzo/)).not.toBeInTheDocument();
+    expect(api.actualizarPasoPlanAccion).toHaveBeenCalledWith(7, 11, true);
+  });
+
+  it("si el servidor no acepta el cambio, los avisos vuelven", async () => {
+    vi.mocked(api.actualizarPasoPlanAccion).mockRejectedValue(new Error("Sin conexión"));
+    const usuario = await abrir([rechazado]);
+    await screen.findByTestId("observados-11");
+
+    await usuario.click(screen.getByRole("button", { name: "Marcar como completado" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(await screen.findByTestId("observados-11")).toBeInTheDocument();
+    expect(screen.getByText(/Falta el soporte de marzo/)).toBeInTheDocument();
+  });
+
+  it("al recargar, un paso señalado ya corregido no muestra avisos", async () => {
+    await abrir([{ ...rechazado, pasos: [paso({ completado: true })] }]);
+    await screen.findByText("PACC-2026-007");
+
+    expect(screen.queryByTestId("observados-11")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Falta el soporte de marzo/)).not.toBeInTheDocument();
+  });
+
+  it("un rechazo sin archivos señalados mantiene el motivo aunque los pasos estén completos", async () => {
+    await abrir([{ ...rechazado, pasos: [paso({ completado: true })], rechazo: { ...rechazado.rechazo!, evidenciasObservadas: [] } }]);
+    expect(await screen.findByText(/Falta el soporte de marzo/)).toBeInTheDocument();
+  });
 });
 
 describe("solicitud de prórroga", () => {

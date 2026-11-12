@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Card } from "../ComponentesCompartidos";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { desplazarAElemento } from "../desplazarAElemento";
+import { useCambiosPlanes } from "./useCambiosPlanes";
 import {
   aprobarProrroga,
   listarProrrogasPendientes,
@@ -27,19 +28,26 @@ export default function BandejaProrrogas({ destino }: { destino?: SolicitudDesti
   const decidiendo = useRef(false);
   const [destacadaPlanId, setDestacadaPlanId] = useState<number | null>(null);
 
-  const cargar = async () => {
-    setCargando(true);
+  // Solo se usa la respuesta de la última petición: una recarga en vivo no debe pisar otra más reciente.
+  const ultimaPeticion = useRef(0);
+  // `silencioso`: recarga en vivo, sin indicador de carga ni avisos de error.
+  const cargar = async ({ silencioso = false } = {}) => {
+    const peticion = ++ultimaPeticion.current;
+    if (!silencioso) setCargando(true);
     try {
       const lista = await listarProrrogasPendientes();
+      if (peticion !== ultimaPeticion.current) return null;
       setSolicitudes(lista);
       return lista;
     } catch (error) {
-      toast.error(mensajeDe(error, "No se pudieron cargar las solicitudes de prórroga."));
+      if (!silencioso && peticion === ultimaPeticion.current) toast.error(mensajeDe(error, "No se pudieron cargar las solicitudes de prórroga."));
       return null;
     } finally {
-      setCargando(false);
+      if (peticion === ultimaPeticion.current) setCargando(false);
     }
   };
+
+  useCambiosPlanes(() => void cargar({ silencioso: true }));
 
   useEffect(() => {
     void cargar().then((lista) => {
